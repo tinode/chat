@@ -1,0 +1,373 @@
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T17:47:25+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T17:47:25+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T17:47:35+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T17:47:35+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T17:47:45+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:JXUBjPi' with engine 'docker'","time":"2021-09-07T17:47:50+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:JXUBjPi: Error during image registry authentication: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": Get \"https://auth.docker.io/token?account=danghongthanh\u0026client_id=docker\u0026offline_token=true\u0026service=registry.docker.io\": dial tcp: lookup auth.docker.io on 192.168.65.5:53: no such host","time":"2021-09-07T17:47:52+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T17:47:57+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T17:47:57+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T17:48:01+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:GxvJdMF' with engine 'docker'","time":"2021-09-07T17:48:06+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:GxvJdMF: Error during image registry authentication: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": dial tcp: lookup registry-1.docker.io on 192.168.65.5:53: no such host","time":"2021-09-07T17:48:07+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:00:05+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:00:05+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:00:34+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:00:34+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:00:49+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:eLoTSIv' with engine 'docker'","time":"2021-09-07T22:00:54+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:eLoTSIv: Error during image registry authentication: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": dial tcp: lookup registry-1.docker.io on 192.168.65.5:53: no such host","time":"2021-09-07T22:00:55+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:00:58+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:00:58+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:01:13+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:kihBVWl' with engine 'docker'","time":"2021-09-07T22:01:17+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:kihBVWl: Error during image registry authentication: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)","time":"2021-09-07T22:01:45+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:01:49+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:01:49+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:02:00+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:rbOGLVY' with engine 'docker'","time":"2021-09-07T22:02:04+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:rbOGLVY: Error during image registry authentication: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": Get \"https://auth.docker.io/token?account=danghongthanh\u0026client_id=docker\u0026offline_token=true\u0026service=registry.docker.io\": context deadline exceeded (Client.Timeout exceeded while awaiting headers) (Client.Timeout exceeded while awaiting headers)","time":"2021-09-07T22:02:30+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:04:09+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:04:09+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:04:14+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:04:18+07:00"}
+{"level":"info","msg":"Building image 'mgivn/chat-service-dev:kvPzOKy' with engine 'kaniko'","time":"2021-09-07T22:04:18+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:04:48+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:04:52+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-mhr27\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:04:52+07:00"}
+{"level":"fatal","msg":"error building image mgivn/chat-service-dev:kvPzOKy: error building image (Exit Code 1)","time":"2021-09-07T22:04:56+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:06:13+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:06:13+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:06:17+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:06:22+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:ymbvnJI' with engine 'kaniko'","time":"2021-09-07T22:06:22+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:07:57+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:08:01+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-p2xnp\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:08:03+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:ymbvnJI: error building image (Exit Code 1)","time":"2021-09-07T22:08:40+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:16:12+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:16:12+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:16:21+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:16:26+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:dojiYbX' with engine 'kaniko'","time":"2021-09-07T22:16:28+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:dojiYbX: Error executing command in init container: Timeout occurred","time":"2021-09-07T22:17:43+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:18:05+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:18:05+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:18:14+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:18:18+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:lVxjJAv' with engine 'kaniko'","time":"2021-09-07T22:18:21+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:18:54+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:19:00+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-mwxsq\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:19:05+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:lVxjJAv: error building image (Exit Code 1)","time":"2021-09-07T22:19:39+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:20:30+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:20:30+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:20:41+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:20:46+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:IvWmFSc' with engine 'kaniko'","time":"2021-09-07T22:20:47+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:21:28+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:21:36+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-5qj7c\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:21:37+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:IvWmFSc: error building image (Exit Code 1)","time":"2021-09-07T22:22:08+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:25:15+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:25:15+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:25:24+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:25:29+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:AnMjsVY' with engine 'kaniko'","time":"2021-09-07T22:25:31+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:AnMjsVY: Error executing command in init container: Timeout occurred","time":"2021-09-07T22:26:58+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:27:26+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:27:26+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:27:38+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:27:42+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:dsJwerG' with engine 'kaniko'","time":"2021-09-07T22:27:45+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:29:45+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:29:47+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-hlkg8\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:29:50+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:dsJwerG: error building image (Exit Code 1)","time":"2021-09-07T22:30:36+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:31:45+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:31:45+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:31:55+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:31:59+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:VZZWmPe' with engine 'kaniko'","time":"2021-09-07T22:32:01+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:33:05+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:33:11+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-cj6wx\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:33:11+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:VZZWmPe: error building image (Exit Code 1)","time":"2021-09-07T22:33:53+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:36:35+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:36:35+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:36:41+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:36:46+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:KFDCKYp' with engine 'kaniko'","time":"2021-09-07T22:36:49+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:37:35+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:37:38+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-6sv62\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:37:39+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:KFDCKYp: error building image (Exit Code 1)","time":"2021-09-07T22:38:20+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:39:03+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:39:03+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:39:15+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:39:19+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:yiHhdat' with engine 'kaniko'","time":"2021-09-07T22:39:22+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:40:20+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:40:23+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-wlz9s\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:40:24+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:yiHhdat: error building image (Exit Code 1)","time":"2021-09-07T22:41:19+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T22:41:32+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T22:41:32+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T22:41:42+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T22:41:46+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:KXVwDtj' with engine 'kaniko'","time":"2021-09-07T22:41:47+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T22:42:40+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T22:42:42+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-8wplq\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T22:42:44+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:KXVwDtj: error building image (Exit Code 1)","time":"2021-09-07T22:43:32+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:01:42+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:01:42+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:03:27+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:03:27+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:03:32+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:03:36+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:vcOZUcA' with engine 'kaniko'","time":"2021-09-07T23:03:37+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:04:15+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:04:16+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:04:23+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:04:26+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:cBDLaoS' with engine 'kaniko'","time":"2021-09-07T23:04:27+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:05:03+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:05:06+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-h9rqq\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:05:06+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:cBDLaoS: error building image (Exit Code 1)","time":"2021-09-07T23:07:47+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:08:22+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:08:22+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:08:28+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:08:33+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:kMvcqCe' with engine 'kaniko'","time":"2021-09-07T23:08:33+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:09:12+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:09:14+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-4hrrm\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:09:15+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:12:17+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:12:18+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/700464720 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:12:18+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:12:44+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 1)","time":"2021-09-07T23:13:49+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:13:49+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:13:49+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:13:49+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:15:22+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:15:22+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:15:27+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:15:31+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:fcimvvy' with engine 'kaniko'","time":"2021-09-07T23:15:33+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:16:11+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:16:16+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-rqzfr\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:16:16+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:19:12+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:19:13+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:19:13+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/015905770 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:19:44+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:20:06+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 2)","time":"2021-09-07T23:20:37+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:20:37+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:20:37+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:20:37+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:23:35+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:23:35+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:23:39+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:23:43+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:rQvoETo' with engine 'kaniko'","time":"2021-09-07T23:23:44+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:24:09+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:24:12+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-2mcp9\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:24:13+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:27:23+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:27:23+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:27:23+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/652460966 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:27:48+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:28:09+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 3)","time":"2021-09-07T23:28:39+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:28:39+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:28:39+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:28:39+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:29:07+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:29:07+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:29:10+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:29:15+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:rxRhWWU' with engine 'kaniko'","time":"2021-09-07T23:29:16+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:29:46+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:29:50+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-78gfm\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:29:50+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:32:32+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:32:32+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:32:33+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/843435429 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:32:39+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:32:49+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 4)","time":"2021-09-07T23:32:57+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:32:57+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:32:57+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:32:57+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:37:28+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:37:28+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:37:31+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:37:35+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:GbqRuuk' with engine 'kaniko'","time":"2021-09-07T23:37:36+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:37:58+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:38:01+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-7v6lr\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:38:01+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:GbqRuuk: error building image (Exit Code 1)","time":"2021-09-07T23:40:40+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:42:34+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:42:34+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:42:37+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:42:41+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:GoqHUBi' with engine 'kaniko'","time":"2021-09-07T23:42:42+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:43:06+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:43:09+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-44pmk\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:43:09+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:45:50+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:45:50+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:45:51+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/553434304 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:45:58+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:46:07+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 5)","time":"2021-09-07T23:46:14+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:46:14+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:46:14+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:46:14+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:50:04+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:50:04+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:50:08+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:50:13+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:tPxVfXO' with engine 'kaniko'","time":"2021-09-07T23:50:13+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-07T23:50:39+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-07T23:50:43+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-8hb76\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-07T23:50:43+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-07T23:53:38+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-07T23:53:38+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:53:38+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/099553513 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:53:44+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-07T23:53:56+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 6)","time":"2021-09-07T23:54:03+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-07T23:54:03+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-07T23:54:03+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-07T23:54:03+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:59:12+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:59:12+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:59:15+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:59:19+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:nPNTLsk' with engine 'kaniko'","time":"2021-09-07T23:59:20+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-07T23:59:31+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-07T23:59:31+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-07T23:59:33+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-07T23:59:37+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:uDdaqDg' with engine 'kaniko'","time":"2021-09-07T23:59:38+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:uDdaqDg: copy context: error dialing backend: EOF","time":"2021-09-07T23:59:42+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:04:09+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:04:09+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:04:13+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:04:17+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:vNEZSmK' with engine 'kaniko'","time":"2021-09-08T00:04:18+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:04:41+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:04:43+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-swnlr\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:04:43+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:07:05+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:07:05+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:07:09+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:07:13+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:EwTuccJ' with engine 'kaniko'","time":"2021-09-08T00:07:14+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:07:42+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:07:46+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-h9m7q\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:07:46+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-08T00:10:36+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-08T00:10:36+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:10:37+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/775708904 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:10:44+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:10:54+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 7)","time":"2021-09-08T00:11:01+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-08T00:11:01+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-08T00:11:01+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-08T00:11:01+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:16:17+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:16:17+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:16:20+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:16:24+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:QNBcwFu' with engine 'kaniko'","time":"2021-09-08T00:16:24+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:16:50+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:16:53+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-ws9ts\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:16:53+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:QNBcwFu: error building image (Exit Code 1)","time":"2021-09-08T00:19:52+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:24:35+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:24:35+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:24:37+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:24:42+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:OhjbzhQ' with engine 'kaniko'","time":"2021-09-08T00:24:42+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:25:14+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:25:17+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-5t5lk\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:25:18+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-08T00:28:22+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-08T00:28:22+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:28:23+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/032513052 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:28:30+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:28:41+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 8)","time":"2021-09-08T00:28:47+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-08T00:28:47+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-08T00:28:47+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-08T00:28:47+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:32:27+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:32:27+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:32:32+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:32:36+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:sJfDLqg' with engine 'kaniko'","time":"2021-09-08T00:32:36+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:32:59+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:33:02+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-476mn\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:33:02+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-08T00:35:53+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-08T00:35:54+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:35:54+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/544014180 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:36:00+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:36:09+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 9)","time":"2021-09-08T00:36:15+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-08T00:36:15+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-08T00:36:15+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-08T00:36:15+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:46:30+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:46:30+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:46:33+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:46:37+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T00:47:06+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T00:47:06+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T00:47:09+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T00:47:13+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:IOAmgYd' with engine 'kaniko'","time":"2021-09-08T00:47:14+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T00:47:52+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T00:47:56+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-xpd9q\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T00:47:56+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-08T00:50:59+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-08T00:50:59+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:50:59+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/351968465 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:51:06+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T00:51:16+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 10)","time":"2021-09-08T00:51:20+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-08T00:51:20+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-08T00:51:20+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-08T00:51:20+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T01:02:11+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T01:02:11+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T01:02:14+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T01:02:18+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:dXhdsPP' with engine 'kaniko'","time":"2021-09-08T01:02:19+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T01:02:45+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T01:02:49+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-m68dp\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T01:02:49+07:00"}
+{"level":"fatal","msg":"error building image danghongthanh/chat-service-dev:dXhdsPP: error building image (Exit Code 1)","time":"2021-09-08T01:05:12+07:00"}
+{"level":"info","msg":"Using namespace '\u001b[1;37mapps\u001b[0m'","time":"2021-09-08T01:05:31+07:00"}
+{"level":"info","msg":"Using kube context '\u001b[1;37mcontext-cnu3w2it3ha\u001b[0m'","time":"2021-09-08T01:05:31+07:00"}
+{"level":"info","msg":"Execute hook '\u001b[1;37msh build.sh\u001b[0m'","time":"2021-09-08T01:05:35+07:00"}
+{"level":"info","msg":"Couldn't find a running docker daemon. Will fallback to kaniko","time":"2021-09-08T01:05:40+07:00"}
+{"level":"info","msg":"Building image 'danghongthanh/chat-service-dev:NLRPfGU' with engine 'kaniko'","time":"2021-09-08T01:05:41+07:00"}
+{"level":"info","msg":"Uploaded files to container","time":"2021-09-08T01:06:07+07:00"}
+{"level":"info","msg":"Build pod has started","time":"2021-09-08T01:06:10+07:00"}
+{"level":"info","msg":"Printing logs of pod:container \u001b[1;37mdevspace-build-kaniko-6m8l4\u001b[0m:\u001b[1;37mkaniko\u001b[0m","time":"2021-09-08T01:06:10+07:00"}
+{"level":"info","msg":"Done building image","time":"2021-09-08T01:08:56+07:00"}
+{"level":"info","msg":"Done processing image 'danghongthanh/chat-service-dev'","time":"2021-09-08T01:08:56+07:00"}
+{"level":"info","msg":"Execute 'helm upgrade chat-service /home/thanhdang/.devspace/component-chart/component-chart-0.8.0.tgz --namespace apps --values /tmp/046393893 --install --kube-context context-cnu3w2it3ha'","time":"2021-09-08T01:08:56+07:00"}
+{"level":"info","msg":"Execute 'helm list --namespace apps --output json --kube-context context-cnu3w2it3ha'","time":"2021-09-08T01:09:07+07:00"}
+{"level":"info","msg":"Deployed helm chart (Release revision: 11)","time":"2021-09-08T01:09:13+07:00"}
+{"level":"info","msg":"Successfully deployed chat-service with helm","time":"2021-09-08T01:09:13+07:00"}
+{"level":"info","msg":"Successfully deployed!","time":"2021-09-08T01:09:13+07:00"}
+{"level":"info","msg":"\r         \nRun: \n- `\u001b[1;37mdevspace open\u001b[0m` to create an ingress for the app and open it in the browser \n- `\u001b[1;37mdevspace enter\u001b[0m` to open a shell into the container \n- `\u001b[1;37mdevspace logs\u001b[0m` to show the container logs\n- `\u001b[1;37mdevspace analyze\u001b[0m` to analyze the space for potential issues\n","time":"2021-09-08T01:09:13+07:00"}

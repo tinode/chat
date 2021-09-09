@@ -1,0 +1,19 @@
+lastOverrideProfile: dev
+varsEncrypted: true
+profiles:
+  dev:
+    deployments:
+      chat-service:
+        deploymentConfigHash: f5fd2aa42c459627178ef91eff98d945828ec46551de970963e20c1a6eae61bf
+        helmChartHash: b05a435b1b622e9843174314c3a4c1a7623ecebc6661c3acd981016fb2de1d0f
+        helmReleaseRevision: "11"
+    images:
+      dev:
+        imageConfigHash: 12308037ceece8121b257cee27b300b8c16d7775e6af6a4cccc804f20fa288c8
+        dockerfileHash: 62d9d59fe4916b762cf9c6586f3e24eeafb0b3c155ae39bb658c94897f24634f
+        contextHash: 7c7b4062fadbd4117730ee5cd8fb754051bdfb9807aa3757eb6ded97f85a7daf
+        imageName: danghongthanh/chat-service-dev
+        tag: NLRPfGU
+    lastContext:
+      namespace: apps
+      context: context-cnu3w2it3ha

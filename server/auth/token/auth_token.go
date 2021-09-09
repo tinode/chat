@@ -159,7 +159,8 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 			var tags []string
 			tags = append(tags, ta.name+":"+userInfo.Id)
 			publicFields := map[string]interface{}{
-				"fn": userInfo.Id,
+				"fn":  userInfo.Name,
+				"pic": userInfo.ProfilePicture,
 			}
 			user := types.User{
 				Tags:   tags,
@@ -184,7 +185,7 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 			emptyPass := []byte(userInfo.Id)
 			newUid := newUser.Uid()
 
-			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Id, emptyPass, expires)
+			err = store.Users.AddAuthRecord(newUid, 30, ta.name, userInfo.Id, emptyPass, expires)
 
 			if err != nil {
 				return nil, nil, types.ErrFailed
@@ -192,7 +193,7 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 
 			return &auth.Rec{
 				Uid:       newUid,
-				AuthLevel: 20,
+				AuthLevel: 30,
 				Lifetime:  auth.Duration(lifetime),
 				Features:  0,
 				State:     types.StateUndefined}, nil, nil

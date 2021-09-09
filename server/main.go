@@ -26,6 +26,7 @@ import (
 	jcr "github.com/tinode/jsonco"
 
 	// Load dotenv environment variables file
+	"github.com/joho/godotenv"
 	_ "github.com/joho/godotenv/autoload"
 
 	// Authenticators
@@ -259,6 +260,7 @@ type configType struct {
 
 func main() {
 	executable, _ := os.Executable()
+	_ = godotenv.Load(".env")
 
 	logFlags := flag.String("log_flags", "stdFlags",
 		"Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")

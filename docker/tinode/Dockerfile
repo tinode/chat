@@ -26,7 +26,7 @@ LABEL version=$VERSION
 # `--build-arg TARGET_DB=mysql` to build for MySQL or
 # `--build-arg TARGET_DB=mongodb` to build for MongoDB.
 # `--build-arg TARGET_DB=alldbs` to build a generic Tinode docker image.
-ARG TARGET_DB=rethinkdb
+ARG TARGET_DB=mongodb
 ENV TARGET_DB=$TARGET_DB
 
 # Runtime options.
@@ -42,14 +42,14 @@ ENV RESET_DB=false
 ENV UPGRADE_DB=false
 
 # Option to skip DB initialization when it's missing.
-ENV NO_DB_INIT=false
+ENV NO_DB_INIT=true
 
 # Load sample data to database from data.json.
 ARG SAMPLE_DATA=data.json
 ENV SAMPLE_DATA=$SAMPLE_DATA
 
 # The MySQL DSN connection.
-ENV MYSQL_DSN='root@tcp(mysql)/tinode'
+# ENV MYSQL_DSN='root@tcp(mysql)/tinode'
 
 # Disable chatbot plugin by default.
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
@@ -124,13 +124,15 @@ WORKDIR /opt/tinode
 # Copy config template to the container.
 COPY config.template .
 COPY entrypoint.sh .
+COPY build .
 
 # Get the desired Tinode build.
-ADD https://github.com/tinode/chat/releases/download/v$BINVERS/tinode-$TARGET_DB.linux-amd64.tar.gz .
+# ADD https://github.com/tinode/chat/releases/download/v$BINVERS/tinode-$TARGET_DB.linux-amd64.tar.gz .
+# ADD tinode-mongodb.linux-amd64.tar.gz .
 
 # Unpack the Tinode archive.
-RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
-	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
+# RUN tar -xzf tinode-mongodb.linux-amd64.tar.gz
+	# && rm tinode-$TARGET_DB.linux-amd64.tar.gz
 
 # Create directory for chatbot data.
 RUN mkdir /botdata
