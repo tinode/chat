@@ -642,7 +642,7 @@ func (subsMapper) Delete(topic string, user types.Uid) error {
 
 // MessagesPersistenceInterface is an interface which defines methods for persistent storage of messages.
 type MessagesPersistenceInterface interface {
-	Save(msg *types.Message, attachments []string, readBySender bool) error
+	Save(msg *types.Message, attachmentURLs []string, readBySender bool) error
 	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
@@ -655,7 +655,7 @@ type messagesMapper struct{}
 var Messages MessagesPersistenceInterface
 
 // Save message
-func (messagesMapper) Save(msg *types.Message, attachments []string, readBySender bool) error {
+func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySender bool) error {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
 	// Increment topic's or user's SeqId
@@ -682,8 +682,17 @@ func (messagesMapper) Save(msg *types.Message, attachments []string, readBySende
 		}
 	}
 
-	if len(attachments) > 0 {
-		return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments)
+	if len(attachmentURLs) > 0 {
+		var attachments []string
+		for _, url := range attachmentURLs {
+			// Convert attachment URLs to file IDs.
+			if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
+				attachments = append(attachments, fid.String())
+			}
+		}
+		if len(attachments) > 0 {
+			return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments)
+		}
 	}
 
 	return nil
