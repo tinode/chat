@@ -138,7 +138,7 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 		case "password:":
 			return []byte(a.password), nil
 		default:
-			return nil, errors.New("Unknown server response in LOGIN AUTH")
+			return nil, errors.New("unknown server response in LOGIN AUTH")
 		}
 	}
 	return nil, nil
@@ -195,14 +195,14 @@ func (v *validator) Init(jsonconf string) error {
 	if v.Login != "" {
 		mechanism := strings.ToLower(v.AuthMechanism)
 		switch mechanism {
-		case "md5":
+		case "cram-md5":
 			v.auth = smtp.CRAMMD5Auth(v.Login, v.SenderPassword)
 		case "login":
 			v.auth = &loginAuth{v.Login, v.SenderPassword}
 		case "", "plain":
 			v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
 		default:
-			return errors.New("Bad Auth Mechanism for SMTP")
+			return errors.New("unknown auth_mechanism")
 		}
 	}
 
