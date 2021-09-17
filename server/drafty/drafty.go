@@ -258,8 +258,7 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 			i = si
 		}
 
-		tag := tags[sp.tp]
-		if tag.isVoid {
+		if tags[sp.tp].isVoid {
 			result = append(result, &node{sp: sp})
 		} else {
 			children, err := forEach(line, start, sp.end, subspans)
@@ -320,12 +319,6 @@ func plainTextFormatter(n *node, ctx interface{}) error {
 		state.txt += text
 	case "BR":
 		state.txt += "\n"
-	case "IC":
-		name, ok := nullableMapGet(n.sp.data, "name")
-		if !ok || name == "" {
-			name = "?"
-		}
-		state.txt += "[ICON:" + name + " " + text + "]"
 	case "IM":
 		name, ok := nullableMapGet(n.sp.data, "name")
 		if !ok || name == "" {
@@ -365,14 +358,12 @@ func previewFormatter(n *node, ctx interface{}) error {
 		}
 	}
 
-	var end int
 	if len(n.children) > 0 {
 		for _, c := range n.children {
 			if err := previewFormatter(c, ctx); err != nil {
 				return err
 			}
 		}
-		end = len(state.drafty.txt)
 	} else {
 		increment := len(n.txt)
 		if at+increment > state.maxLength {
@@ -381,7 +372,7 @@ func previewFormatter(n *node, ctx interface{}) error {
 		state.drafty.txt = append(state.drafty.txt, n.txt[:increment]...)
 	}
 
-	end = len(state.drafty.txt)
+	end := len(state.drafty.txt)
 
 	if n.sp != nil {
 		fmt := style{}

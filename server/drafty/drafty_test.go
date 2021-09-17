@@ -52,11 +52,6 @@ var validInputs = []string{
 		"fmt":[{"at":13,"len":1,"tp":"BR"},{"at":15,"len":1},{"len":13,"key":1},{"len":16,"tp":"QQ"},{"at":16,"len":1,"tp":"BR"}],
 		"ent":[{"tp":"IM","data":{"mime":"image/jpeg","val":"<1292, bytes: /9j/4AAQSkZJ...rehH5o6D/9k=>","width":25,"height":14,"size":968}},{"tp":"MN","data":{"color":2}}]
 	}`,
-	`{
-		"txt":"Tino the Chatbot Post responseYesДа reply to a form",
-		"ent":[{"tp":"IC","data":{"orig":"BN","name":"button"}},{"tp":"IC","data":{"orig":"BN","name":"button"}},{"tp":"MN","data":{"colorId":6}}],
-		"fmt":[{"at":30,"len":3},{"at":33,"len":2,"key":1},{"len":16,"key":2}]
-	}`,
 }
 
 var invalidInputs = []string{
@@ -104,7 +99,6 @@ func TestPlainText(t *testing.T) {
 		"This *text* is _formatted_ and ~deleted *too*~",
 		"*мультибайтовый* _юникод_",
 		"This is a test",
-		"Tino the Chatbot Post response[ICON:button Yes][ICON:button Да] reply to a form",
 	}
 
 	for i := range validInputs {
@@ -146,7 +140,6 @@ func TestPreview(t *testing.T) {
 		`{"txt":"This text is fo","fmt":[{"tp":"ST","at":5,"len":4},{"tp":"EM","at":13,"len":2}]}`,
 		`{"txt":"мультибайтовый ","fmt":[{"tp":"ST","len":14}]}`,
 		`{"txt":"This is a test"}`,
-		`{"txt":"Tino the Chatbo","fmt":[{"len":15}],"ent":[{"tp":"MN"}]}`,
 	}
 	for i := range validInputs {
 		var val interface{}
