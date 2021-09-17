@@ -23,9 +23,9 @@ const (
 	defaultMinPasswordLength = 3
 )
 
-// Token suitable as a login: starts with a Unicode letter (class L) and contains Unicode letters (L),
-// numbers (N) and underscore.
-var loginPattern = regexp.MustCompile(`^\pL[_\pL\pN]+$`)
+// Token suitable as a login: starts and ends with a Unicode letter (class L) or number (class N),
+// contains Unicode letters, numbers, dot and underscore.
+var loginPattern = regexp.MustCompile(`^[\pL\pN][_.\pL\pN]*[\pL\pN]+$`)
 
 // authenticator is the type to map authentication methods to.
 type authenticator struct {

@@ -153,7 +153,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 		data["mime"] = pl.ContentType
 
 		// Convert Drafty content to plain text (clients 0.16 and below).
-		data["content"], err = drafty.ToPlainText(pl.Content)
+		data["content"], err = drafty.PlainText(pl.Content)
 		if err != nil {
 			return nil, err
 		}
