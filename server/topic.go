@@ -1906,11 +1906,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			// Not a p2p topic.
 			desc.Public = t.public
 			desc.Trusted = t.trusted
-			logs.Info.Println("Trusted 1:", pud.trusted)
 		} else if full && t.cat == types.TopicCatP2P {
 			desc.Public = pud.public
 			desc.Trusted = pud.trusted
-			logs.Info.Println("Trusted 2:", pud.trusted)
 		}
 	}
 
