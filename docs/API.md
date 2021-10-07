@@ -73,7 +73,7 @@ Server connects sessions, users, and topics. Session is a network connection bet
 
 Users and topics are assigned unique IDs. User ID is a string with 'usr' prefix followed by base64-URL-encoded pseudo-random 64-bit number, e.g. `usr2il9suCbuko`. Topic IDs are described below.
 
-Clients such as mobile or web applications create sessions by connecting to the server over a websocket or through long polling. Client authentication is required in order to perform most operations. Client authenticates the session by sending a `{login}` packet. See [Authentication](#authentication) section for details. Once authenticated, the client receives a a token which is used for authentication later. Multiple simultaneous sessions may be established by the same user. Logging out is not supported (and not needed).
+Clients such as mobile or web applications create sessions by connecting to the server over a websocket or through long polling. Client authentication is required in order to perform most operations. Client authenticates the session by sending a `{login}` packet. See [Authentication](#authentication) section for details. Once authenticated, the client receives a token which is used for authentication later. Multiple simultaneous sessions may be established by the same user. Logging out is not supported (and not needed).
 
 Once the session is established, the user can start interacting with other users through topics. The following
 topic types are available:
