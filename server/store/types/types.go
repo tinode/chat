@@ -330,6 +330,19 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 	return
 }
 
+// P2PNameForUser takes a user ID and a full name of a P2P topic and generates the name of the
+// P2P topic as it should be seen by the given user.
+func P2PNameForUser(uid Uid, p2p string) (string, error) {
+	uid1, uid2, err := ParseP2P(p2p)
+	if err != nil {
+		return "", err
+	}
+	if uid.Compare(uid1) == 0 {
+		return uid2.UserId(), nil
+	}
+	return uid1.UserId(), nil
+}
+
 // ObjHeader is the header shared by all stored objects.
 type ObjHeader struct {
 	// using string to get around rethinkdb's problems with uint64;

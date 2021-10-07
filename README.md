@@ -91,7 +91,7 @@ When you register a new account you are asked for an email address to send valid
   * Message status notifications: message delivery to server; received and read notifications; typing notifications.
   * Most recent message preview in contact list.
   * Server-generated presence notifications for people, group chats.
-  * Replying to messages.
+  * Forwarding and replying to messages.
 * Administration:
   * Granular access control with permissions for various actions.
   * Support for custom authentication backends.
@@ -114,7 +114,6 @@ When you register a new account you are asked for an email address to send valid
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Voice and video messages, location sharing.
-* Forwarding messages.
 * Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).

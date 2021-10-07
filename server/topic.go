@@ -3273,12 +3273,8 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 
 // Prepares a payload to be delivered to a mobile device as a push notification in response to a {data} message.
 func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receipt {
-	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
-	// not the t.original(fromUid) because it's the topic name as seen by the recipient, not by the sender.
-	topic := t.xoriginal
-	if t.cat == types.TopicCatP2P {
-		topic = fromUid.UserId()
-	}
+	// Passing `Topic` as `t.xoriginal` for group topics and P2P topics. The p2p topic name is later rewritten for
+	// each recepient then the payload is created: p2p recepient sees the topic as the ID of the other user.
 
 	// Initialize the push receipt.
 	contentType, _ := data.Head["mime"].(string)
@@ -3287,7 +3283,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 		Payload: push.Payload{
 			What:        push.ActMsg,
 			Silent:      false,
-			Topic:       topic,
+			Topic:       t.xoriginal,
 			From:        data.From,
 			Timestamp:   data.Timestamp,
 			SeqId:       data.SeqId,
@@ -3297,6 +3293,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 	}
 
 	if t.isChan {
+		// Channel readers should get a push on a channel name (as an FCM topic push).
 		receipt.Channel = types.GrpToChn(t.xoriginal)
 	}
 
@@ -3685,11 +3682,8 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 	case types.TopicCatFnd:
 		return "fnd"
 	case types.TopicCatP2P:
-		uid1, uid2, _ := types.ParseP2P(name)
-		if uid == uid1 {
-			return uid2.UserId()
-		}
-		return uid1.UserId()
+		topic, _ := types.P2PNameForUser(uid, name)
+		return topic
 	case types.TopicCatGrp:
 		if isChan {
 			return types.GrpToChn(name)
