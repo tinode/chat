@@ -172,7 +172,9 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
-		store.Files.LinkAttachments(user.Uid().UserId(), types.ZeroUid, msg.Extra.Attachments)
+		if err := store.Files.LinkAttachments(user.Uid().UserId(), types.ZeroUid, msg.Extra.Attachments); err != nil {
+			logs.Warn.Println("create user: failed to link avatar attachment", err, s.sid)
+		}
 	}
 
 	var reply *ServerComMessage

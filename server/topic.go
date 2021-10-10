@@ -2127,7 +2127,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 	}
 
 	if len(core) > 0 && msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
-		store.Files.LinkAttachments(t.name, types.ZeroUid, msg.Extra.Attachments)
+		if err := store.Files.LinkAttachments(t.name, types.ZeroUid, msg.Extra.Attachments); err != nil {
+			logs.Warn.Printf("topic[%s] failed to link avatar attachment: %v", t.name, err)
+			// This is not a critical error, continue execution.
+		}
 	}
 
 	// Update values cached in the topic object

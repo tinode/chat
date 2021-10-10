@@ -1040,7 +1040,7 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 			userId = types.ParseUserId(topic)
 			topic = ""
 		}
-		return adp.FileLinkAttachments(topic, userId, msgId, attachments)
+		return adp.FileLinkAttachments(topic, userId, msgId, fids)
 	}
 	return nil
 }
