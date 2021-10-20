@@ -1017,7 +1017,7 @@ func (fileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 		return err
 	}
 	if len(toDel) > 0 {
-		logs.Warn.Println("deleteting media", toDel)
+		logs.Warn.Println("deleting media", toDel)
 		return Store.GetMediaHandler().Delete(toDel)
 	}
 	return nil
