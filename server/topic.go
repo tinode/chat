@@ -3276,7 +3276,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 
 // Prepares a payload to be delivered to a mobile device as a push notification in response to a {data} message.
 func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receipt {
-	// Passing `Topic` as `t.xoriginal` for group topics and P2P topics. The p2p topic name is later rewritten for
+	// Passing `Topic` as `t.name` for group topics and P2P topics. The p2p topic name is later rewritten for
 	// each recepient then the payload is created: p2p recepient sees the topic as the ID of the other user.
 
 	// Initialize the push receipt.
@@ -3286,7 +3286,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 		Payload: push.Payload{
 			What:        push.ActMsg,
 			Silent:      false,
-			Topic:       t.xoriginal,
+			Topic:       t.name,
 			From:        data.From,
 			Timestamp:   data.Timestamp,
 			SeqId:       data.SeqId,
@@ -3297,7 +3297,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 
 	if t.isChan {
 		// Channel readers should get a push on a channel name (as an FCM topic push).
-		receipt.Channel = types.GrpToChn(t.xoriginal)
+		receipt.Channel = types.GrpToChn(t.name)
 	}
 
 	for uid, pud := range t.perUser {
