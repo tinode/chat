@@ -32,13 +32,17 @@ const (
 
 	plgClientMask = plgHi | plgAcc | plgLogin | plgSub | plgLeave | plgPub | plgGet | plgSet | plgDel | plgNote
 	plgServerMask = plgData | plgMeta | plgPres | plgInfo
+)
 
+const (
 	plgActCreate = 1 << iota
 	plgActUpd
 	plgActDel
 
 	plgActMask = plgActCreate | plgActUpd | plgActDel
+)
 
+const (
 	plgTopicMe = 1 << iota
 	plgTopicFnd
 	plgTopicP2P
@@ -47,7 +51,9 @@ const (
 	plgTopicNew
 
 	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys
+)
 
+const (
 	plgFilterByTopicType = 1 << iota
 	plgFilterByPacket
 	plgFilterByAction
