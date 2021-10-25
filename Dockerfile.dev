@@ -26,6 +26,7 @@ WORKDIR /go/src/mgi-vn/chat
 COPY . .
 RUN mkdir -p /dist
 RUN mkdir -p /dist/templ
+RUN mkdir -p /dist/queue
 
 RUN go build \
     -installsuffix 'static' \
@@ -39,8 +40,9 @@ RUN go build \
 
 # RUN cp entrypoint.sh /dist/
 RUN cp server/tinode.conf /dist/
-RUN cp server/.env /dist/
+RUN cp server/.env-dev /dist/.env
 RUN cp server/templ/*.templ /dist/templ/
+RUN cp server/queue/*.json /dist/queue/
 
 # Final stage: the running container.
 FROM alpine AS final

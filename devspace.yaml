@@ -10,7 +10,7 @@ hooks:
 # `vars` specifies variables which may be used as ${VAR_NAME} in devspace.yaml
 vars:
 - name: IMAGE
-  value: danghongthanh/chat-service
+  value: mgivn/chat-service
 
 # `images` specifies all images that may need to be built for this project
 images:
