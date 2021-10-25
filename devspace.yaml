@@ -1,0 +1,123 @@
+version: v1beta10
+
+hooks:
+- command: "sh"
+  args: ["build.sh"]
+  when:
+    before:
+      images: all
+
+# `vars` specifies variables which may be used as ${VAR_NAME} in devspace.yaml
+vars:
+- name: IMAGE
+  value: danghongthanh/chat-service
+
+# `images` specifies all images that may need to be built for this project
+images:
+  dev: # This image is called `admin-service` and this name `admin-service` is referenced multiple times in the config below
+    image: ${IMAGE}-dev
+    dockerfile: ./Dockerfile.dev
+  prod: # This image is called `admin-service` and this name `admin-service` is referenced multiple times in the config below
+    image: ${IMAGE}-prod
+    dockerfile: ./Dockerfile
+
+# `deployments` tells DevSpace how to deploy this project
+deployments:
+- name: chat-service
+  # This deployment uses `helm` but you can also define `kubectl` deployments or kustomizations
+  helm:
+    # We are deploying the so-called Component Chart: https://devspace.sh/component-chart/docs
+    componentChart: true
+    # Under `values` we can define the values for this Helm chart used during `helm install/upgrade`
+    # You may also use `valuesFiles` to load values from files, e.g. valuesFiles: ["values.yaml"]
+    values:
+      containers:
+      - image: ${IMAGE}-prod # Use the value of our `${IMAGE}` variable here (see vars above)
+      - image: ${IMAGE}-dev # Use the value of our `${IMAGE}` variable here (see vars above)
+      service:
+        ports:
+        - port: 16060
+        - port: 6060
+      replicas: 1   # int       | Number of replicas of component
+
+# `dev` only applies when you run `devspace dev`
+dev:
+  # `dev.ports` specifies all ports that should be forwarded while `devspace dev` is running
+  # Port-forwarding lets you access your application via localhost on your local machine
+  ports:
+  - imageSelector: ${IMAGE}-dev # Select the Pod that runs our `${IMAGE}`
+    forward:
+    - port: 16060
+
+  # `dev.open` tells DevSpace to open certain URLs as soon as they return HTTP status 200
+  # Since we configured port-forwarding, we can use a localhost address here to access our application
+  open:
+  - url: http://localhost:16060
+
+  # `dev.sync` configures a file sync between our Pods in k8s and your local project files
+  sync:
+  - imageSelector: ${IMAGE}-dev # Select the Pod that runs our `${IMAGE}`
+    excludePaths:
+    - .git/
+    uploadExcludePaths:
+    - Dockerfile
+
+  # `dev.terminal` tells DevSpace to open a terminal as a last step during `devspace dev`
+  terminal:
+    imageSelector: ${IMAGE}-dev # Select the Pod that runs our `${IMAGE}`
+    # With this optional `command` we can tell DevSpace to run a script when opening the terminal
+    # This is often useful to display help info for new users or perform initial tasks (e.g. installing dependencies)
+    # DevSpace has generated an example ./devspace_start.sh file in your local project - Feel free to customize it!
+    command:
+    - ./devspace_start.sh
+
+  # Since our Helm charts and manifests deployments are often optimized for production,
+  # DevSpace let's you swap out Pods dynamically to get a better dev environment
+  replacePods:
+  - imageSelector: ${IMAGE}-dev # Select the Pod that runs our `${IMAGE}`
+    # Since the `${IMAGE}` used to start our main application pod may be distroless or not have any dev tooling, let's replace it with a dev-optimized image
+    # DevSpace provides a sample image here but you can use any image for your specific needs
+    replaceImage: loftsh/go:latest
+    # Besides replacing the container image, let's also apply some patches to the `spec` of our Pod
+    # We are overwriting `command` + `args` for the first container in our selected Pod, so it starts with `sleep 9999999`
+    # Using `sleep 9999999` as PID 1 (instead of the regular ENTRYPOINT), allows you to start the application manually
+    patches:
+    - op: replace
+      path: spec.containers[0].command
+      value:
+      - sleep
+    - op: replace
+      path: spec.containers[0].args
+      value:
+      - "9999999"
+    - op: remove
+      path: spec.containers[0].securityContext
+
+# `profiles` lets you modify the config above for different environments (e.g. dev vs production)
+profiles:
+  # This profile is called `production` and you can use it for example using: devspace deploy -p production
+  # We generally recommend to use the base config without any profiles as optimized for development (e.g. image build+push is disabled)
+- name: prod
+# This profile adds our image to the config so that DevSpace will build, tag and push our image before the deployment
+  replace:
+    images:
+      prod:
+        image: ${IMAGE}-prod # Use the value of our `${IMAGE}` variable here (see vars above)
+        dockerfile: ./Dockerfile
+  patches:
+  - op: remove
+    path: deployments[0].helm.values.containers[1]
+  - op: replace
+    path: deployments.name=post-service.helm.values.replicas
+    value: 5
+
+- name: dev
+# This profile adds our image to the config so that DevSpace will build, tag and push our image before the deployment
+  replace:
+    images:
+      dev:
+        image: ${IMAGE}-dev # Use the value of our `${IMAGE}` variable here (see vars above)
+        dockerfile: ./Dockerfile.dev
+  patches:
+  - op: remove
+    path: deployments[0].helm.values.containers[0]

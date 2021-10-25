@@ -1,0 +1,53 @@
+{{/*
+  FRENCH
+
+  See explanation in ./email-validation-en.templ
+*/}}
+
+{{define "subject" -}}
+Tinode enregistrement : confirmer l'adresse e-mail
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>Bonjour.</p>
+
+<p>Vous recevez ce message car quelqu'un a utilisé votre adresse électronique pour s'inscrire sur le site
+<a href="{{.HostUrl}}">Tinode</a>.</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">Cliquer ici</a> pour confimer
+ou rendez-vous à l'adresse
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+et entrez le code suivant :</p>
+<blockquote>{{.Code}}</blockquote>
+<p>Vous devrez peut-être entrer un login et un mot de passe.</p>
+
+<p>Si vous ne vous êtes pas inscrit à Tinode, ignorez ce message.</p>
+
+<p><a href="https://tinode.co/">L'équipe Tinode</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+Bonjour.
+
+Vous recevez ce message car quelqu'un a utilisé votre adresse électronique pour s'inscrire sur le site Tinode ({{.HostUrl}}).
+
+Cliquer sur le lien {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} pour confimer ou rendez-vous à l'adresse {{.HostUrl}}#cred?what=email
+et entrez le code suivant :
+
+	{{.Code}}
+
+Vous devrez peut-être entrer un login et un mot de passe.
+
+Si vous ne vous êtes pas inscrit à Tinode, ignorez ce message.
+
+L'équipe Tinode
+https://tinode.co/
+
+{{- end}}

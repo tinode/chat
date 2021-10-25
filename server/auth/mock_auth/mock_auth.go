@@ -6,11 +6,12 @@ package mock_auth
 
 import (
 	json "encoding/json"
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	auth "github.com/tinode/chat/server/auth"
 	types "github.com/tinode/chat/server/store/types"
-	reflect "reflect"
-	time "time"
 )
 
 // MockAuthHandler is a mock of AuthHandler interface
@@ -42,6 +43,11 @@ func (m *MockAuthHandler) Init(jsonconf json.RawMessage, name string) error {
 	ret := m.ctrl.Call(m, "Init", jsonconf, name)
 	ret0, _ := ret[0].(error)
 	return ret0
+}
+
+// IsInitialized returns true if the handler is initialized.
+func (m *MockAuthHandler) IsInitialized() bool {
+	return true
 }
 
 // Init indicates an expected call of Init

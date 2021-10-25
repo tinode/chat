@@ -599,7 +599,11 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	// Disable all authenticators
 	authnames := store.Store.GetAuthNames()
 	for _, name := range authnames {
-		if err := store.Store.GetAuthHandler(name).DelRecords(uid); err != nil {
+		hdl := store.Store.GetAuthHandler(name)
+		if !hdl.IsInitialized() {
+			continue
+		}
+		if err := hdl.DelRecords(uid); err != nil {
 			// This could be completely benign, i.e. authenticator exists but not used.
 			logs.Warn.Println("replyDelUser: failed to delete auth record", uid.UserId(), name, err, s.sid)
 			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrUnsupported {

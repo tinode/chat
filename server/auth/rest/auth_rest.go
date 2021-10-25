@@ -74,6 +74,10 @@ type response struct {
 
 // Init initializes the handler.
 func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
+	if name == "" {
+		return errors.New("auth_rest: authenticator name cannot be blank")
+	}
+
 	if a.name != "" {
 		return errors.New("auth_rest: already initialized as " + a.name + "; " + name)
 	}
@@ -108,6 +112,11 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	a.useSeparateEndpoints = config.UseSeparateEndpoints
 
 	return nil
+}
+
+// IsInitialized returns true if the handler is initialized.
+func (a *authenticator) IsInitialized() bool {
+	return a.name != ""
 }
 
 // Execute HTTP POST to the server at the specified endpoint and with the provided payload.
@@ -251,6 +260,7 @@ func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 
 // DelRecords deletes all authentication records for the given user.
 func (a *authenticator) DelRecords(uid types.Uid) error {
+	logs.Info.Println("DelRecords, initialized=", a.name != "")
 	_, err := a.callEndpoint("del", &auth.Rec{Uid: uid}, nil, "")
 	return err
 }

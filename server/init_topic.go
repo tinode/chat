@@ -276,8 +276,10 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
-				// Adapter already swapped the public values
+				// Adapter has already swapped the state, public, defaultAccess, lastSeen values.
 				public:    subs[i].GetPublic(),
+				lastSeen:  subs[i].GetLastSeen(),
+				lastUA:    subs[i].GetUserAgent(),
 				topicName: types.ParseUid(subs[(i+1)%2].User).UserId(),
 
 				private:   subs[i].Private,

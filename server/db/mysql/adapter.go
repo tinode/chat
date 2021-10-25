@@ -867,8 +867,8 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	if err := a.db.GetContext(ctx, &record, "SELECT uname,secret,expires,authlvl FROM auth WHERE userid=? AND scheme=?",
 		store.DecodeUid(uid), scheme); err != nil {
 		if err == sql.ErrNoRows {
-			// Nothing found - clear the error
-			err = nil
+			// Nothing found - use standard error.
+			err = t.ErrNotFound
 		}
 		return "", 0, nil, expires, err
 	}
@@ -1465,11 +1465,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
 	// Prepare a list of separate subscriptions to users vs topics
-	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
 	for rows.Next() {
+		var sub t.Subscription
 		if err = rows.StructScan(&sub); err != nil {
 			break
 		}
@@ -1485,8 +1485,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid1, uid2, _ := t.ParseP2P(tname)
 			if uid1 == uid {
 				usrq = append(usrq, store.DecodeUid(uid2))
+				sub.SetWith(uid2.UserId())
 			} else {
 				usrq = append(usrq, store.DecodeUid(uid1))
+				sub.SetWith(uid1.UserId())
 			}
 			topq = append(topq, tname)
 		} else {
@@ -1551,6 +1553,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 		var top t.Topic
 		for rows.Next() {
+			var sub t.Subscription
 			if err = rows.StructScan(&top); err != nil {
 				break
 			}
@@ -1589,17 +1592,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			args = append(args, t.StateDeleted)
 		}
 
-		if !ims.IsZero() {
-			// Use cache timestamp if provided: get newer entries only.
-			q += " AND updatedat>?"
-			args = append(args, ims)
-
-			if limit > 0 && limit < len(usrq) {
-				// No point in fetching more than the requested limit.
-				q += " ORDER BY updatedat LIMIT ?"
-				args = append(args, limit)
-			}
-		}
+		// Ignoring ims: we need all users to get LastSeen and UserAgent.
 
 		q = a.db.Rebind(q)
 
@@ -1612,21 +1605,20 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var usr t.User
 		for rows.Next() {
-			if err = rows.StructScan(&usr); err != nil {
+			var usr2 t.User
+			if err = rows.StructScan(&usr2); err != nil {
 				break
 			}
 
-			uid2 := encodeUidString(usr.Id)
+			uid2 := encodeUidString(usr2.Id)
 			joinOn := uid.P2PName(uid2)
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
-				sub.SetState(usr.State)
-				sub.SetPublic(fromJSON(usr.Public))
-				sub.SetWith(uid2.UserId())
-				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
-				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.SetState(usr2.State)
+				sub.SetPublic(fromJSON(usr2.Public))
+				sub.SetDefaultAccess(usr2.Access.Auth, usr2.Access.Anon)
+				sub.SetLastSeenAndUA(usr2.LastSeen, usr2.UserAgent)
 				join[joinOn] = sub
 			}
 		}
@@ -1656,7 +1648,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
-		s.readseqid,s.modewant,s.modegiven,u.public,s.private
+		s.readseqid,s.modewant,s.modegiven,u.public,u.lastseen,u.useragent,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
 		WHERE s.topic=?`
 	args := []interface{}{topic}
@@ -1707,18 +1699,21 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var sub t.Subscription
 	var subs []t.Subscription
 	var public interface{}
+	var lastSeen sql.NullTime
+	var userAgent string
 	for rows.Next() {
 		if err = rows.Scan(
 			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
 			&sub.User, &sub.Topic, &sub.DelId, &sub.RecvSeqId,
 			&sub.ReadSeqId, &sub.ModeWant, &sub.ModeGiven,
-			&public, &sub.Private); err != nil {
+			&public, &lastSeen, &userAgent, &sub.Private); err != nil {
 			break
 		}
 
 		sub.User = encodeUidString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
+		sub.SetLastSeenAndUA(&lastSeen.Time, userAgent)
 		subs = append(subs, sub)
 	}
 	if err == nil {
@@ -1727,14 +1722,20 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	rows.Close()
 
 	if err == nil && tcat == t.TopicCatP2P && len(subs) > 0 {
-		// Swap public values of P2P topics as expected.
+		// Swap public & lastSeen values of P2P topics as expected.
 		if len(subs) == 1 {
 			// The other user is deleted, nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetLastSeenAndUA(nil, "")
 		} else {
 			pub := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
 			subs[1].SetPublic(pub)
+
+			lastSeen := subs[0].GetLastSeen()
+			userAgent = subs[0].GetUserAgent()
+			subs[0].SetLastSeenAndUA(subs[1].GetLastSeen(), subs[1].GetUserAgent())
+			subs[1].SetLastSeenAndUA(lastSeen, userAgent)
 		}
 
 		// Remove deleted and unneeded subscriptions

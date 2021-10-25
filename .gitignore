@@ -8,3 +8,7 @@
 
 .DS_Store
 
+docker/tinode/build
+py_grpc
+releases
+vendor

@@ -55,7 +55,8 @@ fi
 if [ ! -z "$EXT_STATIC_DIR" ] ; then
 	STATIC_DIR=$EXT_STATIC_DIR
 else
-	STATIC_DIR="./static"
+	# STATIC_DIR="./static"
+	STATIC_DIR="-"
 fi
 
 # Do not load data when upgrading database.
@@ -63,22 +64,22 @@ if [ "$UPGRADE_DB" = "true" ] ; then
 	SAMPLE_DATA=
 fi
 
-# If push notifications are enabled, generate client-side firebase config file.
-if [ ! -z "$FCM_PUSH_ENABLED" ] || [ ! -z "$TNPG_PUSH_ENABLED" ] ; then
-	# Write client config to $STATIC_DIR/firebase-init.js
-	cat > $STATIC_DIR/firebase-init.js <<- EOM
-const FIREBASE_INIT = {
-  apiKey: "$FCM_API_KEY",
-  appId: "$FCM_APP_ID",
-  messagingSenderId: "$FCM_SENDER_ID",
-  projectId: "$FCM_PROJECT_ID",
-  messagingVapidKey: "$FCM_VAPID_KEY"
-};
-EOM
-else
-	# Create an empty firebase-init.js
-	echo "" > $STATIC_DIR/firebase-init.js
-fi
+# # If push notifications are enabled, generate client-side firebase config file.
+# if [ ! -z "$FCM_PUSH_ENABLED" ] || [ ! -z "$TNPG_PUSH_ENABLED" ] ; then
+# 	# Write client config to $STATIC_DIR/firebase-init.js
+# 	cat > $STATIC_DIR/firebase-init.js <<- EOM
+# const FIREBASE_INIT = {
+#   apiKey: "$FCM_API_KEY",
+#   appId: "$FCM_APP_ID",
+#   messagingSenderId: "$FCM_SENDER_ID",
+#   projectId: "$FCM_PROJECT_ID",
+#   messagingVapidKey: "$FCM_VAPID_KEY"
+# };
+# EOM
+# else
+# 	# Create an empty firebase-init.js
+# 	echo "" > $STATIC_DIR/firebase-init.js
+# fi
 
 if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
 	# Write config to $STATIC_DIR/apple-app-site-association config file.
@@ -109,18 +110,18 @@ if [ ! -z "$WAIT_FOR" ] ; then
 fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-init_stdout=./init-db-stdout.txt
-./init-db \
-	--reset=${RESET_DB} \
-	--upgrade=${UPGRADE_DB} \
-	--config=${CONFIG} \
-	--data=${SAMPLE_DATA} \
-	--no_init=${NO_DB_INIT} \
-	1>${init_stdout}
-if [ $? -ne 0 ]; then
-	echo "./init-db failed. Quitting."
-	exit 1
-fi
+# init_stdout=./init-db-stdout.txt
+# ./init-db \
+# 	--reset=${RESET_DB} \
+# 	--upgrade=${UPGRADE_DB} \
+# 	--config=${CONFIG} \
+# 	--data=${SAMPLE_DATA} \
+# 	--no_init=${NO_DB_INIT} \
+# 	1>${init_stdout}
+# if [ $? -ne 0 ]; then
+# 	echo "./init-db failed. Quitting."
+# 	exit 1
+# fi
 
 # If sample data was provided, try to find Tino password.
 if [ ! -z "$SAMPLE_DATA" ] ; then

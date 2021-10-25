@@ -1141,8 +1141,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
 				usrq = append(usrq, uid2.String())
+				sub.SetWith(uid2.UserId())
 			} else {
 				usrq = append(usrq, uid1.String())
+				sub.SetWith(uid1.UserId())
 			}
 			topq = append(topq, tname)
 		} else {
@@ -1220,15 +1222,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			q = q.Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not())
 		}
 
-		if !ims.IsZero() {
-			// Use cache timestamp if provided: get newer entries only.
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(ims))
-
-			if limit > 0 && limit < len(topq) {
-				// No point in fetching more than the requested limit.
-				q = q.OrderBy("UpdatedAt").Limit(limit)
-			}
-		}
+		// Ignoring ims: we need all users to get LastSeen and UserAgent.
 
 		cursor, err = q.Run(a.conn)
 		if err != nil {
@@ -1328,6 +1322,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
+				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
 				subs = append(subs, sub)
 			}
 		}
@@ -1335,14 +1330,20 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
-		// Swap public values of P2P topics as expected.
+		// Swap public values & lastSeen of P2P topics as expected.
 		if len(subs) == 1 {
 			// User is deleted. Nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetLastSeenAndUA(nil, "")
 		} else {
 			pub := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
 			subs[1].SetPublic(pub)
+
+			lastSeen := subs[0].GetLastSeen()
+			userAgent := subs[0].GetUserAgent()
+			subs[0].SetLastSeenAndUA(subs[1].GetLastSeen(), subs[1].GetUserAgent())
+			subs[1].SetLastSeenAndUA(lastSeen, userAgent)
 		}
 
 		// Remove deleted and unneeded subscriptions

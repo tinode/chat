@@ -9,12 +9,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"time"
 
 	"github.com/mgi-vn/common/pkg/middleware/identity"
 	pb "github.com/mgi-vn/proto-service/gen/go"
-	"github.com/opentracing/opentracing-go/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
@@ -71,6 +71,10 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
 func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
+	if name == "" {
+		return errors.New("auth_token: authenticator name cannot be blank")
+	}
+
 	if ta.name != "" {
 		return errors.New("auth_token: already initialized as " + ta.name + "; " + name)
 	}
@@ -103,6 +107,11 @@ func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	return nil
 }
 
+// IsInitialized returns true if the handler is initialized.
+func (ta *authenticator) IsInitialized() bool {
+	return ta.name != ""
+}
+
 // AddRecord is not supprted, will produce an error.
 func (authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return nil, types.ErrUnsupported
@@ -125,13 +134,13 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		authMiddleware := identity.NewAuth(secretAuthKey)
 		userID, err := authMiddleware.ValidateToken(string(token))
 		if err != nil || userID == "" {
-			log.Error(err)
+			log.Printf("Validate token failed: %s\n", err)
 			return nil, nil, types.ErrFailed
 		}
 
 		userInfo, err := ta.GetUserInfo(context.Background(), string(token))
 		if err != nil {
-			log.Error(err)
+			log.Printf("Cannot get user info: %s\n", err)
 			return nil, nil, types.ErrFailed
 		}
 		if userInfo.IsEnabled == 0 {
@@ -150,7 +159,8 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 			var tags []string
 			tags = append(tags, ta.name+":"+userInfo.Id)
 			publicFields := map[string]interface{}{
-				"fn": userInfo.Id,
+				"fn":  userInfo.Name,
+				"pic": userInfo.ProfilePicture,
 			}
 			user := types.User{
 				Tags:   tags,
@@ -175,7 +185,7 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 			emptyPass := []byte(userInfo.Id)
 			newUid := newUser.Uid()
 
-			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Id, emptyPass, expires)
+			err = store.Users.AddAuthRecord(newUid, 30, ta.name, userInfo.Id, emptyPass, expires)
 
 			if err != nil {
 				return nil, nil, types.ErrFailed
@@ -183,7 +193,7 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 
 			return &auth.Rec{
 				Uid:       newUid,
-				AuthLevel: 20,
+				AuthLevel: 30,
 				Lifetime:  auth.Duration(lifetime),
 				Features:  0,
 				State:     types.StateUndefined}, nil, nil
