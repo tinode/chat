@@ -1,0 +1,10 @@
+{
+    "exchanges": ["notification_exchange"],
+    "queues": [{
+        "name": "notification_queue",
+        "topics": [{
+            "name": "notification.*",
+            "exchange": "notification_exchange"
+        }]
+    }]
+}
