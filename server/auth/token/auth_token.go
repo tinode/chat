@@ -132,8 +132,8 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		secretAuthKey := os.Getenv("SECRET_AUTH_KEY")
 
 		authMiddleware := identity.NewAuth(secretAuthKey)
-		userID, err := authMiddleware.ValidateToken(string(token))
-		if err != nil || userID == "" {
+		_, err := authMiddleware.ValidateToken(string(token))
+		if err != nil {
 			log.Printf("Validate token failed: %s\n", err)
 			return nil, nil, types.ErrFailed
 		}
