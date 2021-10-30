@@ -150,8 +150,8 @@ github.com/mattn/go-sqlite3 v1.9.0 h1:pDRiWfl+++eC2FEFRy6jXmQlvp4Yh3z1MJKg4UeYM/
 github.com/mattn/go-sqlite3 v1.9.0/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsOqkbpncsNc=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
-github.com/mgi-vn/common v0.0.0-20211025074359-398d1dc14aa9 h1:Wip3VnA3C8AwDIzaTklA3hALsfjTOgVe7eqPHvMSDUk=
-github.com/mgi-vn/common v0.0.0-20211025074359-398d1dc14aa9/go.mod h1:dm0M75yc3TF7ySn7uSJvwyo1oju1pS4anVOi2JVXkl0=
+github.com/mgi-vn/common v0.0.0-20211030152257-1c9abe4b72e5 h1:x/VpFGCixRcQinu+NJyDWoGE+5ZwhoUx9y7l4sc/4VU=
+github.com/mgi-vn/common v0.0.0-20211030152257-1c9abe4b72e5/go.mod h1:dm0M75yc3TF7ySn7uSJvwyo1oju1pS4anVOi2JVXkl0=
 github.com/mgi-vn/proto-service v0.0.0-20210731073750-be72eccb8927/go.mod h1:BLuck5nbyx1mIMbbhHQuoQ1A8a+5Sdqr709fqLvplYI=
 github.com/mgi-vn/proto-service v0.0.0-20211024071520-2a5efae78738 h1:jnBBavPeeoEQXZnJfBHZwuwIE/putdFGJlx4ihIGX/4=
 github.com/mgi-vn/proto-service v0.0.0-20211024071520-2a5efae78738/go.mod h1:BLuck5nbyx1mIMbbhHQuoQ1A8a+5Sdqr709fqLvplYI=

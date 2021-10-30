@@ -16,6 +16,7 @@ import (
 	"time"
 
 	commonSchemas "github.com/mgi-vn/common/pkg/schemas"
+	pb "github.com/mgi-vn/proto-service/gen/go"
 	"github.com/tinode/chat/server/push"
 )
 
@@ -98,7 +99,7 @@ func sendNotifications(rcpt *push.Receipt, rabbitMQ *queue.RabbitMQ) {
 	fmt.Println(data)
 	if len(rcpt.To) > 0 {
 		// List of UIDs for querying the database
-		uids := make([]string, len(rcpt.To))
+		var uids []string
 		i := 0
 		for uid, _ := range rcpt.To {
 			user, _ := store.Users.Get(uid)
@@ -112,9 +113,10 @@ func sendNotifications(rcpt *push.Receipt, rabbitMQ *queue.RabbitMQ) {
 			}
 			if userId == "" {
 				fmt.Println("Can not find user id")
+			} else {
+				uids = append(uids, userId)
 			}
 			fmt.Println("userId", userId)
-			uids[i] = userId
 			i++
 		}
 		fmt.Println("uids", uids)
@@ -143,6 +145,7 @@ func sendNotifications(rcpt *push.Receipt, rabbitMQ *queue.RabbitMQ) {
 					"topic_id":     rcpt.Payload.Topic,
 				},
 			},
+			IsPersistence: pb.CustomBool_CUSTOM_BOOL_FALSE,
 		}
 
 		notifyByte, err := json.Marshal(notify)

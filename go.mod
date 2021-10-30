@@ -15,7 +15,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/joho/godotenv v1.3.0
-	github.com/mgi-vn/common v0.0.0-20211025074359-398d1dc14aa9
+	github.com/mgi-vn/common v0.0.0-20211030152257-1c9abe4b72e5
 	github.com/mgi-vn/proto-service v0.0.0-20211024071520-2a5efae78738
 	github.com/nyaruka/phonenumbers v1.0.56
 	github.com/prometheus/client_golang v1.5.1
