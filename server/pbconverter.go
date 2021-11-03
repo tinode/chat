@@ -413,15 +413,19 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if get := pkt.GetGet(); get != nil {
 		msg.Get = &MsgClientGet{
-			Id:          get.GetId(),
-			Topic:       get.GetTopic(),
-			MsgGetQuery: *pbGetQueryDeserialize(get.GetQuery()),
+			Id:    get.GetId(),
+			Topic: get.GetTopic(),
+		}
+		if gq := get.GetQuery(); gq != nil {
+			msg.Get.MsgGetQuery = *pbGetQueryDeserialize(gq)
 		}
 	} else if set := pkt.GetSet(); set != nil {
 		msg.Set = &MsgClientSet{
-			Id:          set.GetId(),
-			Topic:       set.GetTopic(),
-			MsgSetQuery: *pbSetQueryDeserialize(set.GetQuery()),
+			Id:    set.GetId(),
+			Topic: set.GetTopic(),
+		}
+		if sq := set.GetQuery(); sq != nil {
+			msg.Set.MsgSetQuery = *pbSetQueryDeserialize(sq)
 		}
 	} else if del := pkt.GetDel(); del != nil {
 		msg.Del = &MsgClientDel{
@@ -560,29 +564,31 @@ func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 }
 
 func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
-	msg := MsgGetQuery{}
+	if in == nil {
+		return nil
+	}
 
-	if in != nil {
-		msg.What = in.GetWhat()
+	msg := MsgGetQuery{
+		What: in.GetWhat(),
+	}
 
-		if desc := in.GetDesc(); desc != nil {
-			msg.Desc = &MsgGetOpts{
-				IfModifiedSince: int64ToTime(desc.GetIfModifiedSince()),
-				Limit:           int(desc.GetLimit()),
-			}
+	if desc := in.GetDesc(); desc != nil {
+		msg.Desc = &MsgGetOpts{
+			IfModifiedSince: int64ToTime(desc.GetIfModifiedSince()),
+			Limit:           int(desc.GetLimit()),
 		}
-		if sub := in.GetSub(); sub != nil {
-			msg.Sub = &MsgGetOpts{
-				IfModifiedSince: int64ToTime(sub.GetIfModifiedSince()),
-				Limit:           int(sub.GetLimit()),
-			}
+	}
+	if sub := in.GetSub(); sub != nil {
+		msg.Sub = &MsgGetOpts{
+			IfModifiedSince: int64ToTime(sub.GetIfModifiedSince()),
+			Limit:           int(sub.GetLimit()),
 		}
-		if data := in.GetData(); data != nil {
-			msg.Data = &MsgGetOpts{
-				BeforeId: int(data.GetBeforeId()),
-				SinceId:  int(data.GetSinceId()),
-				Limit:    int(data.GetLimit()),
-			}
+	}
+	if data := in.GetData(); data != nil {
+		msg.Data = &MsgGetOpts{
+			BeforeId: int(data.GetBeforeId()),
+			SinceId:  int(data.GetSinceId()),
+			Limit:    int(data.GetLimit()),
 		}
 	}
 
