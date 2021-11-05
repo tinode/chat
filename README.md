@@ -25,6 +25,7 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 * Read [API documentation](docs/API.md) and [FAQ](docs/faq.md). Read configuration instructions contained in the [`tinode.conf`](./server/tinode.conf) file.
 * For support, general questions, discussions post to [https://groups.google.com/d/forum/tinode](https://groups.google.com/d/forum/tinode).
 * For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new/choose).
+* Use https://tinode.co/contact for commercial inquiries.
 
 ## Helping out
 
