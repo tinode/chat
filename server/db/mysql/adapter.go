@@ -1634,7 +1634,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			sub := join[top.Id]
 			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
-			sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, top.UpdatedAt, ims)
+			sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, top.UpdatedAt)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
@@ -1687,7 +1687,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			joinOn := uid.P2PName(encodeUidString(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt)
 				sub.SetState(usr2.State)
 				sub.SetPublic(fromJSON(usr2.Public))
 				sub.SetTrusted(fromJSON(usr2.Trusted))
