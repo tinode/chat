@@ -150,9 +150,9 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 ### [Android](https://github.com/tinode/tindroid/)
 
 <p align="center">
-<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 />
-<img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
-<img src="docs/android-account.png" alt="Android screenshot: account settings" width=270 />
+<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=250 />
+<img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=250 />
+<img src="docs/android-account.png" alt="Android screenshot: account settings" width=250 />
 </p>
 
 ### [iOS](https://github.com/tinode/ios)
