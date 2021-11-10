@@ -3339,18 +3339,25 @@ func decodeUidString(str string) int64 {
 // Convert update to a list of columns and arguments.
 // If setTouched is true and update contains updatedAt, its value is copied to touchedAt.
 func updateByMap(update map[string]interface{}, setTouched bool) (cols []string, args []interface{}) {
+	var touched interface{}
+	var touchedFound bool
 	for col, arg := range update {
-		col = strings.ToLower(col)
 		if col == "public" || col == "trusted" || col == "private" {
 			arg = toJSON(arg)
 		}
 		cols = append(cols, col+"=?")
 		args = append(args, arg)
 
-		if setTouched && col == "updatedat" {
-			cols = append(cols, "touchedat=?")
-			args = append(args, arg)
+		if col == "touchedat" {
+			touchedFound = true
 		}
+		if setTouched && col == "updatedat" {
+			touched = arg
+		}
+	}
+	if !touchedFound && touched != nil {
+		cols = append(cols, "touchedat=?")
+		args = append(args, touched)
 	}
 	return
 }
