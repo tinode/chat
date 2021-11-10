@@ -1407,7 +1407,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			findOpts = nil
 			if limit > 0 && limit < len(topq) {
 				// No point in fetching more than the requested limit.
-				findOpts = mdbopts.Find().SetSort(bson.D{{"touchedat", 1}}).SetLimit(int64(limit))
+				findOpts = mdbopts.Find().SetSort(b.D{{"touchedat", 1}}).SetLimit(int64(limit))
 			}
 		}
 		cur, err = a.db.Collection("topics").Find(a.ctx, filter, findOpts)
