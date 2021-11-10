@@ -1226,7 +1226,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 		}
 	}()
 
-	cols, args := updateByMap(update, false)
+	cols, args := updateByMap(update)
 	decoded_uid := store.DecodeUid(uid)
 	args = append(args, decoded_uid)
 	_, err = tx.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
@@ -1972,7 +1972,10 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 		}
 	}()
 
-	cols, args := updateByMap(update, true)
+	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
+		update["TouchedAt"] = u
+	}
+	cols, args := updateByMap(update)
 	args = append(args, topic)
 	_, err = tx.Exec("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args...)
 	if err != nil {
@@ -2140,7 +2143,7 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 		}
 	}()
 
-	cols, args := updateByMap(update, false)
+	cols, args := updateByMap(update)
 	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
 	args = append(args, topic)
 	if !user.IsZero() {
@@ -3337,27 +3340,13 @@ func decodeUidString(str string) int64 {
 }
 
 // Convert update to a list of columns and arguments.
-// If setTouched is true and update contains updatedAt, its value is copied to touchedAt.
-func updateByMap(update map[string]interface{}, setTouched bool) (cols []string, args []interface{}) {
-	var touched interface{}
-	var touchedFound bool
+func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
 		if col == "public" || col == "trusted" || col == "private" {
 			arg = toJSON(arg)
 		}
 		cols = append(cols, col+"=?")
 		args = append(args, arg)
-
-		if col == "touchedat" {
-			touchedFound = true
-		}
-		if setTouched && col == "updatedat" {
-			touched = arg
-		}
-	}
-	if !touchedFound && touched != nil {
-		cols = append(cols, "touchedat=?")
-		args = append(args, touched)
 	}
 	return
 }

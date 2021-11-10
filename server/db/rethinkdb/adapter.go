@@ -1521,10 +1521,8 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 // TopicUpdate performs a generic topic update.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	if updAt, ok := update["UpdatedAt"]; ok {
-		if _, ok := update["TouchedAt"]; !ok {
-			update["TouchedAt"] = updAt
-		}
+	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
+		update["TouchedAt"] = u
 	}
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
