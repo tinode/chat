@@ -48,65 +48,51 @@ func TestSelectEarliestUpdatedSubs(t *testing.T) {
 	}
 
 	subs := SelectEarliestUpdatedSubs(genTestData(), nil, 100)
-	if len(subs) != len(genTestData()) {
-		t.Error("Blank query did not return the full set", len(subs))
-	}
+
 	// No sorting when returning the full set.
 	expectedOrder := "1,2,3,4,5,6,7,8,9,10"
 	sortOrder := getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Wrong results returned. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 
+	// Sorted, oldest 9 results.
 	subs = SelectEarliestUpdatedSubs(genTestData(), nil, 9)
-	if len(subs) != 9 {
-		t.Error("Limited query should have returned 9 results but got", len(subs))
-	}
 	expectedOrder = "1,3,2,4,6,5,7,8,10"
 	sortOrder = getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Limited query returned wrong results. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 
+	// Sorted, oldest 9 results.
 	subs = SelectEarliestUpdatedSubs(genTestData(), &types.QueryOpt{Limit: 20}, 9)
-	if len(subs) != 9 {
-		t.Error("Limited query should have returned 9 results but got", len(subs))
-	}
 	expectedOrder = "1,3,2,4,6,5,7,8,10"
 	sortOrder = getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Limited query (2) returned wrong results. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 
+	// Sorted, oldest 9 results.
 	subs = SelectEarliestUpdatedSubs(genTestData(), &types.QueryOpt{Limit: 9}, 20)
-	if len(subs) != 9 {
-		t.Error("Limited query should have returned 9 results but got", len(subs))
-	}
 	expectedOrder = "1,3,2,4,6,5,7,8,10"
 	sortOrder = getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Limited query (3) returned wrong results. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 
 	ims := time.Date(2021, time.June, 7, 8, 16, 15, 0, time.Local)
 	subs = SelectEarliestUpdatedSubs(genTestData(), &types.QueryOpt{Limit: 6, IfModifiedSince: &ims}, 20)
-	if len(subs) != 3 {
-		t.Error("Limited query should have returned 3 results but got", len(subs))
-	}
 	expectedOrder = "8,10,9"
 	sortOrder = getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Date & count limited query returned wrong results. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 
 	ims = time.Date(2021, time.June, 4, 4, 13, 15, 0, time.Local)
 	subs = SelectEarliestUpdatedSubs(genTestData(), &types.QueryOpt{Limit: 3, IfModifiedSince: &ims}, 20)
-	if len(subs) != 3 {
-		t.Error("Limited query should have returned 3 results but got", len(subs))
-	}
 	expectedOrder = "4,6,5"
 	sortOrder = getOrder(subs)
 	if sortOrder != expectedOrder {
-		t.Error("Wrong sort order. Expected:", expectedOrder, "; Got:", sortOrder)
+		t.Error("Count & date limited query returned wrong results. Expected:", expectedOrder, "; Got:", sortOrder)
 	}
 }
