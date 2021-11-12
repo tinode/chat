@@ -862,19 +862,29 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// Disable subscriptions for topics where the user is the owner.
-		// Disable topics where the user is the owner.
 		now := t.TimeNow()
-		disable := map[string]interface{}{"State": t.StateDeleted, "StateAt": now}
+		disable := map[string]interface{}{
+			"UpdatedAt": now, "State": t.StateDeleted, "StateAt": now,
+		}
 		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
 				return rdb.Expr([]interface{}{
-					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Id")).Update(disable),
-					rdb.DB(a.dbName).Table("topics").Get(topic.Field("Id")).Update(disable),
+					// Disable subscriptions for topics where the user is the owner.
+					rdb.DB(a.dbName).Table("subscriptions").
+						GetAllByIndex("Topic", topic.Field("Id")).
+						Update(disable),
+					// Disable topics where the user is the owner.
+					rdb.DB(a.dbName).Table("topics").
+						Get(topic.Field("Id")).
+						Update(map[string]interface{}{
+							"UpdatedAt": now, "TouchedAt": now, "State": t.StateDeleted, "StateAt": now,
+						}),
 				})
 			}).RunWrite(a.conn); err != nil {
 			return err
 		}
+
+		// FIXME: disable p2p topics with the user.
 
 		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(disable).RunWrite(a.conn)
 	}
@@ -1119,7 +1129,8 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	// Fetch user's subscriptions
+	// Fetch ALL user's subscriptions, even those which has not been modified recently.
+	// We are going to use these subscriptions to fetch topics and users which may have been modified recently.
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String())
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
@@ -1213,11 +1224,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 		if !ims.IsZero() {
 			// Use cache timestamp if provided: get newer entries only.
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(ims))
+			q = q.Filter(rdb.Row.Field("TouchedAt").Gt(ims))
 
 			if limit > 0 && limit < len(topq) {
 				// No point in fetching more than the requested limit.
-				q = q.OrderBy("UpdatedAt").Limit(limit)
+				q = q.OrderBy("TouchedAt").Limit(limit)
 			}
 		}
 
@@ -1231,7 +1242,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub = join[top.Id]
 			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
 			// top.UpdatedAt is guaranteed to be after IMS if IMS is non-zero.
-			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
+			sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, top.UpdatedAt)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
@@ -1269,7 +1280,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		for cursor.Next(&usr2) {
 			joinOn := uid.P2PName(t.ParseUid(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt)
 				sub.SetState(usr2.State)
 				sub.SetPublic(usr2.Public)
 				sub.SetTrusted(usr2.Trusted)
@@ -1485,8 +1496,10 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 	} else {
 		now := t.TimeNow()
 		_, err = q.Update(map[string]interface{}{
-			"State":    t.StateDeleted,
-			"StatedAt": now,
+			"UpdatedAt": now,
+			"TouchedAt": now,
+			"State":     t.StateDeleted,
+			"StatedAt":  now,
 		}).RunWrite(a.conn)
 	}
 	return err
@@ -1508,6 +1521,9 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 // TopicUpdate performs a generic topic update.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
+	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
+		update["TouchedAt"] = u
+	}
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
 }

@@ -717,17 +717,24 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 				return err
 			}
 
-			// Disable subscriptions for topics where the user is the owner.
-			// Disable topics where the user is the owner.
 			now := t.TimeNow()
-			disable := b.M{"$set": b.M{"state": t.StateDeleted, "stateat": now}}
+			disable := b.M{"$set": b.M{"updatedat": now, "state": t.StateDeleted, "stateat": now}}
 
+			// Disable subscriptions for topics where the user is the owner.
 			if _, err = a.db.Collection("subscriptions").UpdateMany(sc, topicFilter, disable); err != nil {
 				return err
 			}
-			if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": topicIds}}, disable); err != nil {
+			// Disable topics where the user is the owner.
+			if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": topicIds}},
+				b.M{"$set": b.M{
+					"updatedat": now, "touchedat": now, "state": t.StateDeleted, "stateat": now,
+				}}); err != nil {
 				return err
 			}
+
+			// FIXME: disable p2p topics with the user.
+
+			// Finally disable the user.
 			if _, err = a.db.Collection("users").UpdateMany(sc, b.M{"_id": forUser}, disable); err != nil {
 				return err
 			}
@@ -1395,12 +1402,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		if !ims.IsZero() {
 			// Use cache timestamp if provided: get newer entries only.
-			filter["updatedat"] = b.M{"$gt": ims}
+			filter["touchedat"] = b.M{"$gt": ims}
 
 			findOpts = nil
 			if limit > 0 && limit < len(topq) {
 				// No point in fetching more than the requested limit.
-				findOpts = mdbopts.Find().SetLimit(int64(limit))
+				findOpts = mdbopts.Find().SetSort(b.D{{"touchedat", 1}}).SetLimit(int64(limit))
 			}
 		}
 		cur, err = a.db.Collection("topics").Find(a.ctx, filter, findOpts)
@@ -1414,7 +1421,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				break
 			}
 			sub := join[top.Id]
-			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
+			sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, top.UpdatedAt)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
@@ -1453,7 +1460,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			joinOn := uid.P2PName(t.ParseUid(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt)
 				sub.SetState(usr2.State)
 				sub.SetPublic(unmarshalBsonD(usr2.Public))
 				sub.SetTrusted(unmarshalBsonD(usr2.Trusted))
@@ -1707,6 +1714,9 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 // TopicUpdate updates topic record.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
+	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
+		update["TouchedAt"] = u
+	}
 	return a.topicUpdate(topic, normalizeUpdateMap(update))
 }
 

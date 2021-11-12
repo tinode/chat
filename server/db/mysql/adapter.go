@@ -1147,14 +1147,15 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 		// Disable group topics where the user is the owner.
-		if _, err = tx.Exec("UPDATE topics SET updatedat=?, state=?, stateat=? WHERE owner=?",
-			now, t.StateDeleted, now, decoded_uid); err != nil {
+		if _, err = tx.Exec("UPDATE topics SET updatedat=?,touchedat=?,state=?,stateat=? WHERE owner=?",
+			now, now, t.StateDeleted, now, decoded_uid); err != nil {
 			return err
 		}
 		// Disable p2p topics with the user (p2p topic's owner is 0).
 		if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
-			"SET topics.updatedat=?, topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=?",
-			now, t.StateDeleted, now, decoded_uid); err != nil {
+			"SET topics.updatedat=?,topics.touchedat=?,topics.state=?,topics.stateat=? "+
+			"WHERE topics.owner=0 AND subscriptions.userid=?",
+			now, now, t.StateDeleted, now, decoded_uid); err != nil {
 			return err
 		}
 
@@ -1490,7 +1491,8 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	// Fetch user's subscriptions
+	// Fetch ALL user's subscriptions, even those which has not been modified recently.
+	// We are going to use these subscriptions to fetch topics and users which may have been modified recently.
 	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
 	args := []interface{}{store.DecodeUid(uid)}
@@ -1604,12 +1606,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 		if !ims.IsZero() {
 			// Use cache timestamp if provided: get newer entries only.
-			q += " AND updatedat>?"
+			q += " AND touchedat>?"
 			args = append(args, ims)
 
 			if limit > 0 && limit < len(topq) {
 				// No point in fetching more than the requested limit.
-				q += " ORDER BY updatedat LIMIT ?"
+				q += " ORDER BY touchedat LIMIT ?"
 				args = append(args, limit)
 			}
 		}
@@ -1626,15 +1628,13 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 		var top t.Topic
 		for rows.Next() {
-			var sub t.Subscription
 			if err = rows.StructScan(&top); err != nil {
 				break
 			}
 
-			sub = join[top.Id]
+			sub := join[top.Id]
 			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
-			// top.UpdatedAt is guaranteed to be after IMS.
-			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
+			sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, top.UpdatedAt)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
@@ -1687,7 +1687,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			joinOn := uid.P2PName(encodeUidString(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt)
 				sub.SetState(usr2.State)
 				sub.SetPublic(fromJSON(usr2.Public))
 				sub.SetTrusted(fromJSON(usr2.Trusted))
@@ -1938,8 +1938,8 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 			return err
 		}
 
-		if _, err = tx.Exec("UPDATE topics SET updatedat=?,state=?,stateat=? WHERE name=?",
-			now, t.StateDeleted, now, topic); err != nil {
+		if _, err = tx.Exec("UPDATE topics SET updatedat=?,touchedat=?,state=?,stateat=? WHERE name=?",
+			now, now, t.StateDeleted, now, topic); err != nil {
 			return err
 		}
 	}
@@ -1972,6 +1972,9 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 		}
 	}()
 
+	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
+		update["TouchedAt"] = u
+	}
 	cols, args := updateByMap(update)
 	args = append(args, topic)
 	_, err = tx.Exec("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args...)
@@ -3339,7 +3342,6 @@ func decodeUidString(str string) int64 {
 // Convert update to a list of columns and arguments.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
-		col = strings.ToLower(col)
 		if col == "public" || col == "trusted" || col == "private" {
 			arg = toJSON(arg)
 		}

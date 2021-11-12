@@ -23,41 +23,38 @@ func SelectEarliestUpdatedSubs(subs []t.Subscription, opts *t.QueryOpt, maxResul
 		}
 	}
 
-	if !ims.IsZero() || len(subs) > limit {
-		// Now that we fetched potentially more subscriptions than needed, we got to take those with the oldest modifications.
-		// Sorting in ascending order by modification time.
-		sort.Slice(subs, func(i, j int) bool {
-			return subs[i].UpdatedAt.Before(subs[j].UpdatedAt)
+	// No cache management and the number of results is below the limit: return all.
+	if ims.IsZero() && len(subs) <= limit {
+		return subs
+	}
+
+	// Now that we fetched potentially more subscriptions than needed, we got to take those with the oldest modifications.
+	// Sorting in ascending order by modification time.
+	sort.Slice(subs, func(i, j int) bool {
+		return subs[i].LastModified().Before(subs[j].LastModified())
+	})
+
+	if !ims.IsZero() {
+		// Keep only those subscriptions which are newer than ims.
+		at := sort.Search(len(subs), func(i int) bool {
+			return subs[i].LastModified().After(ims)
 		})
-		if !ims.IsZero() {
-			// Keep only those subscriptions which are newer than ims.
-			at := sort.Search(len(subs), func(i int) bool { return subs[i].UpdatedAt.After(ims) })
-			subs = subs[at:]
-		}
-		// Trim slice at the limit.
-		if len(subs) > limit {
-			subs = subs[:limit]
-		}
+		subs = subs[at:]
+	}
+	// Trim slice at the limit.
+	if len(subs) > limit {
+		subs = subs[:limit]
 	}
 
 	return subs
 }
 
-// SelectEarliestUpdatedAt picks the oldest timestamp which is still newer than the threshold ims.
-// The 'old' can be less than 'ims', the 'curr' must be greater than 'ims'.
-func SelectEarliestUpdatedAt(old, curr, ims time.Time) time.Time {
-	if old.Before(ims) {
+// SelectLatestTime picks the latest update timestamp out of the two.
+func SelectLatestTime(t1, t2 time.Time) time.Time {
+	if t1.Before(t2) {
 		// Subscription has not changed recently, use user's update timestamp.
-		return curr
-	} else if old.After(curr) {
-		if !ims.IsZero() {
-			// Subscription changed after the user and cache management: using earlier timestamp.
-			return curr
-		}
-	} else if ims.IsZero() {
-		// Subscription changed before the user and NO cache management: using later timestamp.
-		return curr
+		return t2
 	}
 
-	return old
+	return t1
 }

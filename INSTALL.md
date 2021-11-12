@@ -173,7 +173,7 @@ A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
 ### Enabling Push Notifications
 
-Follow [instructions](./docs/faq.md#q-how-to-setup-fcm-push-notifications).
+Follow [instructions](./docs/faq.md#q-how-to-setup-push-notifications-with-google-fcm).
 
 ### Note on Running the Server in Background
 
