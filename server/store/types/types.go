@@ -967,6 +967,14 @@ func (s *Subscription) SetTouchedAt(touchedAt time.Time) {
 	}
 }
 
+// LastModified returns the greater of either TouchedAt or UpdatedAt.
+func (s *Subscription) LastModified() time.Time {
+	if s.UpdatedAt.Before(s.touchedAt) {
+		return s.touchedAt
+	}
+	return s.UpdatedAt
+}
+
 // GetSeqId returns seqId.
 func (s *Subscription) GetSeqId() int {
 	return s.seqId

@@ -31,14 +31,13 @@ func SelectEarliestUpdatedSubs(subs []t.Subscription, opts *t.QueryOpt, maxResul
 	// Now that we fetched potentially more subscriptions than needed, we got to take those with the oldest modifications.
 	// Sorting in ascending order by modification time.
 	sort.Slice(subs, func(i, j int) bool {
-		return SelectLatestTime(subs[i].UpdatedAt, subs[i].GetTouchedAt()).
-			Before(SelectLatestTime(subs[j].UpdatedAt, subs[j].GetTouchedAt()))
+		return subs[i].LastModified().Before(subs[j].LastModified())
 	})
 
 	if !ims.IsZero() {
 		// Keep only those subscriptions which are newer than ims.
 		at := sort.Search(len(subs), func(i int) bool {
-			return SelectLatestTime(subs[i].UpdatedAt, subs[i].GetTouchedAt()).After(ims)
+			return subs[i].LastModified().After(ims)
 		})
 		subs = subs[at:]
 	}
