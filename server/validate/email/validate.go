@@ -87,16 +87,17 @@ const (
 	emailBodyHTML  = "body_html"
 )
 
-func resolveTemplatePath(path string) string {
-	// If a relative path is provided, try to resolve it relative to the exec file location,
-	// not whatever directory the user is in.
-	if !filepath.IsAbs(path) {
-		basepath, err := os.Executable()
-		if err == nil {
-			path = filepath.Join(filepath.Dir(basepath), path)
-		}
+func resolveTemplatePath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return path, nil
 	}
-	return path
+
+	curwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Clean(filepath.Join(curwd, path)), nil
 }
 
 func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, string, error) {
@@ -208,9 +209,15 @@ func (v *validator) Init(jsonconf string) error {
 		}
 	}
 
-	// Optionally resolve paths against the location of this executable file.
-	v.ValidationTemplFile = resolveTemplatePath(v.ValidationTemplFile)
-	v.ResetTemplFile = resolveTemplatePath(v.ResetTemplFile)
+	// Optionally resolve paths.
+	v.ValidationTemplFile, err = resolveTemplatePath(v.ValidationTemplFile)
+	if err != nil {
+		return err
+	}
+	v.ResetTemplFile, err = resolveTemplatePath(v.ResetTemplFile)
+	if err != nil {
+		return err
+	}
 
 	// Paths to templates could be templates themselves: they may be language-dependent.
 	var validationPathTempl, resetPathTempl *textt.Template
