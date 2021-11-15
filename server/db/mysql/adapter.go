@@ -2105,7 +2105,9 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	affected, err := res.RowsAffected()
 	if err == nil && affected == 0 {
-		return t.ErrNotFound
+		// ensure tx.Rollback() above is ran
+		err = t.ErrNotFound
+		return err
 	}
 
 	// Remove records of messages soft-deleted by this user.
