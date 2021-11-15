@@ -2841,7 +2841,9 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		var done bool
 		err = tx.Get(&done, "SELECT done FROM credentials WHERE synthetic=?", synth)
 		if err == nil {
-			return false, t.ErrDuplicate
+			// Assign err to ensure closing of a transaction.
+			err = t.ErrDuplicate
+			return false, err
 		}
 		if err != sql.ErrNoRows {
 			return false, err
