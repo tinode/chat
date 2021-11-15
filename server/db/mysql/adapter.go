@@ -1,3 +1,4 @@
+//go:build mysql
 // +build mysql
 
 // Package mysql is a database adapter for MySQL.
@@ -3342,6 +3343,7 @@ func decodeUidString(str string) int64 {
 // Convert update to a list of columns and arguments.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
+		col = strings.ToLower(col)
 		if col == "public" || col == "trusted" || col == "private" {
 			arg = toJSON(arg)
 		}
