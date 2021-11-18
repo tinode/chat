@@ -2,7 +2,8 @@
 
 # Build Tinode docker linux/amd64 images. 
 # You may have to install buildx https://docs.docker.com/buildx/working-with-buildx/
-# if your build host and target architectures are different (e.g. building on a Mac with Apple silicon).
+# if your build host and target architectures are different (e.g. building on a Mac
+# with Apple silicon).
 
 for line in $@; do
   eval "$line"

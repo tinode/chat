@@ -1,14 +1,13 @@
 #!/bin/bash
 
-# Cross-compiling script using https://github.com/mitchellh/gox
-# This scripts build and archives binaries and supporting files.
-# If directory ./server/static exists, it's asumed to contain
-# TinodeWeb and then it's also copied and archived.
+# This script builds and archives binaries and supporting files for mac, linux, and windows.
+# If directory ./server/static exists, it's asumed to contain TinodeWeb and then it's also
+# copied and archived.
 
-# Supported OSs: darwin windows linux, amd64 and arm.
+# Supported OSs: mac (darwin), windows, linux.
 goplat=( darwin darwin windows linux )
 
-# CPUs architectures: amd64 and arm. The same order as platforms.
+# CPUs architectures: amd64 and arm64. The same order as OSs.
 goarc=( amd64 arm64 amd64 amd64 )
 
 # Number of platform+architectures.
