@@ -40,24 +40,62 @@ pushd ${GOSRC}/chat > /dev/null
 rm -fR ./releases/${version}
 mkdir ./releases/${version}
 
+# Tar on Mac is inflexible about directories. Let's just copy release files to
+# one directory.
+rm -fR ./releases/tmp
+mkdir -p ./releases/tmp/templ
+
+# Copy templates and database initialization files
+cp ./server/tinode.conf ./releases/tmp
+cp ./server/templ/*.templ ./releases/tmp/templ
+cp ./tinode-db/data.json ./releases/tmp
+cp ./tinode-db/*.jpg ./releases/tmp
+cp ./tinode-db/credentials.sh ./releases/tmp
+
+# Create directories for and copy TinodeWeb files.
+if [[ -d ./server/static ]]
+then
+  mkdir -p ./releases/tmp/static/img
+  mkdir ./releases/tmp/static/css
+  mkdir ./releases/tmp/static/audio
+  mkdir ./releases/tmp/static/src
+  mkdir ./releases/tmp/static/umd
+
+  cp ./server/static/img/*.png ./releases/tmp/static/img
+  cp ./server/static/img/*.svg ./releases/tmp/static/img
+  cp ./server/static/audio/*.mp3 ./releases/tmp/static/audio
+  cp ./server/static/css/*.css ./releases/tmp/static/css
+  cp ./server/static/index.html ./releases/tmp/static
+  cp ./server/static/index-dev.html ./releases/tmp/static
+  cp ./server/static/version.js ./releases/tmp/static
+  cp ./server/static/umd/*.js ./releases/tmp/static/umd
+  cp ./server/static/manifest.json ./releases/tmp/static
+  cp ./server/static/service-worker.js ./releases/tmp/static
+  # Create empty FCM client-side config.
+  touch ./releases/tmp/static/firebase-init.js
+else
+  echo "TinodeWeb not found, skipping"
+fi
+
 for (( i=0; i<${buildCount}; i++ ));
 do
   plat="${goplat[$i]}"
   arc="${goarc[$i]}"
 
+  # Remove possibly existing keygen.
+  rm -f ./releases/tmp/keygen*
+
   # Keygen is database-independent
-  # Remove previous build
-  rm -f $GOPATH/bin/keygen
-  # Build
-  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o $GOPATH/bin/keygen ./keygen > /dev/null
+  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o ./releases/tmp ./keygen > /dev/null
 
   for dbtag in "${dbtags[@]}"
   do
     echo "Building ${dbtag}-${plat}/${arc}..."
 
-    # Remove previous builds
-    rm -f $GOPATH/bin/tinode
-    rm -f $GOPATH/bin/init-db
+    # Remove possibly existing binaries from earlier builds.
+    rm -f ./releases/tmp/tinode*
+    rm -f ./releases/tmp/init-db*
+
     # Build tinode server and database initializer for RethinkDb and MySQL.
     # For 'alldbs' tag, we compile in all available DB adapters.
     if [ "$dbtag" = "alldbs" ]; then
@@ -65,56 +103,15 @@ do
     else
       buildtag=$dbtag
     fi
+
     env GOOS="${plat}" GOARCH="${arc}" go build \
       -ldflags "-s -w -X main.buildstamp=`git describe --tags`" -tags "${buildtag}" \
-      -o $GOPATH/bin/tinode ./server > /dev/null
+      -o ./releases/tmp/tinode ./server > /dev/null
     env GOOS="${plat}" GOARCH="${arc}" go build \
-      -ldflags "-s -w" -tags "${buildtag}" -o $GOPATH/bin/init-db ./tinode-db > /dev/null
-
-    # Tar on Mac is inflexible about directories. Let's just copy release files to
-    # one directory.
-    rm -fR ./releases/tmp
-    mkdir -p ./releases/tmp/templ
-
-    # Copy templates and database initialization files
-    cp ./server/tinode.conf ./releases/tmp
-    cp ./server/templ/*.templ ./releases/tmp/templ
-    cp ./tinode-db/data.json ./releases/tmp
-    cp ./tinode-db/*.jpg ./releases/tmp
-    cp ./tinode-db/credentials.sh ./releases/tmp
-
-    # Create directories for and copy TinodeWeb files.
-    if [[ -d ./server/static ]]
-    then
-      mkdir -p ./releases/tmp/static/img
-      mkdir ./releases/tmp/static/css
-      mkdir ./releases/tmp/static/audio
-      mkdir ./releases/tmp/static/src
-      mkdir ./releases/tmp/static/umd
-
-      cp ./server/static/img/*.png ./releases/tmp/static/img
-      cp ./server/static/img/*.svg ./releases/tmp/static/img
-      cp ./server/static/audio/*.mp3 ./releases/tmp/static/audio
-      cp ./server/static/css/*.css ./releases/tmp/static/css
-      cp ./server/static/index.html ./releases/tmp/static
-      cp ./server/static/index-dev.html ./releases/tmp/static
-      cp ./server/static/version.js ./releases/tmp/static
-      cp ./server/static/umd/*.js ./releases/tmp/static/umd
-      cp ./server/static/manifest.json ./releases/tmp/static
-      cp ./server/static/service-worker.js ./releases/tmp/static
-      # Create empty FCM client-side config.
-      echo > ./releases/tmp/static/firebase-init.js
-    else
-      echo "TinodeWeb not found, skipping"
-    fi
+      -ldflags "-s -w" -tags "${buildtag}" -o ./releases/tmp/init-db ./tinode-db > /dev/null
 
     # Build archive. All platforms but Windows use tar for archiving. Windows uses zip.
     if [ "$plat" = "windows" ]; then
-      # Copy binaries
-      cp $GOPATH/bin/tinode.exe ./releases/tmp
-      cp $GOPATH/bin/init-db.exe ./releases/tmp
-      cp $GOPATH/bin/keygen.exe ./releases/tmp
-
       # Remove possibly existing archive.
       rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".zip
       # Generate a new one
@@ -127,30 +124,14 @@ do
       if [ "$plat" = "darwin" ]; then
         plat2=mac
       fi
-      # Copy binaries
-      cp $GOPATH/bin/tinode ./releases/tmp
-      cp $GOPATH/bin/init-db ./releases/tmp
-      cp $GOPATH/bin/keygen ./releases/tmp
 
       # Remove possibly existing archive.
       rm -f ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz
       # Generate a new one
-      tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz .
+      tar -C ./releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz .
     fi
   done
 done
-
-# Need to rebuild the linux-rethink binary without stripping debug info.
-echo "Building the binary for web.tinode.co"
-
-rm -f $GOPATH/bin/tinode
-rm -f $GOPATH/bin/init-db
-
-gox -osarch=linux/amd64 \
-  -ldflags "-X main.buildstamp=`git describe --tags`" \
-  -tags rethinkdb -output $GOPATH/bin/tinode ./server > /dev/null
-gox -osarch=linux/amd64 \
-  -tags rethinkdb -output $GOPATH/bin/init-db ./tinode-db > /dev/null
 
 # Build chatbot release
 echo "Building python code..."
@@ -178,7 +159,7 @@ rm -fR ./releases/tmp
 mkdir -p ./releases/tmp
 
 cp ${GOSRC}/chat/tn-cli/*.py ./releases/tmp
-cp ${GOSRC}/chat/tn-cli/requirements.txt ./releases/tmp
+cp ${GOSRC}/chat/tn-cli/*.txt ./releases/tmp
 
 tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tn-cli.tar.gz .
 pushd ./releases/tmp > /dev/null

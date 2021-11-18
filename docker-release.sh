@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Publish Tinode docker images
+# Publish Tinode docker images to hub.docker.com
 
 function containerName() {
   if [ "$1" == "alldbs" ]; then

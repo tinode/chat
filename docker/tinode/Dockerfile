@@ -9,9 +9,9 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM alpine:3.13
+FROM alpine:3.14
 
-ARG VERSION=0.17
+ARG VERSION=0.18
 ENV VERSION=$VERSION
 ARG BINVERS=$VERSION
 
