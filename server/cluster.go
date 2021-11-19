@@ -1123,7 +1123,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 		if terminate {
 			sess.closeRPC()
 			globals.sessionStore.Delete(sess)
-			// FIXME: maybe sess.inflightReqs = nil
+			sess.inflightReqs = nil
 			sess.unsubAll()
 		}
 	}()

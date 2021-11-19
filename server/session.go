@@ -228,7 +228,6 @@ func (s *Session) unsubAll() {
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
 		// The whole session is being dropped.
-		// FIXME: do I need to call s.inflightReqs.Add(1) or set s.inflightReqs = nil.
 		sub.done <- &ClientComMessage{sess: s}
 	}
 }
@@ -413,7 +412,7 @@ func (s *Session) cleanUp(expired bool) {
 	atomic.StoreInt32(&s.terminating, 1)
 	s.purgeChannels()
 	s.inflightReqs.Wait()
-	// FIXME: maybe sess.inflightReqs = nil as it no longer used after Wait().
+	s.inflightReqs = nil
 	if !expired {
 		s.sessionStoreLock.Lock()
 		globals.sessionStore.Delete(s)
