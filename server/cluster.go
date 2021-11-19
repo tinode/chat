@@ -489,8 +489,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			uid:         msg.Sess.Uid,
 		}
 	}
-	// sess could be nil
-	msg.CliMsg.sess = sess
+
+	if msg.CliMsg != nil {
+		msg.CliMsg.sess = sess
+	}
 
 	switch msg.ReqType {
 	case ProxyReqJoin:
