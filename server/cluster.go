@@ -1061,7 +1061,7 @@ func (c *Cluster) invalidateProxySubs(forNode string) {
 	globals.hub.topics.Range(func(_, v interface{}) bool {
 		topic := v.(*Topic)
 		if !topic.isProxy {
-			// Topic either isn't a proxy.
+			// Topic isn't a proxy.
 			return true
 		}
 		if forNode == "" {

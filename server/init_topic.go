@@ -80,6 +80,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
 			if msg.init {
+				// FIXME: do we need to call msg.sess.inflightReqs.Done()?
 				msg.sess.queueOut(ErrLockedReply(msg, timestamp))
 			}
 		}

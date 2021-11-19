@@ -135,7 +135,7 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 	}
 
 	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, msg, t.name, msg.sess); err != nil {
-		logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
+		logs.Warn.Println("proxy topic: route leave request from proxy to master failed:", err)
 	}
 	if len(t.sessions) == 0 {
 		// No more sessions attached. Start the countdown.
