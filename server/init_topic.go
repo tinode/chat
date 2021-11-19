@@ -79,7 +79,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
-			if msg.sess.inflightReqs != nil {
+			if msg.sess != nil && msg.sess.inflightReqs != nil {
 				msg.sess.inflightReqs.Done()
 			}
 			if msg.init {
