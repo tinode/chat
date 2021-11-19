@@ -228,6 +228,7 @@ func (s *Session) unsubAll() {
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
 		// The whole session is being dropped.
+		// FIXME: do I need to call s.inflightReqs.Add(1)?
 		sub.done <- &ClientComMessage{sess: s}
 	}
 }
