@@ -412,6 +412,7 @@ func (s *Session) cleanUp(expired bool) {
 	atomic.StoreInt32(&s.terminating, 1)
 	s.purgeChannels()
 	s.inflightReqs.Wait()
+	s.inflightReqs = nil
 	if !expired {
 		s.sessionStoreLock.Lock()
 		globals.sessionStore.Delete(s)

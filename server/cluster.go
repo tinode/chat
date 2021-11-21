@@ -1061,7 +1061,7 @@ func (c *Cluster) invalidateProxySubs(forNode string) {
 	globals.hub.topics.Range(func(_, v interface{}) bool {
 		topic := v.(*Topic)
 		if !topic.isProxy {
-			// Topic either isn't a proxy.
+			// Topic isn't a proxy.
 			return true
 		}
 		if forNode == "" {
@@ -1123,6 +1123,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 		if terminate {
 			sess.closeRPC()
 			globals.sessionStore.Delete(sess)
+			sess.inflightReqs = nil
 			sess.unsubAll()
 		}
 	}()
