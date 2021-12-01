@@ -48,8 +48,12 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 
 		case msg := <-t.serverMsg:
-			// FIXME: should something be done here?
-			logs.Err.Printf("ERROR!!! Unexpected server-side message in proxy topic %#v", msg)
+			if msg.Info != nil || msg.Pres != nil {
+				globals.cluster.routeToTopicIntraCluster(t.name, msg, msg.sess)
+			} else {
+				// FIXME: should something be done here?
+				logs.Err.Printf("ERROR!!! Unexpected server-side message in proxy topic %s", msg.describe())
+			}
 
 		case msg := <-t.meta:
 			// Request to get/set topic metadata
