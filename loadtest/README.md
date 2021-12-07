@@ -27,16 +27,16 @@ Currently, three tests are available:
 
 The script supports passing params via the `JAVA_OPTS` envvar.
 
-Parameter name | Description
--------------- | -------------
-`num_sessions` | Total number of sessions to connect to the server
-`ramp` | Time period in seconds over which to ramp up the load (`0` to `num_sessions`).
-`publish_count` | Number of messages that a user will publish to a topic it subscribes to.
-`publish_interval` | Maximum period of time a user will wait between publishing subsequent messages to a topic.
-`accounts` | `tinode.Loadtest` and `tinode.SingleTopicLoadtest` only: Path to CSV file containing user accounts to use in loadtest (in format `username,password[,token]` (`token` field is optional).
-`topic` | `tinode.SingleTopicLoadtest` only: topic name to send load to.
-`username` | `tinode.MeLoadtest` only: user to subscribe to `me` topic.
-`password` | `tinode.MeLoadtest` only: user password.
+Parameter name | Default value | Description
+-------------- | ------------- | -------------
+`num_sessions` | 10000 | Total number of sessions to connect to the server
+`ramp` | 300 | Time period in seconds over which to ramp up the load (`0` to `num_sessions`).
+`publish_count` | 10 | Number of messages that a user will publish to a topic it subscribes to.
+`publish_interval` | 100 | Maximum period of time a user will wait between publishing subsequent messages to a topic.
+`accounts` | users.csv | `tinode.Loadtest` and `tinode.SingleTopicLoadtest` only: Path to CSV file containing user accounts to use in loadtest (in format `username,password[,token]` (`token` field is optional).
+`topic` | | `tinode.SingleTopicLoadtest` only: topic name to send load to.
+`username` | | `tinode.MeLoadtest` only: user to subscribe to `me` topic.
+`password` | | `tinode.MeLoadtest` only: user password.
 
 Examples:
 ```shell
