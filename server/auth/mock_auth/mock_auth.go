@@ -14,49 +14,30 @@ import (
 	types "github.com/tinode/chat/server/store/types"
 )
 
-// MockAuthHandler is a mock of AuthHandler interface
+// MockAuthHandler is a mock of AuthHandler interface.
 type MockAuthHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockAuthHandlerMockRecorder
 }
 
-// MockAuthHandlerMockRecorder is the mock recorder for MockAuthHandler
+// MockAuthHandlerMockRecorder is the mock recorder for MockAuthHandler.
 type MockAuthHandlerMockRecorder struct {
 	mock *MockAuthHandler
 }
 
-// NewMockAuthHandler creates a new mock instance
+// NewMockAuthHandler creates a new mock instance.
 func NewMockAuthHandler(ctrl *gomock.Controller) *MockAuthHandler {
 	mock := &MockAuthHandler{ctrl: ctrl}
 	mock.recorder = &MockAuthHandlerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockAuthHandler) EXPECT() *MockAuthHandlerMockRecorder {
 	return m.recorder
 }
 
-// Init mocks base method
-func (m *MockAuthHandler) Init(jsonconf json.RawMessage, name string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Init", jsonconf, name)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// IsInitialized returns true if the handler is initialized.
-func (m *MockAuthHandler) IsInitialized() bool {
-	return true
-}
-
-// Init indicates an expected call of Init
-func (mr *MockAuthHandlerMockRecorder) Init(jsonconf, name interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockAuthHandler)(nil).Init), jsonconf, name)
-}
-
-// AddRecord mocks base method
+// AddRecord mocks base method.
 func (m *MockAuthHandler) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddRecord", rec, secret, remoteAddr)
@@ -65,28 +46,27 @@ func (m *MockAuthHandler) AddRecord(rec *auth.Rec, secret []byte, remoteAddr str
 	return ret0, ret1
 }
 
-// AddRecord indicates an expected call of AddRecord
+// AddRecord indicates an expected call of AddRecord.
 func (mr *MockAuthHandlerMockRecorder) AddRecord(rec, secret, remoteAddr interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRecord", reflect.TypeOf((*MockAuthHandler)(nil).AddRecord), rec, secret, remoteAddr)
 }
 
-// UpdateRecord mocks base method
-func (m *MockAuthHandler) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
+// AsTag mocks base method.
+func (m *MockAuthHandler) AsTag(token string) string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRecord", rec, secret, remoteAddr)
-	ret0, _ := ret[0].(*auth.Rec)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "AsTag", token)
+	ret0, _ := ret[0].(string)
+	return ret0
 }
 
-// UpdateRecord indicates an expected call of UpdateRecord
-func (mr *MockAuthHandlerMockRecorder) UpdateRecord(rec, secret, remoteAddr interface{}) *gomock.Call {
+// AsTag indicates an expected call of AsTag.
+func (mr *MockAuthHandlerMockRecorder) AsTag(token interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRecord", reflect.TypeOf((*MockAuthHandler)(nil).UpdateRecord), rec, secret, remoteAddr)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsTag", reflect.TypeOf((*MockAuthHandler)(nil).AsTag), token)
 }
 
-// Authenticate mocks base method
+// Authenticate mocks base method.
 func (m *MockAuthHandler) Authenticate(secret []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Authenticate", secret, remoteAddr)
@@ -96,42 +76,27 @@ func (m *MockAuthHandler) Authenticate(secret []byte, remoteAddr string) (*auth.
 	return ret0, ret1, ret2
 }
 
-// Authenticate indicates an expected call of Authenticate
+// Authenticate indicates an expected call of Authenticate.
 func (mr *MockAuthHandlerMockRecorder) Authenticate(secret, remoteAddr interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthHandler)(nil).Authenticate), secret, remoteAddr)
 }
 
-// AsTag mocks base method
-func (m *MockAuthHandler) AsTag(token string) string {
+// DelRecords mocks base method.
+func (m *MockAuthHandler) DelRecords(uid types.Uid) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AsTag", token)
-	ret0, _ := ret[0].(string)
+	ret := m.ctrl.Call(m, "DelRecords", uid)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AsTag indicates an expected call of AsTag
-func (mr *MockAuthHandlerMockRecorder) AsTag(token interface{}) *gomock.Call {
+// DelRecords indicates an expected call of DelRecords.
+func (mr *MockAuthHandlerMockRecorder) DelRecords(uid interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsTag", reflect.TypeOf((*MockAuthHandler)(nil).AsTag), token)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DelRecords", reflect.TypeOf((*MockAuthHandler)(nil).DelRecords), uid)
 }
 
-// IsUnique mocks base method
-func (m *MockAuthHandler) IsUnique(secret []byte, remoteAddr string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsUnique", secret, remoteAddr)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsUnique indicates an expected call of IsUnique
-func (mr *MockAuthHandlerMockRecorder) IsUnique(secret, remoteAddr interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsUnique", reflect.TypeOf((*MockAuthHandler)(nil).IsUnique), secret, remoteAddr)
-}
-
-// GenSecret mocks base method
+// GenSecret mocks base method.
 func (m *MockAuthHandler) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenSecret", rec)
@@ -141,42 +106,27 @@ func (m *MockAuthHandler) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return ret0, ret1, ret2
 }
 
-// GenSecret indicates an expected call of GenSecret
+// GenSecret indicates an expected call of GenSecret.
 func (mr *MockAuthHandlerMockRecorder) GenSecret(rec interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenSecret", reflect.TypeOf((*MockAuthHandler)(nil).GenSecret), rec)
 }
 
-// DelRecords mocks base method
-func (m *MockAuthHandler) DelRecords(uid types.Uid) error {
+// GetRealName mocks base method.
+func (m *MockAuthHandler) GetRealName() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DelRecords", uid)
-	ret0, _ := ret[0].(error)
+	ret := m.ctrl.Call(m, "GetRealName")
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// DelRecords indicates an expected call of DelRecords
-func (mr *MockAuthHandlerMockRecorder) DelRecords(uid interface{}) *gomock.Call {
+// GetRealName indicates an expected call of GetRealName.
+func (mr *MockAuthHandlerMockRecorder) GetRealName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DelRecords", reflect.TypeOf((*MockAuthHandler)(nil).DelRecords), uid)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRealName", reflect.TypeOf((*MockAuthHandler)(nil).GetRealName))
 }
 
-// RestrictedTags mocks base method
-func (m *MockAuthHandler) RestrictedTags() ([]string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RestrictedTags")
-	ret0, _ := ret[0].([]string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RestrictedTags indicates an expected call of RestrictedTags
-func (mr *MockAuthHandlerMockRecorder) RestrictedTags() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestrictedTags", reflect.TypeOf((*MockAuthHandler)(nil).RestrictedTags))
-}
-
-// GetResetParams mocks base method
+// GetResetParams mocks base method.
 func (m *MockAuthHandler) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetResetParams", uid)
@@ -185,8 +135,81 @@ func (m *MockAuthHandler) GetResetParams(uid types.Uid) (map[string]interface{},
 	return ret0, ret1
 }
 
-// GetResetParams indicates an expected call of GetResetParams
+// GetResetParams indicates an expected call of GetResetParams.
 func (mr *MockAuthHandlerMockRecorder) GetResetParams(uid interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResetParams", reflect.TypeOf((*MockAuthHandler)(nil).GetResetParams), uid)
+}
+
+// Init mocks base method.
+func (m *MockAuthHandler) Init(jsonconf json.RawMessage, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Init", jsonconf, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Init indicates an expected call of Init.
+func (mr *MockAuthHandlerMockRecorder) Init(jsonconf, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Init", reflect.TypeOf((*MockAuthHandler)(nil).Init), jsonconf, name)
+}
+
+// IsInitialized mocks base method.
+func (m *MockAuthHandler) IsInitialized() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsInitialized")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsInitialized indicates an expected call of IsInitialized.
+func (mr *MockAuthHandlerMockRecorder) IsInitialized() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInitialized", reflect.TypeOf((*MockAuthHandler)(nil).IsInitialized))
+}
+
+// IsUnique mocks base method.
+func (m *MockAuthHandler) IsUnique(secret []byte, remoteAddr string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsUnique", secret, remoteAddr)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsUnique indicates an expected call of IsUnique.
+func (mr *MockAuthHandlerMockRecorder) IsUnique(secret, remoteAddr interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsUnique", reflect.TypeOf((*MockAuthHandler)(nil).IsUnique), secret, remoteAddr)
+}
+
+// RestrictedTags mocks base method.
+func (m *MockAuthHandler) RestrictedTags() ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RestrictedTags")
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RestrictedTags indicates an expected call of RestrictedTags.
+func (mr *MockAuthHandlerMockRecorder) RestrictedTags() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestrictedTags", reflect.TypeOf((*MockAuthHandler)(nil).RestrictedTags))
+}
+
+// UpdateRecord mocks base method.
+func (m *MockAuthHandler) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateRecord", rec, secret, remoteAddr)
+	ret0, _ := ret[0].(*auth.Rec)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateRecord indicates an expected call of UpdateRecord.
+func (mr *MockAuthHandlerMockRecorder) UpdateRecord(rec, secret, remoteAddr interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRecord", reflect.TypeOf((*MockAuthHandler)(nil).UpdateRecord), rec, secret, remoteAddr)
 }
