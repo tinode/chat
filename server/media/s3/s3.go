@@ -189,9 +189,9 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 		// as a free file server.
 		url, err := awsReq.Presign(time.Second * presignDuration)
 		headers := map[string][]string{
-			"Location":      []string{url},
-			"Content-Type":  []string{"application/json; charset=utf-8"},
-			"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
+			"Location":      {url},
+			"Content-Type":  {"application/json; charset=utf-8"},
+			"Cache-Control": {"no-cache, no-store, must-revalidate"},
 		}
 		return headers, http.StatusTemporaryRedirect, err
 	}

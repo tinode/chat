@@ -101,7 +101,7 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 
 	headers := map[string][]string{
 		// Always add Vary because of possible intermediate caches.
-		"Vary": []string{"Origin", "Access-Control-Request-Method"},
+		"Vary": {"Origin", "Access-Control-Request-Method"},
 	}
 
 	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Header.Get("Origin"))
