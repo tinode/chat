@@ -24,8 +24,6 @@ const (
 	defaultClusterReconnect = 200 * time.Millisecond
 	// Number of replicas in ringhash.
 	clusterHashReplicas = 20
-	// Period for running health check on cluster session: terminate sessions with no subscriptions.
-	clusterSessionCleanup = 5 * time.Second
 )
 
 // ProxyReqType is the type of proxy requests.
@@ -40,18 +38,6 @@ const (
 	ProxyReqBroadcast
 	ProxyReqBgSession
 	ProxyReqMeUserAgent
-)
-
-// ProxyEventType is an enumeration of possible proxy event types processed in the clusterWriteLoop.
-type ProxyEventType int
-
-// Individual proxy events.
-const (
-	EventSend     ProxyEventType = 1
-	EventStop     ProxyEventType = 2
-	EventDetach   ProxyEventType = 3
-	EventContinue ProxyEventType = 4
-	EventAbort    ProxyEventType = 5
 )
 
 type clusterNodeConfig struct {

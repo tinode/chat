@@ -155,7 +155,7 @@ func wsWrite(ws *websocket.Conn, mt int, msg interface{}) error {
 	return ws.WriteMessage(mt, bits)
 }
 
-// Handles websocket requests from peers
+// Handles websocket requests from peers.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,

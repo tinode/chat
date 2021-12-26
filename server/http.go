@@ -161,7 +161,7 @@ func signalHandler() <-chan bool {
 	return stop
 }
 
-// Wrapper for http.Handler which optionally adds a Strict-Transport-Security to the response
+// Wrapper for http.Handler which optionally adds a Strict-Transport-Security to the response.
 func hstsHandler(handler http.Handler) http.Handler {
 	if globals.tlsStrictMaxAge != "" {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

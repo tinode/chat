@@ -32,7 +32,7 @@ func (sess *Session) closeGrpc() {
 	}
 }
 
-// Equivalent of starting a new session and a read loop in one
+// Equivalent of starting a new session and a read loop in one.
 func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	sess, count := globals.sessionStore.NewSession(stream, "")
 	if p, ok := peer.FromContext(stream.Context()); ok {
