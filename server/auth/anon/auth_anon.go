@@ -87,6 +87,12 @@ func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, erro
 	return nil, nil
 }
 
+const realName = "anonymous"
+
+func (authenticator) GetRealName() string {
+	return realName
+}
+
 func init() {
-	store.RegisterAuthScheme("anonymous", &authenticator{})
+	store.RegisterAuthScheme(realName, &authenticator{})
 }

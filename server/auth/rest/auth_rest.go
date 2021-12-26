@@ -99,7 +99,7 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 
 	serverUrl, err := url.Parse(config.ServerUrl)
 	if err != nil || !serverUrl.IsAbs() {
-		return errors.New("auth_rest: invalid server_url")
+		return errors.New("auth_rest: invalid server_url '" + string(jsonconf) + "'")
 	}
 
 	if !strings.HasSuffix(serverUrl.Path, "/") {
@@ -141,6 +141,11 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 		return nil, err
 	}
 	defer post.Body.Close()
+
+	// Check HTTP status response. Must be 2xx.
+	if post.StatusCode < http.StatusOK || post.StatusCode >= http.StatusMultipleChoices {
+		return nil, errors.New("unexpected HTTP response " + post.Status)
+	}
 
 	// Read response.
 	body, err := ioutil.ReadAll(post.Body)
@@ -299,6 +304,12 @@ func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, erro
 	return nil, nil
 }
 
+const realName = "rest"
+
+func (authenticator) GetRealName() string {
+	return realName
+}
+
 func init() {
-	store.RegisterAuthScheme("rest", &authenticator{})
+	store.RegisterAuthScheme(realName, &authenticator{})
 }

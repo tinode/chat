@@ -11,7 +11,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 
 	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/db"
+	adapter "github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store/types"
 	"github.com/tinode/chat/server/validate"
@@ -796,16 +796,16 @@ func (s storeObj) GetAuthNames() []string {
 		return nil
 	}
 
-	var allNames []string
+	allNames := make(map[string]struct{})
 	for name := range authHandlers {
-		allNames = append(allNames, name)
+		allNames[name] = struct{}{}
 	}
 	for name := range authHandlerNames {
-		allNames = append(allNames, name)
+		allNames[name] = struct{}{}
 	}
 
 	var names []string
-	for _, name := range allNames {
+	for name := range allNames {
 		if s.GetLogicalAuthHandler(name) != nil {
 			names = append(names, name)
 		}
