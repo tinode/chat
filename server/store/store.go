@@ -84,7 +84,7 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	return adp.Open(adapterConfig)
 }
 
-// PersistentStorage defines methods used for interation with persistent storage.
+// PersistentStorageInterface defines methods used for interation with persistent storage.
 type PersistentStorageInterface interface {
 	Open(workerId int, jsonconf json.RawMessage) error
 	Close() error
@@ -240,7 +240,7 @@ func EncodeUid(id int64) types.Uid {
 	return uGen.EncodeInt64(id)
 }
 
-// Returns a callback returning db connection stats object.
+// DbStats returns a callback returning db connection stats object.
 func (s storeObj) DbStats() func() interface{} {
 	if !s.IsOpen() {
 		return nil

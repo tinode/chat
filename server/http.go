@@ -368,8 +368,8 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 	return uid, nil, nil
 }
 
-// Session debug info.
-type DebugSession struct {
+// debugSession is session debug info.
+type debugSession struct {
 	RemoteAddr string   `json:"remote_addr,omitempty"`
 	Ua         string   `json:"ua,omitempty"`
 	Uid        string   `json:"uid,omitempty"`
@@ -378,8 +378,8 @@ type DebugSession struct {
 	Subs       []string `json:"subs,omitempty"`
 }
 
-// Topic debug info.
-type DebugTopic struct {
+// debugTopic is a topic debug info.
+type debugTopic struct {
 	Topic    string   `json:"topic,omitempty"`
 	Xorig    string   `json:"xorig,omitempty"`
 	IsProxy  bool     `json:"is_proxy,omitempty"`
@@ -389,24 +389,24 @@ type DebugTopic struct {
 	Sessions []string `json:"sessions,omitempty"`
 }
 
-// Server internal state dump for debugging.
-type DebugDump struct {
+// debugDump is server internal state dump for debugging.
+type debugDump struct {
 	Version   string         `json:"server_version,omitempty"`
 	Build     string         `json:"build_id,omitempty"`
 	Timestamp time.Time      `json:"ts,omitempty"`
-	Sessions  []DebugSession `json:"sessions,omitempty"`
-	Topics    []DebugTopic   `json:"topics,omitempty"`
+	Sessions  []debugSession `json:"sessions,omitempty"`
+	Topics    []debugTopic   `json:"topics,omitempty"`
 }
 
 func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", "application/json")
 
-	result := &DebugDump{
+	result := &debugDump{
 		Version:   currentVersion,
 		Build:     buildstamp,
 		Timestamp: types.TimeNow(),
-		Sessions:  make([]DebugSession, 0, len(globals.sessionStore.sessCache)),
-		Topics:    make([]DebugTopic, 0, 10),
+		Sessions:  make([]debugSession, 0, len(globals.sessionStore.sessCache)),
+		Topics:    make([]debugTopic, 0, 10),
 	}
 	// Sessions.
 	globals.sessionStore.Range(func(sid string, s *Session) bool {
@@ -419,7 +419,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		if s.clnode != nil {
 			clnode = s.clnode.name
 		}
-		result.Sessions = append(result.Sessions, DebugSession{
+		result.Sessions = append(result.Sessions, debugSession{
 			RemoteAddr: s.remoteAddr,
 			Ua:         s.userAgent,
 			Uid:        s.uid.String(),
@@ -444,7 +444,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		for key := range topic.perSubs {
 			ps = append(ps, key)
 		}
-		result.Topics = append(result.Topics, DebugTopic{
+		result.Topics = append(result.Topics, debugTopic{
 			Topic:    topic.name,
 			Xorig:    topic.xoriginal,
 			IsProxy:  topic.isProxy,
