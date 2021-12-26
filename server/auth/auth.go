@@ -273,6 +273,6 @@ type AuthHandler interface {
 	// Returns: map of params.
 	GetResetParams(uid types.Uid) (map[string]interface{}, error)
 
-	// GetRealName returned the hardcoded name of the authenticator.
+	// GetRealName returns the hardcoded name of the authenticator.
 	GetRealName() string
 }

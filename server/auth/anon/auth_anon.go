@@ -89,6 +89,7 @@ func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, erro
 
 const realName = "anonymous"
 
+// GetRealName returns the hardcoded name of the authenticator.
 func (authenticator) GetRealName() string {
 	return realName
 }
