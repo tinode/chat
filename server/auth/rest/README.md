@@ -69,11 +69,11 @@ Add the following section to the `auth_config` in [tinode.conf](../../tinode.con
 },
 ```
 If you want to use your authenticator **instead** of stock `basic` (login-password) authentication,
-add a logical renaming:
+add logical renaming and disable `rest` at the original name:
 ```js
 ...
 "auth_config": {
-  "logical_names": ["basic:rest"],
+  "logical_names": ["basic:rest", "rest:"],
   "rest": { ... },
   ...
 },
@@ -224,7 +224,7 @@ be used by client (Tinode) to create the account. The server may optionally retu
     "anon": "N",
     "public": {/* see /docs/API.md#public-and-private-fields */},
     "private": {/* see /docs/API.md#public-and-private-fields */}
-  }  
+  }
 }
 ```
 
