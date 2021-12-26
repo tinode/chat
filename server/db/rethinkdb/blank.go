@@ -1,3 +1,4 @@
+//go:build !rethinkdb
 // +build !rethinkdb
 
 // This file is needed for conditional compilation. It's used when

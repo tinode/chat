@@ -1,3 +1,4 @@
+//go:build rethinkdb
 // +build rethinkdb
 
 // Package rethinkdb s a database adapter for RethinkDB.

@@ -1,3 +1,4 @@
+//go:build !mongodb
 // +build !mongodb
 
 // This file is needed for conditional compilation. It's used when

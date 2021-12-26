@@ -1,3 +1,4 @@
+//go:build !mysql
 // +build !mysql
 
 // This file is needed for conditional compilation. It's used when
