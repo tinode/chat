@@ -1,5 +1,7 @@
 # Localizing Tinode
 
+IMPORTANT! When translating, please use **devel** branch.
+
 ## Server
 
 The server sends emails to users upon creation of a new account and when the user requests to reset the password:
