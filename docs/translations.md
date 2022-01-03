@@ -1,6 +1,6 @@
 # Localizing Tinode
 
-IMPORTANT! When translating, please use **devel** branch.
+**IMPORTANT!** Please use `devel` breanches for translations.
 
 ## Server
 
