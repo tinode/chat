@@ -32,7 +32,7 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 * Consider buying paid support: https://tinode.co/support.html
 * If you are a software developer, send us your pull requests with bug fixes and new features.
 * If you use the app and discover bugs or missing features, let us know by filing bug reports and feature requests. Vote for existing [feature requests](https://github.com/tinode/chat/issues?q=is%3Aissue+is%3Aopen+sort%3Areactions-%2B1-desc+label%3A%22feature+request%22) you find most valuable.
-* If you speak a language other than English, translate the apps into your language.
+* If you speak a language other than English, [translate](docs/translations.md) the apps into your language. You may also review and improve existing translations.
 * If you are a UI/UX expert, help us polish the app UI.
 * Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at conferences.
 * Use it: install it for your colleagues or friends at work or at home.
