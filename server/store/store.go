@@ -604,7 +604,7 @@ func (topicsMapper) Delete(topic string, hard bool) error {
 // SubsPersistenceInterface is an interface which defines methods for persistent storage of subscriptions.
 type SubsPersistenceInterface interface {
 	Create(subs ...*types.Subscription) error
-	Get(topic string, user types.Uid) (*types.Subscription, error)
+	Get(topic string, user types.Uid, keepDeleted bool) (*types.Subscription, error)
 	Update(topic string, user types.Uid, update map[string]interface{}) error
 	Delete(topic string, user types.Uid) error
 }
@@ -624,9 +624,9 @@ func (subsMapper) Create(subs ...*types.Subscription) error {
 	return adp.TopicShare(subs)
 }
 
-// Get given subscription
-func (subsMapper) Get(topic string, user types.Uid) (*types.Subscription, error) {
-	return adp.SubscriptionGet(topic, user)
+// Get subscription given topic and user ID.
+func (subsMapper) Get(topic string, user types.Uid, keepDeleted bool) (*types.Subscription, error) {
+	return adp.SubscriptionGet(topic, user, keepDeleted)
 }
 
 // Update values of topic's subscriptions.

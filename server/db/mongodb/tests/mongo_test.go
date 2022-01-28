@@ -450,7 +450,7 @@ func TestOwnTopics(t *testing.T) {
 }
 
 func TestSubscriptionGet(t *testing.T) {
-	got, err := adp.SubscriptionGet(topics[0].Id, types.ParseUserId("usr"+users[0].Id))
+	got, err := adp.SubscriptionGet(topics[0].Id, types.ParseUserId("usr"+users[0].Id), false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -459,7 +459,7 @@ func TestSubscriptionGet(t *testing.T) {
 		t.Errorf(mismatchErrorString("Subs", got, subs[0]))
 	}
 	// Test not found
-	got, err = adp.SubscriptionGet("dummytopic", types.ParseUserId("dummyuserid"))
+	got, err = adp.SubscriptionGet("dummytopic", types.ParseUserId("dummyuserid"), false)
 	if err != nil {
 		t.Error(err)
 	}

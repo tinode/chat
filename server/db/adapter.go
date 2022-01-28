@@ -124,7 +124,7 @@ type Adapter interface {
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
-	SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error)
+	SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*t.Subscription, error)
 	// SubsForUser loads all subscriptions of a given user. Does NOT load Public or Private values,
 	// does not load deleted subscriptions.
 	SubsForUser(user t.Uid) ([]t.Subscription, error)

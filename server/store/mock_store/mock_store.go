@@ -944,18 +944,18 @@ func (mr *MockSubsPersistenceInterfaceMockRecorder) Delete(topic, user interface
 }
 
 // Get mocks base method.
-func (m *MockSubsPersistenceInterface) Get(topic string, user types.Uid) (*types.Subscription, error) {
+func (m *MockSubsPersistenceInterface) Get(topic string, user types.Uid, keepDeleted bool) (*types.Subscription, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", topic, user)
+	ret := m.ctrl.Call(m, "Get", topic, user, keepDeleted)
 	ret0, _ := ret[0].(*types.Subscription)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockSubsPersistenceInterfaceMockRecorder) Get(topic, user interface{}) *gomock.Call {
+func (mr *MockSubsPersistenceInterfaceMockRecorder) Get(topic, user, keepDeleted interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSubsPersistenceInterface)(nil).Get), topic, user)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSubsPersistenceInterface)(nil).Get), topic, user, keepDeleted)
 }
 
 // Update mocks base method.

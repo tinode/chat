@@ -583,16 +583,15 @@ func (t *Topic) handleSubscription(msg *ClientComMessage) error {
 		return err
 	}
 
+	if err := t.subscriptionReply(asChan, msg); err != nil {
+		return err
+	}
+
 	msgsub := msg.Sub
 	getWhat := 0
 	if msgsub.Get != nil {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
-
-	if err := t.subscriptionReply(asChan, msg); err != nil {
-		return err
-	}
-
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
 		if err := t.replyGetDesc(msg.sess, asUid, asChan, msgsub.Get.Desc, msg); err != nil {
@@ -1415,9 +1414,9 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			userData.isChan = true
 
 			// Check if user is already subscribed.
-			sub, err = store.Subs.Get(pkt.Original, asUid)
+			sub, err = store.Subs.Get(pkt.Original, asUid, false)
 			if err != nil {
-				sess.queueOut(ErrUnknown(pkt.Id, pkt.Original, now))
+				sess.queueOut(ErrUnknownReply(pkt, now))
 				return nil, err
 			}
 
@@ -1425,7 +1424,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			oldGiven = types.ModeCChnReader
 			userData.modeGiven = types.ModeCChnReader
 
-			if sub != nil && sub.DeletedAt == nil {
+			if sub != nil {
 				// Subscription exists, read old access mode.
 				oldWant = sub.ModeWant
 			} else {
@@ -1444,12 +1443,34 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			// User is subscribed to chnXXX, not grpXXX.
 			tname = pkt.Original
 		} else {
-			// For all other topics access is given as default access.
-			userData.modeGiven = t.accessFor(asLvl)
+			// All other topic types.
+
+			if !existingSub {
+
+				// Check if the user has been subscribed previously and if so, use previous modeGiven.
+				// Otherwise the user may delete subscription and resubscribe to avoid being blocked.
+				sub, err = store.Subs.Get(t.name, asUid, true)
+				if err != nil {
+					sess.queueOut(ErrUnknownReply(pkt, now))
+					return nil, err
+				}
+
+				if sub != nil {
+					userData.modeGiven = sub.ModeGiven
+				} else {
+					// If no mode was previously given, give default access.
+					userData.modeGiven = types.ModeUnset
+				}
+			}
+
+			if userData.modeGiven == types.ModeUnset {
+				// New user: default access.
+				userData.modeGiven = t.accessFor(asLvl)
+			}
 
 			if modeWant == types.ModeUnset {
 				// User wants default access mode.
-				userData.modeWant = userData.modeGiven
+				userData.modeWant = t.accessFor(asLvl)
 			} else {
 				userData.modeWant = modeWant
 			}
@@ -1760,7 +1781,7 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 	// Check if it's a new invite. If so, save it to database as a subscription.
 	// Saved subscription does not mean the user is allowed to post/read
 	userData, existingSub := t.perUser[target]
-	if !existingSub {
+	if !existingSub || userData.deleted {
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicyReply(pkt, now))
@@ -1775,24 +1796,43 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 			modeGiven |= types.ModeJoin
 		}
 
-		// Get user's default access mode to be used as modeWant
 		var modeWant types.AccessMode
-		if user, err := store.Users.Get(target); err != nil {
+		// Check if the user has been subscribed previously and if so, use previous modeWant.
+		// Otherwise the inviter may delete blocked subscription and reinvite to spam the user.
+		sub, err := store.Subs.Get(t.name, asUid, true)
+		if err != nil {
 			sess.queueOut(ErrUnknownReply(pkt, now))
 			return nil, err
-		} else if user == nil {
-			sess.queueOut(ErrUserNotFoundReply(pkt, now))
-			return nil, errors.New("user not found")
-		} else if user.State != types.StateOK {
-			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
-			return nil, errors.New("user is suspended")
+		}
+
+		if sub != nil {
+			// Existing deleted subscription.
+			modeWant = sub.ModeWant
 		} else {
-			// Don't ask by default for more permissions than the granted ones.
-			modeWant = user.Access.Auth & modeGiven
+			// Get user's default access mode to be used as modeWant
+			if user, err := store.Users.Get(target); err != nil {
+				sess.queueOut(ErrUnknownReply(pkt, now))
+				return nil, err
+			} else if user == nil {
+				sess.queueOut(ErrUserNotFoundReply(pkt, now))
+				return nil, errors.New("user not found")
+			} else if user.State != types.StateOK {
+				sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+				return nil, errors.New("user is suspended")
+			} else {
+				// Don't ask by default for more permissions than the granted ones.
+				modeWant = user.Access.Auth & modeGiven
+			}
+		}
+
+		// Reject invitation: 'want' permissions have no 'J'.
+		if !modeWant.IsJoiner() {
+			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+			return nil, errors.New("invitation rejected due to permissions")
 		}
 
 		// Add subscription to database
-		sub := &types.Subscription{
+		sub = &types.Subscription{
 			User:      target.String(),
 			Topic:     t.name,
 			ModeWant:  modeWant,

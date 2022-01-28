@@ -600,7 +600,7 @@ func (a *adapter) UpgradeDb() error {
 		// Perform database upgrade from version 107 to version 108.
 
 		// Replace default user access JRWPA with JRWPAS.
-		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS') 
+		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS')
 			WHERE CAST(JSON_EXTRACT(access, '$.Auth') AS CHAR) LIKE '"JRWPA"'`); err != nil {
 			return err
 		}
@@ -1408,9 +1408,9 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeGiven=?,"+
+			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,"+
 				"delid=0,recvseqid=0,readseqid=0 WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, decoded_uid)
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), sub.Topic, decoded_uid)
 		} else {
 			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,"+
 				"delid=0,recvseqid=0,readseqid=0,private=? WHERE topic=? AND userid=?",
@@ -1724,7 +1724,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,u.trusted,u.lastseen,u.useragent,s.private
-		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
+		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id
 		WHERE s.topic=?`
 	args := []interface{}{topic}
 	if !keepDeleted {
@@ -2009,8 +2009,8 @@ func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	return err
 }
 
-// Get a subscription of a user to a topic
-func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
+// Get a subscription of a user to a topic.
+func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*t.Subscription, error) {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
@@ -2028,7 +2028,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 		return nil, err
 	}
 
-	if sub.DeletedAt != nil {
+	if !keepDeleted && sub.DeletedAt != nil {
 		return nil, nil
 	}
 

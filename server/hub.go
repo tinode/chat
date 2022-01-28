@@ -633,14 +633,14 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		}
 	}
 
-	sub, err := store.Subs.Get(topic, asUid)
+	sub, err := store.Subs.Get(topic, asUid, false)
 	if err != nil {
 		logs.Warn.Println("replyOfflineTopicGetDesc:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
 
-	if sub != nil && sub.DeletedAt == nil {
+	if sub != nil {
 		desc.Private = sub.Private
 		// FIXME: suspended topics should get no AW access.
 		desc.Acs = &MsgAccessMode{
@@ -673,7 +673,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 		topicName = msg.Original
 	}
 
-	ssub, err := store.Subs.Get(topicName, types.ParseUserId(msg.AsUser))
+	ssub, err := store.Subs.Get(topicName, types.ParseUserId(msg.AsUser), true)
 	if err != nil {
 		logs.Warn.Println("replyOfflineTopicGetSub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
@@ -738,14 +738,14 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		topicName = msg.Original
 	}
 
-	sub, err := store.Subs.Get(topicName, asUid)
+	sub, err := store.Subs.Get(topicName, asUid, false)
 	if err != nil {
 		logs.Warn.Println("replyOfflineTopicSetSub get sub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
 
-	if sub == nil || sub.DeletedAt != nil {
+	if sub == nil {
 		sess.queueOut(ErrNotFoundExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
 		return
 	}

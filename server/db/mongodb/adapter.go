@@ -1244,6 +1244,7 @@ func (a *adapter) undeleteSubscription(sub *t.Subscription) error {
 				"updatedat": sub.UpdatedAt,
 				"createdat": sub.CreatedAt,
 				"modegiven": sub.ModeGiven,
+				"modewant":  sub.ModeWant,
 				"delid":     0,
 				"readseqid": 0,
 				"recvseqid": 0}})
@@ -1736,12 +1737,14 @@ func (a *adapter) topicUpdate(topic string, update map[string]interface{}) error
 
 // Topic subscriptions
 
-// SubscriptionGet reads a subscription of a user to a topic
-func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
+// SubscriptionGet reads a subscription of a user to a topic.
+func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*t.Subscription, error) {
 	sub := new(t.Subscription)
-	err := a.db.Collection("subscriptions").FindOne(a.ctx, b.M{
-		"_id":       topic + ":" + user.String(),
-		"deletedat": b.M{"$exists": false}}).Decode(sub)
+	filter := b.M{"_id": topic + ":" + user.String()}
+	if !keepDeleted {
+		filter["deletedat"] = b.M{"$exists": false}
+	}
+	err := a.db.Collection("subscriptions").FindOne(a.ctx, filter}).Decode(sub)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return nil, nil

@@ -1527,7 +1527,7 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 		sess:   s,
 	}
 
-	helper.ss.EXPECT().Get(chanName, uid).Return(nil, types.ErrInternal)
+	helper.ss.EXPECT().Get(chanName, uid, true).Return(nil, types.ErrInternal)
 
 	helper.topic.registerSession(join)
 	helper.finish()
