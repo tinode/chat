@@ -6,7 +6,7 @@
    "tel": "+17025550001",
    "passhash": "alice123",
    "private": {"comment": "some comment 123"},
-   "public": {"fn": "Alice Johnson", "photo": "alice-128.jpg", "type": "jpg"},
+   "public": {"fn": "Alice Hatter", "photo": "alice-128.jpg", "type": "jpg"},
    "trusted": {"verified": true},
    "tags": ["Alice"],
    "state": "ok",
