@@ -1744,7 +1744,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 	if !keepDeleted {
 		filter["deletedat"] = b.M{"$exists": false}
 	}
-	err := a.db.Collection("subscriptions").FindOne(a.ctx, filter}).Decode(sub)
+	err := a.db.Collection("subscriptions").FindOne(a.ctx, filter).Decode(sub)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return nil, nil
