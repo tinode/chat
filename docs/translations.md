@@ -56,14 +56,13 @@ Make a copy of the file with English strings, place it to the new directory. Tra
 
 Unfortunately iOS localization process is very convoluted and generally requires `Xcode` which runs only on Mac. Unless you are familiar with the iOS development, please create a [feature request](https://github.com/tinode/ios/issues/new?assignees=&labels=&template=feature_request.md&title=) for the desired language and we will send you the file for translation.
 
-If you feel brave enough, you can translate the [following .xliff file](https://github.com/tinode/ios/blob/devel/Localizations/en.xcloc/Localized%20Contents/en.xliff) and then send it to us any way you can.
-
+If you feel brave enough, you can translate the [following .xliff file](https://github.com/tinode/ios/blob/devel/Localizations/en.xcloc/Localized%20Contents/en.xliff) and then send it to us in any way you can. Translate all the strings between the `<target>` tags:
 
 ```xml
-<trans-unit id="Action failed: %@" xml:space="preserve">
-  <source>Action failed: %@</source> <!-- This is the original in English, do not translate. -->
+<trans-unit id="Action failed: %@" xml:space="preserve"> <!-- Do NOT change this line -->
+  <source>Action failed: %@</source> <!-- This is the default message in English. -->
   <target>Se ha producido un error al realizar la acción: %@</target> <!-- Only this string "target" needs to be translated. -->
-  <note>Toast notification</note> <!-- Purpose of the string, do not translate. -->
+  <note>Toast notification</note> <!-- This is an explanation where/how the string is used. -->
 </trans-unit>
 ```
 
