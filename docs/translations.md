@@ -54,9 +54,17 @@ Make a copy of the file with English strings, place it to the new directory. Tra
 
 ## iOS
 
-The following two files need to be translated:
+Unfortunately iOS localization process is very convoluted and generally requires `Xcode` which runs only on Mac. Unless you are familiar with the iOS development, please create a [feature request](https://github.com/tinode/ios/issues/new?assignees=&labels=&template=feature_request.md&title=) for the desired language and we will send you the file for translation.
 
-* [/en.lproj/Localizable.strings](https://github.com/tinode/ios/blob/devel/en.lproj/Localizable.strings)
-* [/Tinodios/en.lproj/Main.strings](https://github.com/tinode/ios/blob/devel/Tinodios/en.lproj/Main.strings)
+If you feel brave enough, you can translate the [following .xliff file](https://github.com/tinode/ios/blob/devel/Localizations/en.xcloc/Localized%20Contents/en.xliff) and then send it to us any way you can.
 
-The iOS process of adding translations is convoluted. Unless you are familiar with the iOS development, please send the translated files to us and we will incorporate them into the project.
+
+```xml
+<trans-unit id="Action failed: %@" xml:space="preserve">
+  <source>Action failed: %@</source> <!-- This is the original in English, do not translate. -->
+  <target>Se ha producido un error al realizar la acción: %@</target> <!-- Only this string "target" needs to be translated. -->
+  <note>Toast notification</note> <!-- Purpose of the string, do not translate. -->
+</trans-unit>
+```
+
+If you are familiar with Xcode and localization for iOS, the exported localizations are located at [/Localizations](https://github.com/tinode/ios/tree/devel/Localizations).
