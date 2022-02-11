@@ -2,6 +2,7 @@
 package types
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"encoding/base32"
 	"encoding/base64"
@@ -1072,6 +1073,8 @@ type Topic struct {
 	SeqId int
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
+	// Current call id.
+	CallId sql.NullInt64
 
 	Public  interface{}
 	Trusted interface{}
@@ -1142,6 +1145,25 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 	return
 }
 
+// CallParty represents a video call participant.
+type CallParty struct {
+	ObjHeader    `bson:",inline"`
+	MessageId    int
+	User         string
+	Sid          string
+	IsOriginator bool
+	Expires      time.Time
+}
+
+// CallData contains video call metadata.
+type CallData struct {
+	ObjHeader `bson:",inline"`
+	MessageId int
+	SeqId     int
+	Parties   []CallParty
+	Status    int
+}
+
 // SoftDelete is a single DB record of soft-deletetion.
 type SoftDelete struct {
 	User  string
@@ -1176,6 +1198,14 @@ type Message struct {
 	From    string
 	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
 	Content interface{}
+
+	// What kind of message it is:
+	// 0 = plain txt/drafty
+	// 1 = initiated call
+	// 2 = rejected call
+	// 3 = call in progress
+	// 4 = completed call
+	Status int
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).

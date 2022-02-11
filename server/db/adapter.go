@@ -153,6 +153,11 @@ type Adapter interface {
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
+	// MessageGet fetches and returns message by id.
+	MessageGet(id int) (*t.Message, error)
+	// MessageUpdateStatus changes message status (e.g. for calls).
+	MessageUpdateStatus(id, status int) error
+
 
 	// Devices (for push notifications)
 
@@ -177,4 +182,13 @@ type Adapter interface {
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
 	// FileLinkAttachments connects given topic or message to the file record IDs from the list.
 	FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error
+
+	// Video calls.
+
+	// CallPartiesGetAll fetches and returns all call parties party by call (message) id.
+	CallPartiesGetAll(callId int) ([]t.CallParty, error)
+	// CallPartiesAdd saves a new call party to dadabase.
+	CallPartiesAdd(party *t.CallParty) error
+	// CallExtendLease extends call party lease `until` specified timestamp.
+	CallExtendLease(partyId int, until time.Time) error
 }

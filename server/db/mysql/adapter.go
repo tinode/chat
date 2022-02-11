@@ -397,6 +397,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
+			callid    INT,
 			public    JSON,
 			trusted   JSON,
 			tags      JSON,
@@ -460,9 +461,11 @@ func (a *adapter) CreateDb(reset bool) error {
 			deletedat DATETIME(3),
 			delid     INT DEFAULT 0,
 			seqid     INT NOT NULL,
-			topic     CHAR(25) NOT NULL,` +
+			topic     CHAR(25) NOT NULL,
+			versionid INT,` +
 			"`from`   BIGINT NOT NULL," +
-			`head     JSON,
+			`status   SMALLINT DEFAULT 0,
+			head     JSON,
 			content   JSON,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
@@ -544,6 +547,37 @@ func (a *adapter) CreateDb(reset bool) error {
 			FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE,
 			FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 		)`); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(
+		`CREATE TABLE callparties(
+			id         INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			messageid  INT NOT NULL,
+			userid     BIGINT NOT NULL,
+			sid        CHAR(20) NOT NULL,
+			originator TINYINT NOT NULL DEFAULT 0,
+			expires    DATETIME NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(messageid) REFERENCES messages(id),
+			FOREIGN KEY(userid) REFERENCES users(id)
+		);`); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(
+		`CREATE TABLE messagehistory(
+			id         INT NOT NULL AUTO_INCREMENT,
+			ts         DATETIME(3) NOT NULL,
+			messageid  INT NOT NULL,
+			status     SMALLINT DEFAULT 0,
+			head       JSON,
+			content    JSON,
+			PRIMARY KEY(id),
+			FOREIGN KEY(messageid) REFERENCES messages(id)
+		);`); err != nil {
 		return err
 	}
 
@@ -737,6 +771,47 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
+	if a.version == 112 {
+		if _, err := a.db.Exec("ALTER TABLE topics ADD callid INT"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE messages ADD status SMALLINT NOT NULL DEFAULT 0"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec(
+			`CREATE TABLE callparties(
+				id         INT NOT NULL AUTO_INCREMENT,
+				createdat DATETIME(3) NOT NULL,
+				updatedat DATETIME(3) NOT NULL,
+				messageid  INT NOT NULL,
+				userid     BIGINT NOT NULL,
+				sid        CHAR(20) NOT NULL,
+				originator TINYINT NOT NULL DEFAULT 0,
+				expires    DATETIME NOT NULL,
+				PRIMARY KEY(id),
+				FOREIGN KEY(messageid) REFERENCES messages(id),
+				FOREIGN KEY(userid) REFERENCES users(id)
+			);`); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec(
+			`CREATE TABLE messagehistory(
+				id         INT NOT NULL AUTO_INCREMENT,
+				ts         DATETIME(3) NOT NULL,
+				messageid  INT NOT NULL,
+				status     SMALLINT DEFAULT 0,
+				head       JSON,
+				content    JSON,
+				PRIMARY KEY(id),
+				FOREIGN KEY(messageid) REFERENCES messages(id)
+			);`); err != nil {
+			return err
+		}
+	}
+
 	if a.version != adpVersion {
 		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
 			". DB is still at " + strconv.Itoa(a.version))
@@ -797,6 +872,79 @@ func removeTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []s
 	_, err := tx.Exec(query, args...)
 
 	return err
+}
+
+func (a *adapter) CallPartiesGetAll(callId int) ([]t.CallParty, error) {
+	var limit = a.maxMessageResults
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	rows, err := a.db.QueryxContext(
+		ctx,
+		"SELECT messageid,sid,originator,expires"+
+			" FROM callparties "+
+			" WHERE callid=?",
+		callId)
+
+	if err != nil {
+		return nil, err
+	}
+
+	parties := make([]t.CallParty, 0, limit)
+	for rows.Next() {
+		var party t.CallParty
+		if err = rows.StructScan(&party); err != nil {
+			break
+		}
+		party.User = encodeUidString(party.User).String()
+		parties = append(parties, party)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	return parties, err
+}
+
+func (a *adapter) CallPartiesAdd(party *t.CallParty) error {
+	ctx, cancel := a.getContextForTx()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	decoded_uid := store.DecodeUid(t.ParseUid(party.User))
+	res, err := a.db.ExecContext(ctx, "INSERT INTO callparties(messageid,createdat,updatedat,userid,sid,originator,expires) VALUES(?,?,?,?,?,?,?)",
+		party.MessageId,
+		party.CreatedAt,
+		party.UpdatedAt,
+		decoded_uid,
+		party.Sid,
+		party.IsOriginator,
+		party.Expires)
+
+	if err != nil {
+		return err
+	}
+	id, _ := res.LastInsertId()
+	// Replacing ID given by store by ID given by the DB.
+	party.SetUid(t.Uid(id))
+	return nil
+}
+
+func (a *adapter) CallExtendLease(partyId int, until time.Time) error {
+	ctx, cancel := a.getContextForTx()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	updatedAt := t.TimeNow()
+	if _, err := a.db.ExecContext(ctx, "UPDATE callparties SET updatedat=?,expires=? WHERE id=?",
+		updatedAt, until, partyId); err != nil {
+		return err
+	}
+	return nil
+
 }
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
@@ -1470,7 +1618,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.GetContext(ctx, tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,callid,public,trusted,tags "+
 			"FROM topics WHERE name=?",
 		topic)
 
@@ -2429,15 +2577,41 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	// Using a sequential ID provided by the database.
 	res, err := a.db.ExecContext(
 		ctx,
-		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
+		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,status,head,content) VALUES(?,?,?,?,?,?,?,?)",
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
-		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Status, msg.Head, toJSON(msg.Content))
 	if err == nil {
 		id, _ := res.LastInsertId()
 		// Replacing ID given by store by ID given by the DB.
 		msg.SetUid(t.Uid(id))
 	}
 	return err
+}
+
+func (a *adapter) MessageGet(id int) (*t.Message, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	// Fetch topic by name
+	var mm = new(t.Message)
+	err := a.db.GetContext(ctx, mm,
+		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content,m.status"+
+			" FROM messages AS m WHERE id=?",
+		id)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Nothing found - clear the error
+			err = nil
+		}
+		return nil, err
+	}
+
+	mm.From = encodeUidString(mm.From).String()
+	mm.Content = fromJSON(mm.Content)
+
+	return mm, nil
 }
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
@@ -2466,7 +2640,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	}
 	rows, err := a.db.QueryxContext(
 		ctx,
-		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
+		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content,m.status"+
 			" FROM messages AS m LEFT JOIN dellog AS d"+
 			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
 			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND d.deletedfor IS NULL"+
@@ -2666,6 +2840,31 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		return err
 	}
 
+	return tx.Commit()
+}
+
+func (a *adapter) MessageUpdateStatus(id, status int) error {
+	ctx, cancel := a.getContextForTx()
+	if cancel != nil {
+		defer cancel()
+	}
+	tx, err := a.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.Exec("INSERT INTO messagehistory(ts,messageid,status,head,content) SELECT updatedat,id,status,head,content FROM messages WHERE id=?", id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("UPDATE messages SET updatedat=?,status=? WHERE id=?", t.TimeNow(), status, id); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
