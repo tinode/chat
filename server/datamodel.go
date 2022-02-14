@@ -77,6 +77,37 @@ type MsgCredClient struct {
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
+// RTC params.
+
+// Session description protocol string.
+type SDP string
+
+type RTCMessageType string
+
+var (
+	RTCMessageTypeNotifyClientID RTCMessageType = "notify-client-id"
+	RTCMessageTypeSDPOffer       RTCMessageType = "offer"
+	RTCMessageTypeSDPAnswer      RTCMessageType = "answer"
+	RTCMessageTypeICECandidate   RTCMessageType = "ice-candidate"
+	RTCMessageTypeNewClient      RTCMessageType = "new-client"
+	RTCMessageTypeLeaveClient    RTCMessageType = "leave-client"
+	RTCMessageTypeError          RTCMessageType = "error"
+)
+
+/*
+type RTCMessage struct {
+  //What    string `json:""`
+	Type    RTCMessageType `json:"type,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+}
+*/
+
+type EphemeralMessage struct {
+	Type    string          `json:"type,omitempty"`
+	What    string          `json:"what,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+}
+
 // MsgSetQuery is an update to topic or user metadata: description, subscriptions, tags, credentials.
 type MsgSetQuery struct {
 	// Topic/user description, new object & new subscriptions only
@@ -87,6 +118,8 @@ type MsgSetQuery struct {
 	Tags []string `json:"tags,omitempty"`
 	// Update to account credentials.
 	Cred *MsgCredClient `json:"cred,omitempty"`
+	// Ephemeral params.
+	Ephemeral *EphemeralMessage `json:"ephemeral,omitempty"`
 }
 
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
@@ -185,6 +218,7 @@ const (
 	constMsgMetaTags
 	constMsgMetaDel
 	constMsgMetaCred
+	constMsgMetaEphemeral
 )
 
 const (
@@ -212,6 +246,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaDel
 		case "cred":
 			bits |= constMsgMetaCred
+		case "ephemeral":
+			bits |= constMsgMetaEphemeral
 		default:
 			// ignore unknown
 		}
@@ -306,6 +342,26 @@ type MsgClientNote struct {
 	Unread int `json:"unread,omitempty"`
 }
 
+type MsgClientCall struct {
+	Id string `json:"id,omitempty"`
+	//
+	Topic string `json:"topic,omitempty"`
+	//
+	What string `json:"what,omitempty"`
+
+	SeqId int `json:"seq,omitempty"`
+
+	Payload json.RawMessage `json:"payload,omitempty"`
+
+	LeaseExpires *time.Time `json:"leaseexp,omitempty"`
+	/*
+	  //
+	  Sdp json.RawMessage `json:"sdp,omitempty"`
+	  //
+	  IceCandidate string `json:"ice_candidate,omitempty"`
+	*/
+}
+
 // MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
 type MsgClientExtra struct {
 	// Array of out-of-band attachments which have to be exempted from GC.
@@ -328,6 +384,7 @@ type ClientComMessage struct {
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
+	Call  *MsgClientCall  `json:"call"`
 	// Optional data.
 	Extra *MsgClientExtra `json:"extra"`
 
@@ -710,6 +767,8 @@ type MsgServerMeta struct {
 	Tags []string `json:"tags,omitempty"`
 	// Account credentials, 'me' only.
 	Cred []*MsgCredServer `json:"cred,omitempty"`
+	// Ephemeral params.
+	Ephemeral *EphemeralMessage `json:"ephemeral,omitempty"`
 }
 
 // Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.
@@ -790,6 +849,72 @@ func (src *MsgServerInfo) describe() string {
 	return s
 }
 
+// Telephony message.
+type MsgServerTele struct {
+	//MsgServerInfo
+	// Topic to send event to.
+	Topic string `json:"topic"`
+	// Topic where the even has occurred (set only when Topic='me').
+	Src string `json:"src,omitempty"`
+	// ID of the user who originated the message.
+	From string `json:"from"`
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
+	What string `json:"what"`
+	// Server-issued message ID being reported.
+	SeqId int `json:"seq,omitempty"`
+	// When sending to 'me', skip sessions subscribed to this topic.
+	SkipTopic string `json:"-"`
+
+	/*
+	  Sdp json.RawMessage `json:"sdp,omitempty"`
+	  IceCandidate string `json:"ice_candidate,omitempty"`
+	*/
+	Payload json.RawMessage `json:"payload,omitempty"`
+}
+
+func (src *MsgServerTele) copy() *MsgServerTele {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
+// Basic description.
+func (src *MsgServerTele) describe() string {
+	/*
+		s := src.Topic
+		if src.Src != "" {
+			s += " src=" + src.Src
+		}
+		s += " what=" + src.What + " from=" + src.From
+		if src.SeqId > 0 {
+			s += " seq=" + strconv.Itoa(src.SeqId)
+		}
+	*/
+	//s := src.MsgServerInfo.describe()
+	s := src.Topic
+	/*
+		if src.Src != "" {
+			s += " src=" + src.Src
+		}
+	*/
+	s += " what=" + src.What + " from=" + src.From
+	if src.SeqId > 0 {
+		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+
+	if len(src.Payload) > 0 {
+		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
+	}
+	/*
+	  if src.IceCandidate != "" {
+	    s += " ice=" + src.IceCandidate
+	  }
+	*/
+	return s
+}
+
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
@@ -797,6 +922,7 @@ type ServerComMessage struct {
 	Meta *MsgServerMeta `json:"meta,omitempty"`
 	Pres *MsgServerPres `json:"pres,omitempty"`
 	Info *MsgServerInfo `json:"info,omitempty"`
+	Tele *MsgServerTele `json:"tele,omitempty"`
 
 	// Internal fields.
 
@@ -839,6 +965,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 	dst.Meta = src.Meta.copy()
 	dst.Pres = src.Pres.copy()
 	dst.Info = src.Info.copy()
+	dst.Tele = src.Tele.copy()
 
 	return dst
 }
@@ -859,12 +986,32 @@ func (src *ServerComMessage) describe() string {
 		return "{pres " + src.Pres.describe() + "}"
 	case src.Info != nil:
 		return "{info " + src.Info.describe() + "}"
+	case src.Tele != nil:
+		return "{tele " + src.Tele.describe() + "}"
 	default:
 		return "{nil}"
 	}
 }
 
 // Generators of server-side error messages {ctrl}.
+
+//func NoErrTrying()
+func ProvisionalTeleExplicitTs(code int, text, id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Id:        id,
+			Code:      code, //http.StatusAccepted, // 202
+			Text:      text, //"accepted",
+			Topic:     topic,
+			Timestamp: serverTs,
+		}, Id: id,
+		Timestamp: incomingReqTs,
+	}
+}
+
+func ProvisionalTele(code int, text, id, topic string, ts time.Time) *ServerComMessage {
+	return ProvisionalTeleExplicitTs(code, text, id, topic, ts, ts)
+}
 
 // NoErr indicates successful completion (200).
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
@@ -1546,6 +1693,24 @@ func ErrPolicyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 // with explicit server and incoming request timestamps in response to a client request (422).
 func ErrPolicyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrPolicyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+func ErrTeleBusyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Id:        id,
+			Code:      486, // Busy here.
+			Text:      "Busy Here",
+			Topic:     topic,
+			Timestamp: serverTs,
+		},
+		Id:        id,
+		Timestamp: incomingReqTs,
+	}
+}
+
+func ErrTeleBusyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrTeleBusyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrUnknown database or other server error (500).

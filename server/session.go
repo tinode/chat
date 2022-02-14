@@ -457,6 +457,11 @@ func (s *Session) dispatchRaw(raw []byte) {
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}
+	/*
+	  if msg.Set != nil {
+	    logs.Warn.Printf("\t-> eph = %v", msg.Set.Ephemeral)
+	  }
+	*/
 
 	s.dispatch(&msg)
 }
@@ -582,6 +587,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		handler = s.note
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
+
+	case msg.Call != nil:
+		handler = s.call
+		msg.Id = msg.Call.Id
+		msg.Original = msg.Call.Topic
 
 	default:
 		// Unknown message
@@ -1102,6 +1112,9 @@ func (s *Session) set(msg *ClientComMessage) {
 	if msg.Set.Cred != nil {
 		msg.MetaWhat |= constMsgMetaCred
 	}
+	if msg.Set.Ephemeral != nil {
+		msg.MetaWhat |= constMsgMetaEphemeral
+	}
 
 	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
@@ -1237,6 +1250,61 @@ func (s *Session) note(msg *ClientComMessage) {
 	} else {
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		logs.Warn.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
+	}
+}
+
+func (s *Session) call(msg *ClientComMessage) {
+	if s.ver == 0 || msg.AsUser == "" {
+		// Silently ignore the message: have not received {hi} or don't know who sent the message.
+		return
+	}
+
+	// Expand topic name and validate request.
+	var resp *ServerComMessage
+	msg.RcptTo, resp = s.expandTopicName(msg)
+	if resp != nil {
+		// Silently ignoring the message
+		return
+	}
+
+	/*
+		switch msg.Note.What {
+		case "kp":
+			if msg.Note.SeqId != 0 {
+				return
+			}
+		case "read", "recv":
+			if msg.Note.SeqId <= 0 {
+				return
+			}
+		default:
+			return
+		}
+	*/
+
+	if sub := s.getSub(msg.RcptTo); sub != nil {
+		// Pings can be sent to subscribed topics only
+		select {
+		case sub.broadcast <- msg:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			logs.Err.Println("s.call: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
+		}
+	} else if msg.Call.What == "ringing" || msg.Call.What == "hang-up" {
+		// Client received a pres notification about a new message, initiated a fetch
+		// from the server (and detached from the topic) and acknowledges receipt.
+		// Hub will forward to topic, if appropriate.
+		select {
+		case globals.hub.routeCli <- msg:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			logs.Err.Println("s.note: hub.route channel full", s.sid)
+		}
+	} else {
+		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
+		logs.Warn.Println("s.call: call to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
 

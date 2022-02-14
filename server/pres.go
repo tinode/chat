@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/tinode/chat/server/logs"
@@ -496,6 +497,40 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 			SkipSid: skipSid,
 		}
 	}
+}
+
+func (t *Topic) callSubsOffline(from string, target types.Uid, what string, seq int, sdp json.RawMessage, skipSid string, offlineOnly bool) {
+	/*
+	  var target types.Uid
+		for uid, _ := range t.perUser {
+	    if uid.UserId() != from {
+	      target = uid
+	      break
+	    }
+	  }
+	*/
+	if target.IsZero() {
+		logs.Err.Printf("could not find target: topic %s - from %s", t.name, from)
+		return
+	}
+	msg := &ServerComMessage{
+		Tele: &MsgServerTele{
+			Topic:   "me",
+			Src:     t.original(target),
+			From:    from,
+			What:    what,
+			SeqId:   seq,
+			Payload: sdp,
+			//SkipTopic: t.name,
+			//IceCandidate: msg.Call.IceCandidate,
+		},
+		RcptTo:  target.UserId(),
+		SkipSid: skipSid,
+	}
+	if offlineOnly {
+		msg.Tele.SkipTopic = t.name
+	}
+	globals.hub.routeSrv <- msg
 }
 
 // Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers

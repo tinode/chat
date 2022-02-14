@@ -263,6 +263,31 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 		t.delID = stopic.DelId
 	}
 
+	//var callParties []types.CallPartyData
+	if stopic.CallId.Valid {
+		if callData, err1 := store.Calls.GetCallData(int(stopic.CallId.Int64)); err1 == nil {
+			parties := make(map[*Session]CallPartyData)
+			for _, p := range callData.Parties {
+				if s := globals.sessionStore.Get(p.Sid); s != nil {
+					parties[s] = CallPartyData{
+						expires:      p.Expires,
+						isOriginator: p.IsOriginator,
+					}
+				} else {
+					logs.Warn.Printf("Call id %d: session %s not found", p.MessageId, p.Sid)
+				}
+				//if
+			}
+			t.currentCall = &CallInProgress{
+				parties: parties,
+				created: callData.CreatedAt,
+				updated: callData.UpdatedAt,
+			}
+		} else {
+			return err1
+		}
+	}
+
 	// t.owner is blank for p2p topics
 
 	// Default user access to P2P topics is not set because it's unused.
@@ -293,6 +318,11 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 				readID:    subs[i].ReadSeqId,
 			}
 		}
+
+		//
+		//if subs, err = store.Topics.GetUsers(t.name, nil); err != nil {
+
+		//stopic.CallId
 	} else {
 		// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 		// or the subscription was deleted)
