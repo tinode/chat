@@ -499,7 +499,7 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 	}
 }
 
-func (t *Topic) callSubsOffline(from string, target types.Uid, what string, seq int, sdp json.RawMessage, skipSid string, offlineOnly bool) {
+func (t *Topic) callSubsOffline(from string, target types.Uid, event string, seq int, sdp json.RawMessage, skipSid string, offlineOnly bool) {
 	/*
 	  var target types.Uid
 		for uid, _ := range t.perUser {
@@ -514,11 +514,12 @@ func (t *Topic) callSubsOffline(from string, target types.Uid, what string, seq 
 		return
 	}
 	msg := &ServerComMessage{
-		Tele: &MsgServerTele{
+		Info: &MsgServerInfo{
 			Topic:   "me",
 			Src:     t.original(target),
 			From:    from,
-			What:    what,
+			What:    "call",
+			Event:   event,
 			SeqId:   seq,
 			Payload: sdp,
 			//SkipTopic: t.name,
@@ -528,7 +529,7 @@ func (t *Topic) callSubsOffline(from string, target types.Uid, what string, seq 
 		SkipSid: skipSid,
 	}
 	if offlineOnly {
-		msg.Tele.SkipTopic = t.name
+		msg.Info.SkipTopic = t.name
 	}
 	globals.hub.routeSrv <- msg
 }

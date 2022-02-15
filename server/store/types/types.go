@@ -1205,7 +1205,7 @@ type Message struct {
 	// 2 = rejected call
 	// 3 = call in progress
 	// 4 = completed call
-	Status int
+	//Status int
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).

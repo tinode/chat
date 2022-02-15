@@ -276,8 +276,8 @@ func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
 			msg.Pres.Topic = t.original(uid)
 		case msg.Info != nil:
 			msg.Info.Topic = t.original(uid)
-		case msg.Tele != nil:
-			msg.Tele.Topic = t.original(uid)
+		//case msg.Tele != nil:
+		//	msg.Tele.Topic = t.original(uid)
 		}
 	}
 }
@@ -702,8 +702,6 @@ func (t *Topic) handleClientMsg(msg *ClientComMessage) {
 		t.handlePubBroadcast(msg)
 	} else if msg.Note != nil {
 		t.handleNoteBroadcast(msg)
-	} else if msg.Call != nil {
-		t.handleCallBroadcast(msg)
 	} else {
 		// TODO(gene): maybe remove this panic.
 		logs.Err.Panic("topic: wrong client message type for broadcasting", t.name)
@@ -719,7 +717,7 @@ func (t *Topic) handleServerMsg(msg *ServerComMessage) {
 	}
 	if msg.Pres != nil {
 		t.handlePresence(msg)
-	} else if msg.Info != nil || msg.Tele != nil {
+	} else if msg.Info != nil {
 		t.broadcastToSessions(msg)
 	} else {
 		// TODO(gene): maybe remove this panic.
@@ -1290,10 +1288,11 @@ func (t *Topic) maybeEndCallInProgress(from string) {
 	  }
 	*/
 	msg := &ServerComMessage{
-		Tele: &MsgServerTele{
+		Info: &MsgServerInfo{
 			//Topic: orig,
 			//Src: orig,
-			What:  "hang-up",
+			What:  "call",
+			Event:  "hang-up",
 			SeqId: t.currentCall.seq,
 		},
 	}
@@ -1379,7 +1378,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 
 	//asUid := types.ParseUserId(msg.AsUser)
 	//pud := t.perUser[asUid]
-	call := msg.Call
+	call := msg.Note
 	//if call.What == "invite" {
 	asUid := types.ParseUserId(msg.AsUser)
 
@@ -1441,7 +1440,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 
 		tgt := t.p2pOtherUser(msg.sess.uid)
-		t.callSubsOffline(msg.AsUser, tgt, call.What, t.lastID, msg.Call.Payload, msg.sess.sid, false)
+		t.callSubsOffline(msg.AsUser, tgt, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
 		//t.callState = 1
 		//psd.rtc = true
 		//t.sessions[msg.sess] = psd
@@ -1514,10 +1513,11 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 		logs.Info.Printf("\t- forwarding %s to %s", call.What, initiator.sid)
 		forwardMsg := &ServerComMessage{
-			Tele: &MsgServerTele{
+			Info: &MsgServerInfo{
 				Topic: t.original(initiator.uid),
 				From:  msg.AsUser,
-				What:  call.What,
+				What:  "call",
+				Event: call.Event,
 				SeqId: call.SeqId,
 			},
 		}
@@ -1559,7 +1559,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			*/
 
 			// Notify other clients that the call has been accepted.
-			t.callSubsOffline(msg.AsUser, msg.sess.uid, call.What, t.lastID, msg.Call.Payload, msg.sess.sid, false)
+			t.callSubsOffline(msg.AsUser, msg.sess.uid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
 		}
 		initiator.queueOut(forwardMsg)
 
@@ -1594,11 +1594,12 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		msg.sess.queueOut(NoErrReply(msg, types.TimeNow()))
 		otherEnd.queueOut(
 			&ServerComMessage{
-				Tele: &MsgServerTele{
+				Info: &MsgServerInfo{
 					Topic: t.original(otherEnd.uid),
 					//Src: t.original(target),
 					From:    msg.AsUser,
-					What:    call.What, //"ringing",
+					What:    "call",
+					Event:   call.Event, //"ringing",
 					SeqId:   call.SeqId,
 					Payload: call.Payload,
 					//SkipTopic: t.name,
@@ -1607,6 +1608,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 				//RcptTo: target.UserId(),
 				//SkipSid: skipSid,
 			})
+	/*
 	} else if call.What == "extend-lease" {
 		if t.currentCall == nil || t.currentCall.seq != call.SeqId {
 			logs.Err.Printf("extend-lease --> no call in progress or wrong seq: %s - seq: %d", t.name, call.SeqId)
@@ -1636,6 +1638,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		} else {
 			msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		}
+	*/
 	} else if call.What == "hang-up" {
 		//t.handleCallHangup(call, msg)
 		//
@@ -1735,6 +1738,12 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 	// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
 	if (msg.Note.What == "read" || msg.Note.What == "recv") && !mode.IsReader() {
+		return
+	}
+
+	if msg.Note.What == "call" {
+		// Handle calls separately.
+		t.handleCallBroadcast(msg)
 		return
 	}
 
@@ -1871,23 +1880,6 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 					continue
 				}
 
-			} else if msg.Tele != nil {
-				logs.Info.Printf("Sess %s: handling server call from %s", sess.sid, msg.Tele.From)
-				// Skip notifying - already notified on topic.
-				if msg.Tele.SkipTopic != "" && sess.getSub(msg.Tele.SkipTopic) != nil {
-					continue
-				}
-				/*
-				   // Only forward to the opposite side.
-				   if sess.uid.UserId() == msg.Call.From {
-				     continue
-				   }
-				   // Already subscribed - data message has already informed the session.
-				   logs.Info.Printf("Sess %s checking subscription to %s -> %+v", sess.sid, msg.RcptTo, sess.subs)
-				   if sess.getSub(msg.RcptTo) != nil {
-				     continue
-				   }
-				*/
 			} else {
 				if msg.Info != nil {
 					// Don't forward read receipts and key presses to channel readers and those without the R permission.

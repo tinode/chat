@@ -340,8 +340,13 @@ type MsgClientNote struct {
 	SeqId int `json:"seq,omitempty"`
 	// Client's count of unread messages to report back to the server. Used in push notifications on iOS.
 	Unread int `json:"unread,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used in video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
+/*
 type MsgClientCall struct {
 	Id string `json:"id,omitempty"`
 	//
@@ -354,13 +359,8 @@ type MsgClientCall struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 
 	LeaseExpires *time.Time `json:"leaseexp,omitempty"`
-	/*
-	  //
-	  Sdp json.RawMessage `json:"sdp,omitempty"`
-	  //
-	  IceCandidate string `json:"ice_candidate,omitempty"`
-	*/
 }
+*/
 
 // MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
 type MsgClientExtra struct {
@@ -384,7 +384,7 @@ type ClientComMessage struct {
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
-	Call  *MsgClientCall  `json:"call"`
+	//Call  *MsgClientCall  `json:"call"`
 	// Optional data.
 	Extra *MsgClientExtra `json:"extra"`
 
@@ -815,10 +815,14 @@ type MsgServerInfo struct {
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from"`
-	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used by video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 
 	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.
 	// They are still serialized for intra-cluster communication.
@@ -846,9 +850,13 @@ func (src *MsgServerInfo) describe() string {
 	if src.SeqId > 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)
 	}
+	if len(src.Payload) > 0 {
+		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
+	}
 	return s
 }
 
+/*
 // Telephony message.
 type MsgServerTele struct {
 	//MsgServerInfo
@@ -865,10 +873,6 @@ type MsgServerTele struct {
 	// When sending to 'me', skip sessions subscribed to this topic.
 	SkipTopic string `json:"-"`
 
-	/*
-	  Sdp json.RawMessage `json:"sdp,omitempty"`
-	  IceCandidate string `json:"ice_candidate,omitempty"`
-	*/
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
@@ -882,23 +886,8 @@ func (src *MsgServerTele) copy() *MsgServerTele {
 
 // Basic description.
 func (src *MsgServerTele) describe() string {
-	/*
-		s := src.Topic
-		if src.Src != "" {
-			s += " src=" + src.Src
-		}
-		s += " what=" + src.What + " from=" + src.From
-		if src.SeqId > 0 {
-			s += " seq=" + strconv.Itoa(src.SeqId)
-		}
-	*/
 	//s := src.MsgServerInfo.describe()
 	s := src.Topic
-	/*
-		if src.Src != "" {
-			s += " src=" + src.Src
-		}
-	*/
 	s += " what=" + src.What + " from=" + src.From
 	if src.SeqId > 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)
@@ -907,13 +896,9 @@ func (src *MsgServerTele) describe() string {
 	if len(src.Payload) > 0 {
 		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
 	}
-	/*
-	  if src.IceCandidate != "" {
-	    s += " ice=" + src.IceCandidate
-	  }
-	*/
 	return s
 }
+*/
 
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
@@ -922,7 +907,7 @@ type ServerComMessage struct {
 	Meta *MsgServerMeta `json:"meta,omitempty"`
 	Pres *MsgServerPres `json:"pres,omitempty"`
 	Info *MsgServerInfo `json:"info,omitempty"`
-	Tele *MsgServerTele `json:"tele,omitempty"`
+	//Tele *MsgServerTele `json:"tele,omitempty"`
 
 	// Internal fields.
 
@@ -965,7 +950,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 	dst.Meta = src.Meta.copy()
 	dst.Pres = src.Pres.copy()
 	dst.Info = src.Info.copy()
-	dst.Tele = src.Tele.copy()
+	//dst.Tele = src.Tele.copy()
 
 	return dst
 }
@@ -986,8 +971,8 @@ func (src *ServerComMessage) describe() string {
 		return "{pres " + src.Pres.describe() + "}"
 	case src.Info != nil:
 		return "{info " + src.Info.describe() + "}"
-	case src.Tele != nil:
-		return "{tele " + src.Tele.describe() + "}"
+	//case src.Tele != nil:
+	//	return "{tele " + src.Tele.describe() + "}"
 	default:
 		return "{nil}"
 	}

@@ -397,7 +397,6 @@ func (a *adapter) CreateDb(reset bool) error {
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
-			callid    INT,
 			public    JSON,
 			trusted   JSON,
 			tags      JSON,
@@ -464,8 +463,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			topic     CHAR(25) NOT NULL,
 			versionid INT,` +
 			"`from`   BIGINT NOT NULL," +
-			`status   SMALLINT DEFAULT 0,
-			head     JSON,
+			`head     JSON,
 			content   JSON,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
@@ -549,7 +547,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		)`); err != nil {
 		return err
 	}
-
+	/*
 	if _, err := tx.Exec(
 		`CREATE TABLE callparties(
 			id         INT NOT NULL AUTO_INCREMENT,
@@ -580,6 +578,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		);`); err != nil {
 		return err
 	}
+	*/
 
 	if _, err = tx.Exec(
 		`CREATE TABLE kvmeta(` +
@@ -771,6 +770,7 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
+	/*
 	if a.version == 112 {
 		if _, err := a.db.Exec("ALTER TABLE topics ADD callid INT"); err != nil {
 			return err
@@ -811,6 +811,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 	}
+	*/
 
 	if a.version != adpVersion {
 		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
@@ -2577,9 +2578,9 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	// Using a sequential ID provided by the database.
 	res, err := a.db.ExecContext(
 		ctx,
-		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,status,head,content) VALUES(?,?,?,?,?,?,?,?)",
+		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
-		store.DecodeUid(t.ParseUid(msg.From)), msg.Status, msg.Head, toJSON(msg.Content))
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
 	if err == nil {
 		id, _ := res.LastInsertId()
 		// Replacing ID given by store by ID given by the DB.

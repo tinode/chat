@@ -1101,7 +1101,7 @@ func (callsMapper) GetCallData(callId int) (*types.CallData, error) {
 		Parties:   parties,
 		//CreatedAt:
 		//UpdatedAt:
-		Status: msg.Status,
+		//Status: msg.Status,
 	}
 	return res, nil
 }
@@ -1114,7 +1114,7 @@ func (callsMapper) Start(topicName string, asUid types.Uid, callData *types.Call
 		Topic:     topicName,
 		From:      asUid.String(),
 		Head:      map[string]interface{}{"mime": "application/tinode-tele-call"},
-		Status:    callData.Status,
+		//Status:    callData.Status,
 		Content:   "☎️",
 	} //, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
 
@@ -1137,10 +1137,6 @@ func (callsMapper) Start(topicName string, asUid types.Uid, callData *types.Call
 		}
 		//logs.Info.Printf("set new party uid to %s", p.Uid())
 	}
-	/*
-		for _, p := range callData.Parties {
-		}
-	*/
 
 	return m, nil
 }

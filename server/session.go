@@ -588,10 +588,12 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
 
+	/*
 	case msg.Call != nil:
 		handler = s.call
 		msg.Id = msg.Call.Id
 		msg.Original = msg.Call.Topic
+	*/
 
 	default:
 		// Unknown message
@@ -1223,6 +1225,10 @@ func (s *Session) note(msg *ClientComMessage) {
 		if msg.Note.SeqId <= 0 {
 			return
 		}
+	case "call":
+		if msg.Note.SeqId <= 0 {
+			return
+		}
 	default:
 		return
 	}
@@ -1236,7 +1242,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
 			logs.Err.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.Note.What == "recv" {
+	} else if msg.Note.What == "recv" || (msg.Note.What == "call" && (msg.Note.Event == "ringing" || msg.Note.Event == "hang-up")) {
 		// Client received a pres notification about a new message, initiated a fetch
 		// from the server (and detached from the topic) and acknowledges receipt.
 		// Hub will forward to topic, if appropriate.
@@ -1253,6 +1259,7 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 }
 
+/*
 func (s *Session) call(msg *ClientComMessage) {
 	if s.ver == 0 || msg.AsUser == "" {
 		// Silently ignore the message: have not received {hi} or don't know who sent the message.
@@ -1266,21 +1273,6 @@ func (s *Session) call(msg *ClientComMessage) {
 		// Silently ignoring the message
 		return
 	}
-
-	/*
-		switch msg.Note.What {
-		case "kp":
-			if msg.Note.SeqId != 0 {
-				return
-			}
-		case "read", "recv":
-			if msg.Note.SeqId <= 0 {
-				return
-			}
-		default:
-			return
-		}
-	*/
 
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
@@ -1307,6 +1299,7 @@ func (s *Session) call(msg *ClientComMessage) {
 		logs.Warn.Println("s.call: call to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
+*/
 
 // expandTopicName expands session specific topic name to global name
 // Returns
