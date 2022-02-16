@@ -1619,7 +1619,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.GetContext(ctx, tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,callid,public,trusted,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags "+
 			"FROM topics WHERE name=?",
 		topic)
 
@@ -2641,7 +2641,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	}
 	rows, err := a.db.QueryxContext(
 		ctx,
-		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content,m.status"+
+		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
 			" FROM messages AS m LEFT JOIN dellog AS d"+
 			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
 			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND d.deletedfor IS NULL"+

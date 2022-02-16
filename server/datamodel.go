@@ -333,6 +333,8 @@ type MsgClientDel struct {
 // MsgClientNote is a client-generated notification for topic subscribers {note}.
 type MsgClientNote struct {
 	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
+	Id string `json:"id,omitempty"`
+
 	Topic string `json:"topic"`
 	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
 	What string `json:"what"`
@@ -345,22 +347,6 @@ type MsgClientNote struct {
 	// Arbitrary json payload (used in video calls).
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
-
-/*
-type MsgClientCall struct {
-	Id string `json:"id,omitempty"`
-	//
-	Topic string `json:"topic,omitempty"`
-	//
-	What string `json:"what,omitempty"`
-
-	SeqId int `json:"seq,omitempty"`
-
-	Payload json.RawMessage `json:"payload,omitempty"`
-
-	LeaseExpires *time.Time `json:"leaseexp,omitempty"`
-}
-*/
 
 // MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
 type MsgClientExtra struct {
@@ -855,50 +841,6 @@ func (src *MsgServerInfo) describe() string {
 	}
 	return s
 }
-
-/*
-// Telephony message.
-type MsgServerTele struct {
-	//MsgServerInfo
-	// Topic to send event to.
-	Topic string `json:"topic"`
-	// Topic where the even has occurred (set only when Topic='me').
-	Src string `json:"src,omitempty"`
-	// ID of the user who originated the message.
-	From string `json:"from"`
-	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
-	What string `json:"what"`
-	// Server-issued message ID being reported.
-	SeqId int `json:"seq,omitempty"`
-	// When sending to 'me', skip sessions subscribed to this topic.
-	SkipTopic string `json:"-"`
-
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
-func (src *MsgServerTele) copy() *MsgServerTele {
-	if src == nil {
-		return nil
-	}
-	dst := *src
-	return &dst
-}
-
-// Basic description.
-func (src *MsgServerTele) describe() string {
-	//s := src.MsgServerInfo.describe()
-	s := src.Topic
-	s += " what=" + src.What + " from=" + src.From
-	if src.SeqId > 0 {
-		s += " seq=" + strconv.Itoa(src.SeqId)
-	}
-
-	if len(src.Payload) > 0 {
-		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
-	}
-	return s
-}
-*/
 
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {

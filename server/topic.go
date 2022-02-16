@@ -1153,6 +1153,13 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		return
 	}
 
+	//
+	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == "application/tinode-video-call"
+	if isCall && t.currentCall != nil {
+		msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+		return
+	}
+
 	// Save to DB at master topic.
 	var attachments []string
 	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
@@ -1192,7 +1199,14 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		t.perUser[asUid] = pud
 	}
 
-	t.broadcastMessage(msg, asUid, msg.Pub.NoEcho, nil, msg.Pub.Head, msg.Pub.Content)
+	var params map[string]interface{} = nil
+	if msg.Pub.Head != nil && msg.Pub.Head["mime"] == "application/tinode-video-call" {
+		params = make(map[string]interface{})
+		params["sip-code"] = 100
+		//params["lease-expires"] = initiator.Expires
+		t.handleCallInvite(msg, asUid)
+	}
+	t.broadcastMessage(msg, asUid, msg.Pub.NoEcho, params, msg.Pub.Head, msg.Pub.Content)
 	/*
 	  logs.Info.Printf("about to send response to msg %+v", msg)
 		if msg.Id != "" && msg.sess != nil {
@@ -1367,6 +1381,80 @@ func (t *Topic) handleCallHangup(call *MsgClientCall, msg *ClientComMessage) {
 
 }
 */
+func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid,) {
+		logs.Info.Println("--> 1")
+		if t.currentCall != nil {
+			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			return
+		}
+
+		logs.Info.Println("--> 2")
+		/*
+			if t.callState >= 1 {
+				msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+				return
+			}
+		*/
+		logs.Info.Println("--> 3")
+		initiator := types.CallParty{
+			ObjHeader:    types.ObjHeader{CreatedAt: msg.Timestamp},
+			User:         asUid.String(),
+			Sid:          msg.sess.sid,
+			IsOriginator: true,
+			Expires:      types.TimeNow().Add(time.Second * 15),
+		}
+		parties := []types.CallParty{initiator}
+		callData := &types.CallData{
+			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
+			SeqId:     t.lastID + 1,
+			Parties:   parties,
+			// Call initiated.
+			Status: 1,
+		}
+		/*
+		callContent, err := store.Calls.Start(t.name, asUid, callData, (pud.modeGiven & pud.modeWant).IsReader())
+		if err != nil {
+			logs.Err.Printf("error inserting record: %s", err)
+			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			return
+		}
+		logs.Info.Println("--> 4")
+		t.lastID++
+		t.touched = msg.Timestamp
+
+		if userFound {
+			pud.readID = t.lastID
+			t.perUser[asUid] = pud
+		}
+		*/
+
+		tgt := t.p2pOtherUser(msg.sess.uid)
+		t.callSubsOffline(msg.AsUser, tgt, "invite", t.lastID, nil, msg.sess.sid, false)
+		//t.callState = 1
+		//psd.rtc = true
+		//t.sessions[msg.sess] = psd
+		t.currentCall = &CallInProgress{
+			messageId: callData.MessageId,
+			parties:   make(map[*Session]CallPartyData),
+			seq:       t.lastID,
+			created:   callData.ObjHeader.CreatedAt,
+			updated:   callData.ObjHeader.UpdatedAt,
+		}
+		t.currentCall.parties[msg.sess] = CallPartyData{
+			partyId:      int(callData.Parties[0].ObjHeader.Uid()),
+			expires:      initiator.Expires,
+			isOriginator: true,
+		}
+		logs.Info.Println("--> current call party ", callData.Parties[0].ObjHeader.Uid())
+		/*
+		params := make(map[string]interface{})
+		params["sip-code"] = 100
+		params["lease-expires"] = initiator.Expires
+		t.broadcastMessage(msg, asUid, true, params, callContent.Head, callContent.Content)
+
+		t.callTimer.Reset(15 * time.Second)
+		*/
+}
 
 func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 	if t.isInactive() {
@@ -1390,7 +1478,9 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	if call.What == "invite" {
+  logs.Info.Printf("\tcall: %+v", call)
+
+	if call.Event == "invite" {
 		// Client calling.
 		//if psd, ok := t.sessions[msg.sess]; ok {
 		// TODO: Check if user already in call.
@@ -1463,7 +1553,6 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		t.broadcastMessage(msg, asUid, true, params, callContent.Head, callContent.Content)
 
 		t.callTimer.Reset(15 * time.Second)
-
 		/*
 		    } else {
 				  msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
@@ -1471,7 +1560,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		      return
 		    }
 		*/
-	} else if call.What == "ringing" || call.What == "accept" {
+	} else if call.Event == "ringing" || call.Event == "accept" {
 		if t.currentCall == nil {
 			logs.Err.Printf("no call present: %s - seq: %d", t.name, call.SeqId)
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
@@ -1491,7 +1580,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		     return
 		   }
 		*/
-		logs.Info.Printf("\t+ forwarding %s from %s", call.What, msg.sess.sid)
+		logs.Info.Printf("\t+ forwarding %s from %s", call.Event, msg.sess.sid)
 		var initiator *Session
 		for sess, p := range t.currentCall.parties {
 			if p.isOriginator {
@@ -1511,7 +1600,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
 			return
 		}
-		logs.Info.Printf("\t- forwarding %s to %s", call.What, initiator.sid)
+		logs.Info.Printf("\t- forwarding %s to %s", call.Event, initiator.sid)
 		forwardMsg := &ServerComMessage{
 			Info: &MsgServerInfo{
 				Topic: t.original(initiator.uid),
@@ -1524,7 +1613,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		//initiator.queueOut(reply)
 		//  )
 		var params map[string]interface{}
-		if call.What == "accept" {
+		if call.Event == "accept" {
 			//store.
 			expires := time.Now().Add(time.Second * 15)
 			party := &types.CallParty{
@@ -1563,8 +1652,9 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 		initiator.queueOut(forwardMsg)
 
+    logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
 		msg.sess.queueOut(NoErrParamsReply(msg, types.TimeNow(), params))
-	} else if call.What == "offer" || call.What == "answer" || call.What == "ice-candidate" {
+	} else if call.Event == "offer" || call.Event == "answer" || call.Event == "ice-candidate" {
 		//
 		if t.currentCall == nil {
 			logs.Err.Printf("no call in progress: %s - seq: %d", t.name, call.SeqId)
@@ -1639,7 +1729,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		}
 	*/
-	} else if call.What == "hang-up" {
+	} else if call.Event == "hang-up" {
 		//t.handleCallHangup(call, msg)
 		//
 		if t.currentCall == nil {
@@ -1708,6 +1798,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 // handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.
 // This is a NON-proxy broadcast (at master topic).
 func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
+  logs.Info.Printf("\tnote msg: %+v", msg.Note)
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
 		return

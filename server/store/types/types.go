@@ -2,7 +2,7 @@
 package types
 
 import (
-	"database/sql"
+	//"database/sql"
 	"database/sql/driver"
 	"encoding/base32"
 	"encoding/base64"
@@ -1074,7 +1074,7 @@ type Topic struct {
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
 	// Current call id.
-	CallId sql.NullInt64
+	//CallId sql.NullInt64
 
 	Public  interface{}
 	Trusted interface{}

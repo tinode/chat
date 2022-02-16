@@ -585,6 +585,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	case msg.Note != nil:
 		handler = s.note
+    msg.Id = msg.Note.Id
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
 

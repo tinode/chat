@@ -1143,16 +1143,19 @@ func (callsMapper) Start(topicName string, asUid types.Uid, callData *types.Call
 
 func (callsMapper) Accept(party *types.CallParty) error {
 	party.InitTimes()
+  /*
 	if err := adp.MessageUpdateStatus(party.MessageId, 2); err != nil {
 		return err
 	}
 	return adp.CallPartiesAdd(party)
+  */
+  return nil//Messages.Save()
 }
 
 func (callsMapper) Finish(messageId int) error {
-	err := adp.MessageUpdateStatus(messageId, 3)
-	logs.Err.Printf("msg id %d:  setting status to %d; error = %s", messageId, 3, err)
-	return err
+	//err := adp.MessageUpdateStatus(messageId, 3)
+	logs.Err.Printf("msg id %d:  setting status to %d; error = %s", messageId, 3,nil)
+	return nil//err
 }
 
 func (callsMapper) ExtendLease(partyId int, until time.Time) error {
