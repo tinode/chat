@@ -1,5 +1,6 @@
 syntax = "proto3";
 package pbx;
+option go_package = "github.com/tinode/chat/pbx";
 
 // This is the single method that needs to be implemented by a gRPC client.
 service Node {
@@ -242,7 +243,7 @@ message ClientDel {
 	// User ID of the subscription to delete
 	string user_id = 5;
 	// Credential to delete.
-	ClientCred cred = 6; 
+	ClientCred cred = 6;
 	// Request to hard-delete messages for all users, if such option is available.
 	bool hard = 7;
 }
