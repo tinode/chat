@@ -1,6 +1,6 @@
 # Tinode Instant Messaging Server
 
-<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage is any one of [RethinkDB](http://rethinkdb.com/), MySQL or MongoDB. Other databases can be supported by writing custom adapters.
+<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage is any one of MySQL, MongoDB or [RethinkDB](http://rethinkdb.com/). Other databases can be supported by writing custom adapters.
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
@@ -83,7 +83,7 @@ When you register a new account you are asked for an email address to send valid
   * Scriptable [command line](tn-cli/) (Python)
 * User features:
   * One-on-one and group messaging.
-  * Channels with an unlimited number of read-only subscribers.
+  * Channels with unlimited number of read-only subscribers.
   * Granular access control with permissions for various actions.
   * User search/discovery.
   * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
@@ -101,7 +101,7 @@ When you register a new account you are asked for an email address to send valid
   * Plugins to extend functionality, for example, to support moderation or chatbots.
 * Performance, reliability and development:
   * Sharded clustering with failover.
-  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3.
+  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with plugins).
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:
     * Javascript with no external dependencies.
@@ -113,13 +113,13 @@ When you register a new account you are asked for an email address to send valid
 ### Planned
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
-* End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
-* Voice and video messages, location sharing.
 * Video or audio calling.
+* Voice and video messages, location sharing.
 * Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
+* End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Full text search in messages.
 
 ### Translations
