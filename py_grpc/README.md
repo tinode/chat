@@ -17,7 +17,7 @@ pip install tinode_grpc
 
 ## Generating files
 
-Don't modify included files directly. If you want to make changes, you have to install protobuffers tool chain and gRPC the generate the Python bindings from [`pbx/model.proto`](https://github.com/tinode/chat/tree/master/pbx/model.proto) (your path to `model.proto` may be different):
+Don't modify included files directly. If you want to make changes, you have to install protobuffers tool chain and gRPC then generate the Python bindings from [`pbx/model.proto`](https://github.com/tinode/chat/tree/master/pbx/model.proto) (your path to `model.proto` may be different):
 ```
 python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/model.proto
 ```

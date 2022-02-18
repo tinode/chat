@@ -5,7 +5,7 @@ echo "Packaging python tinode-grpc..."
 pushd ./pbx > /dev/null
 
 # Generate grpc bindings from the proto file.
-./generate-python.sh v=3
+./py-generate.sh v=3
 
 pushd ../py_grpc > /dev/null
 
