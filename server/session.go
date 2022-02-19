@@ -1115,9 +1115,6 @@ func (s *Session) set(msg *ClientComMessage) {
 	if msg.Set.Cred != nil {
 		msg.MetaWhat |= constMsgMetaCred
 	}
-	if msg.Set.Ephemeral != nil {
-		msg.MetaWhat |= constMsgMetaEphemeral
-	}
 
 	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))

@@ -405,127 +405,6 @@ func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan boo
 			logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 		}
 	}
-	/*
-	  if msg.MetaWhat&constMsgMetaEphemeral != 0 {
-		  now := types.TimeNow()
-
-	    set := msg.Set
-	    eph := set.Ephemeral
-
-	    if eph.What == "join" {
-	      cnt := 0
-	      var another *Session
-		    for sess, pssd := range t.sessions {
-	        if pssd.rtc {
-	          another = sess
-	          cnt += 1
-	        }
-	      }
-	      // create
-	      params := map[string]interface{}{
-	        "rtc": "joined",
-	        "count": cnt,
-	      }
-	      //response := NoErrAccepted(msg, now)
-	      if cnt < 2 {
-	        //response.Ctrl.Params = params
-	        //pssd := t.sessions[msg.sess]
-	        pssd, _ := t.sessions[msg.sess]
-	        pssd.rtc = true
-	        t.sessions[msg.sess] = pssd
-	        if cnt == 1 {
-	          // Send meta to another.
-		        toriginal := asUid.UserId()
-	          r := &MsgServerMeta{
-	            Id:        msg.Id,
-				      Topic:     toriginal,
-				      //Desc:      desc,
-				      Timestamp: &now,
-	            Ephemeral: &EphemeralMessage{What: "joined"},
-			      }
-
-	          logs.Warn.Printf("sending meta %+v to sid %s", r.Ephemeral, another.sid)
-				    //logs.Warn.Printf("topic[%s] subscription failed %v --> %s", t.name, r.Ephemeral, string(r.Ephemeral.Payload))
-		        another.queueOut(&ServerComMessage{
-	            Meta: r,
-		        })
-	        }
-	      } else {
-	        params["rtc"] = "full"
-	      }
-		    msg.sess.queueOut(NoErrParamsReply(msg, now, params))
-	    } else if eph.What == "bye" {
-	      src := msg.sess
-	      logs.Info.Printf("session '%s' is disconnecting from RTC", src.sid)
-	      if pd, ok := t.sessions[src]; ok {
-	        pd.rtc = false
-	        t.sessions[src] = pd
-	      }
-
-
-	      var target *Session
-	      //logs.Info.Printf("---> from sess %s message %+v", src.sid, eph)
-		    for sess, pssd := range t.sessions {
-	        //logs.Info.Printf("\t sess %s -- pssd: %+v", sess.sid, pssd)
-	        if pssd.rtc && sess != src {
-	          target = sess
-	        }
-	      }
-	      //logs.Info.Printf("\t\t eph payload --> '%s'", string(eph.Payload))
-	      src.queueOut(NoErrReply(msg, now))
-	      if target == nil {
-	        return
-	      }
-	      logs.Info.Printf("received set.message from %s, sending meta to %s", src.sid, target.sid)
-		    toriginal := asUid.UserId() //t.original(asUid)
-	      r := &MsgServerMeta{
-	    		Id:        msg.Id,
-				  Topic:     toriginal,
-				  //Desc:      desc,
-				  Timestamp: &now,
-	        Ephemeral: &EphemeralMessage{Type: "rtc", What: "bye"},
-			  }
-
-	      logs.Warn.Printf("sending meta %+v to sid %s", r, target.sid)
-				//logs.Warn.Printf("topic[%s] subscription failed %v --> %s", t.name, r.Ephemeral, string(r.Ephemeral.Payload))
-		    target.queueOut(&ServerComMessage{
-	    		Meta: r,
-		    })
-
-	    } else if eph.What == "message" {
-	      src := msg.sess
-	      var target *Session
-	      //logs.Info.Printf("---> from sess %s message %+v", src.sid, eph)
-		    for sess, pssd := range t.sessions {
-	        //logs.Info.Printf("\t sess %s -- pssd: %+v", sess.sid, pssd)
-	        if pssd.rtc && sess != src {
-	          target = sess
-	        }
-	      }
-	      //logs.Info.Printf("\t\t eph payload --> '%s'", string(eph.Payload))
-	      src.queueOut(NoErrReply(msg, now))
-	      if target == nil {
-	        return
-	      }
-	      logs.Info.Printf("received set.message from %s, sending meta to %s", src.sid, target.sid)
-		    toriginal := asUid.UserId() //t.original(asUid)
-	      r := &MsgServerMeta{
-	    		Id:        msg.Id,
-				  Topic:     toriginal,
-				  //Desc:      desc,
-				  Timestamp: &now,
-	        Ephemeral: &EphemeralMessage{Type: "rtc", Payload: eph.Payload},
-			  }
-
-	      logs.Warn.Printf("sending meta %+v to sid %s", r, target.sid)
-				//logs.Warn.Printf("topic[%s] subscription failed %v --> %s", t.name, r.Ephemeral, string(r.Ephemeral.Payload))
-		    target.queueOut(&ServerComMessage{
-	    		Meta: r,
-		    })
-
-	    }
-	  }
-	*/
 }
 
 func (t *Topic) handleMetaDel(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
@@ -1083,11 +962,6 @@ func (t *Topic) broadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho 
 				reply.Ctrl.Params.(map[string]interface{})[k] = v
 			}
 		}
-		/*
-		   if msg.Call != nil {
-		     reply.Ctrl.Params.(map[string]int)["sip-code"] = 100
-		   }
-		*/
 		logs.Info.Printf("sending ctrl noerraccepted to sid %s: %+v", msg.sess.sid, reply)
 		msg.sess.queueOut(reply)
 	}
@@ -1098,8 +972,8 @@ func (t *Topic) broadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho 
 			From:      msg.AsUser,
 			Timestamp: msg.Timestamp,
 			SeqId:     t.lastID,
-			Head:      head,    //msg.Pub.Head,
-			Content:   content, //msg.Pub.Content,
+			Head:      head,
+			Content:   content,
 		},
 		// Internal-only values.
 		Id:        msg.Id,
@@ -1162,16 +1036,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		t.perUser[asUid] = pud
 	}
 
-  /*
-	var params map[string]interface{} = nil
-	if isCall {
-		params = make(map[string]interface{})
-		params["sip-code"] = 100
-		//params["lease-expires"] = initiator.Expires
-		t.handleCallInvite(msg, asUid)
-	}
-  */
-	t.broadcastMessage(msg, asUid, noEcho, /*extraHeaders*/replyParams, head /*msg.Pub.Head*/, content/*msg.Pub.Content*/)
+	t.broadcastMessage(msg, asUid, noEcho, replyParams, head, content)
   return nil
 }
 
@@ -1185,18 +1050,6 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	/*
-	pud, userFound := t.perUser[asUid]
-	// Anyone is allowed to post to 'sys' topic.
-	if t.cat != types.TopicCatSys {
-		// If it's not 'sys' check write permission.
-		if !(pud.modeWant & pud.modeGiven).IsWriter() {
-			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-			return
-		}
-	}
-	*/
-
 	if t.isReadOnly() {
 		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
 		return
@@ -1204,7 +1057,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 
 	//
 	var params map[string]interface{} = nil
-	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == "application/tinode-video-call"
+	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == constTinodeVideoCallMimeType
 	if isCall {
 		if t.currentCall != nil {
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
@@ -1220,45 +1073,11 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		attachments = msg.Extra.Attachments
 	}
 
-  /*
-	if err := store.Messages.Save(
-		&types.Message{
-			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
-			SeqId:     t.lastID + 1,
-			Topic:     t.name,
-			From:      asUid.String(),
-			Head:      msg.Pub.Head,
-			Content:   msg.Pub.Content,
-		}, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
-		logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
-		msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
-
-		return
-	}
-
-	t.lastID++
-	t.touched = msg.Timestamp
-
-	if userFound {
-		pud.readID = t.lastID
-		t.perUser[asUid] = pud
-	}
-
-	var params map[string]interface{} = nil
-	if isCall {
-		params = make(map[string]interface{})
-		params["sip-code"] = 100
-		//params["lease-expires"] = initiator.Expires
-		t.handleCallInvite(msg, asUid)
-	}
-	t.broadcastMessage(msg, asUid, msg.Pub.NoEcho, params, msg.Pub.Head, msg.Pub.Content)
-  */
 	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, params, msg.Pub.Head, msg.Pub.Content); err != nil {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
 	}
 	if isCall {
-		//params["lease-expires"] = initiator.Expires
 		t.handleCallInvite(msg, asUid)
 	}
 }
@@ -1278,45 +1097,23 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 		replaceWith = "disconnected"
 	}
 	head := make(map[string]interface{})
-	head["mime"] = "application/tinode-video-call"
+	head["mime"] = constTinodeVideoCallMimeType
 	head["replace-seq"] = t.currentCall.seq
-			//if err := t.; err != nil {
 	if err := t.saveAndBroadcastMessage(msg, asUid, false, nil, nil, head, replaceWith); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 
 
 	for tgt, _ := range t.perUser {
-		t.callSubsOffline(from, tgt, "hang-up", t.currentCall.seq, nil, "", true)
+		t.callSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
 	}
-	/*
-	  for s, _ := range t.currentCall.parties {
-			if psd, found := t.sessions[s]; found {
-				//otherUid := t.p2pOtherUser(psd.uid)
-				orig := t.original(psd.uid)
-				s.queueOut(&ServerComMessage{
-					Tele: &MsgServerTele{
-						Topic: orig,
-						Src: orig,
-						What: "hang-up",
-						SeqId: t.currentCall.seq,
-					},
-					//RcptTo: otherUid.UserId(),
-					//SkipSid: msg.sess.sid,
-				})
-			}
-	  }
-	*/
 	resp := &ServerComMessage{
 		Info: &MsgServerInfo{
-			//Topic: orig,
-			//Src: orig,
 			What:  "call",
-			Event:  "hang-up",
+			Event: constCallEventHangUp,
 			SeqId: t.currentCall.seq,
 		},
 	}
-	//for
 	t.broadcastToSessions(resp)
 	t.currentCall = nil
 }
@@ -1339,127 +1136,48 @@ func (t *Topic) handleCallTimerEvent() {
 	if !drop {
 		return
 	}
-	//t.maybeEndCallInProgress("")
 }
 
-/*
-func (t *Topic) handleCallHangup(call *MsgClientCall, msg *ClientComMessage) {
-	if t.currentCall == nil {
-		logs.Err.Printf("hangup --> no call in progress: %s - seq: %d", t.name, call.SeqId)
+func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid,) {
+	logs.Info.Println("--> 1")
+	if t.currentCall != nil {
 		msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
 		return
 	}
 
-	t.callState = 0
-	if pssd, ok := t.sessions[msg.sess]; ok {
-		pssd.rtc = false
-		t.sessions[msg.sess] = pssd
+	logs.Info.Println("--> 2")
+	logs.Info.Println("--> 3")
+	initiator := types.CallParty{
+		ObjHeader:    types.ObjHeader{CreatedAt: msg.Timestamp},
+		User:         asUid.String(),
+		Sid:          msg.sess.sid,
+		IsOriginator: true,
+		Expires:      types.TimeNow().Add(time.Second * 15),
 	}
-  //msg.sess.
-	if err := store.Calls.Finish(t.currentCall.messageId); err != nil {
-		logs.Err.Printf("hangup error: %s", err)
+	parties := []types.CallParty{initiator}
+	callData := &types.CallData{
+		ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
+		SeqId:     t.lastID + 1,
+		Parties:   parties,
+		// Call initiated.
+		Status: 1,
 	}
-
-	msg.sess.queueOut(NoErrReply(msg, types.TimeNow()))
 
 	tgt := t.p2pOtherUser(msg.sess.uid)
-	t.callSubsOffline(msg.AsUser, tgt, call.What, call.SeqId, msg.Call.Payload, msg.sess.sid, true)
-
-	otherUid := t.p2pOtherUser(msg.sess.uid)
-  reply := &ServerComMessage{
-		Tele: &MsgServerTele{
-			Topic: t.original(otherUid),
-        //Src: t.original(target),
-			From: msg.AsUser,
-			What: call.What,//"ringing",
-			SeqId: call.SeqId,
-        //Payload:   sdp,
-        //SkipTopic: t.name,
-        //IceCandidate: msg.Call.IceCandidate,
-		},
-		RcptTo: otherUid.UserId(),
-		SkipSid: msg.sess.sid,
+	t.callSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
+	t.currentCall = &CallInProgress{
+		messageId: callData.MessageId,
+		parties:   make(map[*Session]CallPartyData),
+		seq:       t.lastID,
+		created:   callData.ObjHeader.CreatedAt,
+		updated:   callData.ObjHeader.UpdatedAt,
 	}
-    //initiator.queueOut(
-    //)
-	t.broadcastToSessions(reply)
-	t.currentCall = nil
-
-}
-*/
-func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid,) {
-		logs.Info.Println("--> 1")
-		if t.currentCall != nil {
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
-			return
-		}
-
-		logs.Info.Println("--> 2")
-		/*
-			if t.callState >= 1 {
-				msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
-				return
-			}
-		*/
-		logs.Info.Println("--> 3")
-		initiator := types.CallParty{
-			ObjHeader:    types.ObjHeader{CreatedAt: msg.Timestamp},
-			User:         asUid.String(),
-			Sid:          msg.sess.sid,
-			IsOriginator: true,
-			Expires:      types.TimeNow().Add(time.Second * 15),
-		}
-		parties := []types.CallParty{initiator}
-		callData := &types.CallData{
-			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
-			SeqId:     t.lastID + 1,
-			Parties:   parties,
-			// Call initiated.
-			Status: 1,
-		}
-		/*
-		callContent, err := store.Calls.Start(t.name, asUid, callData, (pud.modeGiven & pud.modeWant).IsReader())
-		if err != nil {
-			logs.Err.Printf("error inserting record: %s", err)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
-			return
-		}
-		logs.Info.Println("--> 4")
-		t.lastID++
-		t.touched = msg.Timestamp
-
-		if userFound {
-			pud.readID = t.lastID
-			t.perUser[asUid] = pud
-		}
-		*/
-
-		tgt := t.p2pOtherUser(msg.sess.uid)
-		t.callSubsOffline(msg.AsUser, tgt, "invite", t.lastID, nil, msg.sess.sid, false)
-		//t.callState = 1
-		//psd.rtc = true
-		//t.sessions[msg.sess] = psd
-		t.currentCall = &CallInProgress{
-			messageId: callData.MessageId,
-			parties:   make(map[*Session]CallPartyData),
-			seq:       t.lastID,
-			created:   callData.ObjHeader.CreatedAt,
-			updated:   callData.ObjHeader.UpdatedAt,
-		}
-		t.currentCall.parties[msg.sess] = CallPartyData{
-			partyId:      int(callData.Parties[0].ObjHeader.Uid()),
-			expires:      initiator.Expires,
-			isOriginator: true,
-		}
-		logs.Info.Println("--> current call party ", callData.Parties[0].ObjHeader.Uid())
-		/*
-		params := make(map[string]interface{})
-		params["sip-code"] = 100
-		params["lease-expires"] = initiator.Expires
-		t.broadcastMessage(msg, asUid, true, params, callContent.Head, callContent.Content)
-
-		t.callTimer.Reset(15 * time.Second)
-		*/
+	t.currentCall.parties[msg.sess] = CallPartyData{
+		partyId:      int(callData.Parties[0].ObjHeader.Uid()),
+		expires:      initiator.Expires,
+		isOriginator: true,
+	}
+	logs.Info.Println("--> current call party ", callData.Parties[0].ObjHeader.Uid())
 }
 
 func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
@@ -1469,9 +1187,6 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 	}
 
 	// TODO: Check if it's a p2p topic.
-
-	//asUid := types.ParseUserId(msg.AsUser)
-	//pud := t.perUser[asUid]
 	call := msg.Note
 	//if call.What == "invite" {
 	asUid := types.ParseUserId(msg.AsUser)
@@ -1498,12 +1213,6 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 
 		logs.Info.Println("--> 2")
-		/*
-			if t.callState >= 1 {
-				msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
-				return
-			}
-		*/
 		logs.Info.Println("--> 3")
 		initiator := types.CallParty{
 			ObjHeader:    types.ObjHeader{CreatedAt: msg.Timestamp},
@@ -1566,26 +1275,12 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		      return
 		    }
 		*/
-	} else if call.Event == "ringing" || call.Event == "accept" {
+	} else if call.Event == constCallEventRinging || call.Event == constCallEventAccept {
 		if t.currentCall == nil {
 			logs.Err.Printf("no call present: %s - seq: %d", t.name, call.SeqId)
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
 			return
 		}
-		/*
-		   var initiator *Session
-		   for s, pssd := range t.sessions {
-		     if pssd.rtc {
-		       initiator = s
-		       break
-		     }
-		   }
-		   if initiator == nil {
-		     logs.Err.Printf("could not find session for call: %s", t.name)
-		     //msg.sess.queueOut(ErrReply(msg, types.TimeNow()))
-		     return
-		   }
-		*/
 		logs.Info.Printf("\t+ forwarding %s from %s", call.Event, msg.sess.sid)
 		var initiator *Session
 		for sess, p := range t.currentCall.parties {
@@ -1619,7 +1314,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		//initiator.queueOut(reply)
 		//  )
 		//var params map[string]interface{}
-		if call.Event == "accept" {
+		if call.Event == constCallEventAccept {
 			//store.
 			expires := time.Now().Add(time.Second * 15)
 			party := &types.CallParty{
@@ -1641,7 +1336,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			//
 			replaceWith := "accepted"
 			head := make(map[string]interface{})
-			head["mime"] = "application/tinode-video-call"
+			head["mime"] = constTinodeVideoCallMimeType
 			head["replace-seq"] = call.SeqId
 			//if err := t.; err != nil {
 			if err := t.saveAndBroadcastMessage(msg, asUid, false, nil, nil, head, replaceWith); err != nil {
@@ -1671,20 +1366,13 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 
     logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
 		//msg.sess.queueOut(NoErrParamsReply(msg, types.TimeNow(), params))
-	} else if call.Event == "offer" || call.Event == "answer" || call.Event == "ice-candidate" {
+	} else if call.Event == constCallEventOffer || call.Event == constCallEventAnswer || call.Event == constCallEventIceCandidate {
 		//
 		if t.currentCall == nil {
 			logs.Err.Printf("no call in progress: %s - seq: %d", t.name, call.SeqId)
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
 			return
 		}
-		/*
-		   initiator := t.getCallOther(msg.sess)
-		   if initiator == nil {
-		     msg.sess.queueOut(ErrUserNotFoundReply(msg, types.TimeNow()))
-		     return
-		   }
-		*/
 		var otherEnd *Session
 		for sess, _ := range t.currentCall.parties {
 			if sess != msg.sess {
@@ -1706,7 +1394,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 					//Src: t.original(target),
 					From:    msg.AsUser,
 					What:    "call",
-					Event:   call.Event, //"ringing",
+					Event:   call.Event,
 					SeqId:   call.SeqId,
 					Payload: call.Payload,
 					//SkipTopic: t.name,
@@ -1715,40 +1403,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 				//RcptTo: target.UserId(),
 				//SkipSid: skipSid,
 			})
-	/*
-	} else if call.What == "extend-lease" {
-		if t.currentCall == nil || t.currentCall.seq != call.SeqId {
-			logs.Err.Printf("extend-lease --> no call in progress or wrong seq: %s - seq: %d", t.name, call.SeqId)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
-			return
-		}
-		if party, ok := t.currentCall.parties[msg.sess]; ok {
-			//
-			var expires time.Time
-			maxExpires := types.TimeNow().Add(time.Second * 15)
-			if call.LeaseExpires.Before(maxExpires) {
-				expires = *call.LeaseExpires
-			} else {
-				expires = maxExpires
-			}
-			//expires := call.LeaseExpires //
-			logs.Info.Printf("extend-lease --> store call: partyid %d, expires: %s", party.partyId, expires)
-			if err := store.Calls.ExtendLease(party.partyId, expires); err != nil {
-				logs.Err.Printf("extend-lease --> store call failed: partyid %d, expires: %s", party.partyId, expires)
-				return
-			}
-			party.expires = expires
-			t.currentCall.parties[msg.sess] = party
-			params := make(map[string]interface{})
-			params["lease-expires"] = expires
-			msg.sess.queueOut(NoErrParamsReply(msg, types.TimeNow(), params))
-		} else {
-			msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
-		}
-	*/
-	} else if call.Event == "hang-up" {
-		//t.handleCallHangup(call, msg)
-		//
+	} else if call.Event == constCallEventHangUp {
 		if t.currentCall == nil {
 			logs.Err.Printf("hangup --> no call in progress: %s - seq: %d", t.name, call.SeqId)
 			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
@@ -1756,60 +1411,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 
 		t.maybeEndCallInProgress(asUid, msg.AsUser, msg)
-		/*
-				t.callState = 0
-				if pssd, ok := t.sessions[msg.sess]; ok {
-					pssd.rtc = false
-					t.sessions[msg.sess] = pssd
-				}
-			  //msg.sess.
-				if err := store.Calls.Finish(t.currentCall.messageId); err != nil {
-					logs.Err.Printf("hangup error: %s", err)
-				}
-
-				msg.sess.queueOut(NoErrReply(msg, types.TimeNow()))
-
-				tgt := t.p2pOtherUser(msg.sess.uid)
-				t.callSubsOffline(msg.AsUser, tgt, call.What, call.SeqId, msg.Call.Payload, msg.sess.sid, true)
-
-				otherUid := t.p2pOtherUser(msg.sess.uid)
-			  reply := &ServerComMessage{
-					Tele: &MsgServerTele{
-						Topic: t.original(otherUid),
-			        //Src: t.original(target),
-						From: msg.AsUser,
-						What: call.What,//"ringing",
-						SeqId: call.SeqId,
-			        //Payload:   sdp,
-			        //SkipTopic: t.name,
-			        //IceCandidate: msg.Call.IceCandidate,
-					},
-					RcptTo: otherUid.UserId(),
-					SkipSid: msg.sess.sid,
-				}
-			    //initiator.queueOut(
-			    //)
-				t.broadcastToSessions(reply)
-				t.currentCall = nil
-		*/
 	}
-	/*
-		info := &ServerComMessage{
-			Info: &MsgServerInfo{
-				Topic: msg.Original,
-				From:  msg.AsUser,
-				What:  msg.Note.What,
-				SeqId: msg.Note.SeqId,
-			},
-			RcptTo:    msg.RcptTo,
-			AsUser:    msg.AsUser,
-			Timestamp: msg.Timestamp,
-			SkipSid:   msg.sess.sid,
-			sess:      msg.sess,
-		}
-
-		t.broadcastToSessions(info)
-	*/
 }
 
 // handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.

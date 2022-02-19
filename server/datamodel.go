@@ -77,37 +77,6 @@ type MsgCredClient struct {
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
-// RTC params.
-
-// Session description protocol string.
-type SDP string
-
-type RTCMessageType string
-
-var (
-	RTCMessageTypeNotifyClientID RTCMessageType = "notify-client-id"
-	RTCMessageTypeSDPOffer       RTCMessageType = "offer"
-	RTCMessageTypeSDPAnswer      RTCMessageType = "answer"
-	RTCMessageTypeICECandidate   RTCMessageType = "ice-candidate"
-	RTCMessageTypeNewClient      RTCMessageType = "new-client"
-	RTCMessageTypeLeaveClient    RTCMessageType = "leave-client"
-	RTCMessageTypeError          RTCMessageType = "error"
-)
-
-/*
-type RTCMessage struct {
-  //What    string `json:""`
-	Type    RTCMessageType `json:"type,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-*/
-
-type EphemeralMessage struct {
-	Type    string          `json:"type,omitempty"`
-	What    string          `json:"what,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
 // MsgSetQuery is an update to topic or user metadata: description, subscriptions, tags, credentials.
 type MsgSetQuery struct {
 	// Topic/user description, new object & new subscriptions only
@@ -118,8 +87,6 @@ type MsgSetQuery struct {
 	Tags []string `json:"tags,omitempty"`
 	// Update to account credentials.
 	Cred *MsgCredClient `json:"cred,omitempty"`
-	// Ephemeral params.
-	Ephemeral *EphemeralMessage `json:"ephemeral,omitempty"`
 }
 
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
@@ -218,7 +185,6 @@ const (
 	constMsgMetaTags
 	constMsgMetaDel
 	constMsgMetaCred
-	constMsgMetaEphemeral
 )
 
 const (
@@ -246,8 +212,6 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaDel
 		case "cred":
 			bits |= constMsgMetaCred
-		case "ephemeral":
-			bits |= constMsgMetaEphemeral
 		default:
 			// ignore unknown
 		}
@@ -329,6 +293,19 @@ type MsgClientDel struct {
 	// Request to hard-delete objects (i.e. delete messages for all users), if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
+
+// Call constants.
+const (
+	constCallEventInvite = "invite"
+	constCallEventRinging = "ringing"
+	constCallEventAccept = "accept"
+	constCallEventOffer  = "offer"
+	constCallEventAnswer = "answer"
+	constCallEventIceCandidate = "ice-candidate"
+	constCallEventHangUp = "hang-up"
+
+  constTinodeVideoCallMimeType = "application/tinode-video-call"
+)
 
 // MsgClientNote is a client-generated notification for topic subscribers {note}.
 type MsgClientNote struct {
@@ -753,8 +730,6 @@ type MsgServerMeta struct {
 	Tags []string `json:"tags,omitempty"`
 	// Account credentials, 'me' only.
 	Cred []*MsgCredServer `json:"cred,omitempty"`
-	// Ephemeral params.
-	Ephemeral *EphemeralMessage `json:"ephemeral,omitempty"`
 }
 
 // Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.
