@@ -282,6 +282,7 @@ func (h *Hub) run() {
 					logs.Err.Println("hub.topicUnreg failed:", err)
 				}
 			} else {
+				// User is being deleted.
 				go h.stopTopicsForUser(unreg.forUser, reason, unreg.done)
 			}
 
@@ -384,7 +385,7 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 // 2.1 Unregister it with no further action
 //
 func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, reason int) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	if reason == StopDeleted {
 		asUid := types.ParseUserId(msg.AsUser)

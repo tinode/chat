@@ -86,7 +86,7 @@ type Topic struct {
 	clientMsg chan *ClientComMessage
 	// Channel for receiving server messages generated on the server or received from other cluster nodes, buffered = 64.
 	serverMsg chan *ServerComMessage
-	// Channel for receiving {get}/{set} requests, buffered = 64
+	// Channel for receiving {get}/{set}/{del} requests, buffered = 64
 	meta chan *ClientComMessage
 	// Subscribe requests from sessions, buffered = 256
 	reg chan *ClientComMessage
@@ -1223,8 +1223,9 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 
 	// Drop "bad" sessions.
 	for _, sess := range dropSessions {
-		// The whole session is being dropped, so ClientComMessage.init is not set.
-		t.unregisterSession(&ClientComMessage{sess: sess})
+		// The whole session is being dropped, so ClientComMessage.init is false.
+		// keep redundant init: false so it can be searched for.
+		t.unregisterSession(&ClientComMessage{sess: sess, init: false})
 	}
 }
 
