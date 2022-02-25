@@ -1069,10 +1069,10 @@ The `{note.recv}` and `{note.read}` do alter persistent state on the server. The
 note: {
   topic: "grp1XUtEhjv6HND", // string, topic to notify, required
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
-              // "rcpt" (received notification), "data" (form response or other structured data);
+              // "recv" (received notification), "data" (form response or other structured data);
               // any other string will cause the message to be silently ignored, required.
   seq: 123,   // integer, ID of the message being acknowledged, required for
-              // 'rcpt' & 'read'.
+              // 'recv' & 'read'.
   unread: 10, // integer, client-reported total count of unread messages, optional.
   data: {     // object, required payload for 'data'.
     ...
@@ -1291,7 +1291,7 @@ info: {
   what: "read", // string, one of "kp", "recv", "read", "data", see client-side {note},
                 // always present
   seq: 123, // integer, ID of the message that client has acknowledged,
-            // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for rcpt &
+            // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for recv &
             // read
 }
 ```
