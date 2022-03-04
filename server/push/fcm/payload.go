@@ -174,6 +174,9 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	} else if pl.What == push.ActSub {
 		data["modeWant"] = pl.ModeWant.String()
 		data["modeGiven"] = pl.ModeGiven.String()
+	} else if pl.What == push.ActRead {
+		data["seq"] = strconv.Itoa(pl.SeqId)
+		data["silent"] = "true"
 	} else {
 		return nil, errors.New("unknown push type")
 	}
@@ -226,46 +229,63 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		return nil
 	}
 
-	var titlelc, title, bodylc, body, icon, color, clickAction string
-	if config != nil && config.Enabled {
-		titlelc = config.getTitleLocKey(rcpt.Payload.What)
-		title = config.getTitle(rcpt.Payload.What)
-		bodylc = config.getBodyLocKey(rcpt.Payload.What)
-		body = config.getBody(rcpt.Payload.What)
-		if body == "$content" {
-			body = data["content"]
+	var title, body, priority string
+	var androidNotification func(msg *fcm.Message, priority string)
+	if rcpt.Payload.What == push.ActRead {
+		priority = "normal"
+		androidNotification = func(msg *fcm.Message, priority string) {
+			msg.Android = &fcm.AndroidConfig{
+				Priority:     priority,
+				Notification: nil,
+			}
 		}
-		icon = config.getIcon(rcpt.Payload.What)
-		color = config.getColor(rcpt.Payload.What)
-		clickAction = config.getClickAction(rcpt.Payload.What)
-	}
-
-	androidNotification := func(msg *fcm.Message) {
-		// When this notification type is included and the app is not in the foreground
-		// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
-		// See dicussion: https://github.com/firebase/quickstart-js/issues/71
+	} else {
+		priority = "high"
+		var titlelc, bodylc, icon, color, clickAction string
 		if config != nil && config.Enabled {
-			msg.Android.Notification = &fcm.AndroidNotification{
-				// Android uses Tag value to group notifications together:
-				// show just one notification per topic.
-				Tag:         rcpt.Payload.Topic,
-				Priority:    fcm.PriorityHigh,
-				Visibility:  fcm.VisibilityPrivate,
-				TitleLocKey: titlelc,
-				Title:       title,
-				BodyLocKey:  bodylc,
-				Body:        body,
-				Icon:        icon,
-				Color:       color,
-				ClickAction: clickAction,
+			titlelc = config.getTitleLocKey(rcpt.Payload.What)
+			title = config.getTitle(rcpt.Payload.What)
+			bodylc = config.getBodyLocKey(rcpt.Payload.What)
+			body = config.getBody(rcpt.Payload.What)
+			if body == "$content" {
+				body = data["content"]
+			}
+			icon = config.getIcon(rcpt.Payload.What)
+			color = config.getColor(rcpt.Payload.What)
+			clickAction = config.getClickAction(rcpt.Payload.What)
+		}
+
+		androidNotification = func(msg *fcm.Message, priority string) {
+			msg.Android = &fcm.AndroidConfig{
+				Priority: priority,
+			}
+			// When this notification type is included and the app is not in the foreground
+			// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
+			// See dicussion: https://github.com/firebase/quickstart-js/issues/71
+			if config != nil && config.Enabled {
+				msg.Android.Notification = &fcm.AndroidNotification{
+					// Android uses Tag value to group notifications together:
+					// show just one notification per topic.
+					Tag:         rcpt.Payload.Topic,
+					Priority:    fcm.PriorityHigh,
+					Visibility:  fcm.VisibilityPrivate,
+					TitleLocKey: titlelc,
+					Title:       title,
+					BodyLocKey:  bodylc,
+					Body:        body,
+					Icon:        icon,
+					Color:       color,
+					ClickAction: clickAction,
+				}
 			}
 		}
 	}
 
 	// TODO(aforge): introduce iOS push configuration (similar to Android).
+	// FIXME(gene): need to configure silent "read" push.
 	titleIOS := "New message"
 	bodyIOS := data["content"]
-	apnsNotification := func(msg *fcm.Message) {
+	apnsNotification := func(msg *fcm.Message, unread int) {
 		msg.APNS = &fcm.APNSConfig{
 			Payload: &fcm.APNSPayload{
 				Aps: &fcm.Aps{
@@ -280,6 +300,10 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 					},
 				},
 			},
+		}
+		if unread >= 0 {
+			// iOS uses Badge to show the total unread message count.
+			msg.APNS.Payload.Aps.Badge = &unread
 		}
 	}
 
@@ -305,22 +329,19 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 				msg := fcm.Message{
 					Token: d.DeviceId,
 					Data:  userData,
-					Notification: &fcm.Notification{
+				}
+
+				if title != "" || body != "" {
+					msg.Notification = &fcm.Notification{
 						Title: title,
 						Body:  body,
-					},
+					}
 				}
 
 				if d.Platform == "android" {
-					msg.Android = &fcm.AndroidConfig{
-						Priority: "high",
-					}
-					androidNotification(&msg)
+					androidNotification(&msg, priority)
 				} else if d.Platform == "ios" {
-					apnsNotification(&msg)
-					// iOS uses Badge to show the total unread message count.
-					badge := rcpt.To[uid].Unread
-					msg.APNS.Payload.Aps.Badge = &badge
+					apnsNotification(&msg, rcpt.To[uid].Unread)
 				}
 				messages = append(messages, MessageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
 			}
@@ -342,11 +363,9 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 			},
 		}
 
-		msg.Android = &fcm.AndroidConfig{
-			Priority: "normal",
-		}
-		androidNotification(&msg)
-		apnsNotification(&msg)
+		// We don't know the platform of the receiver, must provide payload for all platforms.
+		androidNotification(&msg, "normal")
+		apnsNotification(&msg, -1)
 		messages = append(messages, MessageData{Message: &msg})
 	}
 
