@@ -478,6 +478,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	if msg.CliMsg != nil {
 		msg.CliMsg.sess = sess
+		msg.CliMsg.init = true
 	}
 
 	switch msg.ReqType {
@@ -1153,7 +1154,6 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				return
 			}
 		case msg := <-sess.stop:
-			logs.Info.Println("cluster: stop msg received - multi sid", sess.sid)
 			if msg == nil {
 				// Terminating multiplexing session.
 				return
@@ -1164,7 +1164,6 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			// In both cases the msg does not need to be forwarded to the proxy.
 
 		case <-sess.detach:
-			logs.Info.Println("cluster: detach msg received", sess.sid)
 			return
 		default:
 			terminate = false

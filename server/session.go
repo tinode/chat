@@ -227,8 +227,9 @@ func (s *Session) unsubAll() {
 
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
-		// The whole session is being dropped.
-		sub.done <- &ClientComMessage{sess: s}
+		// The whole session is being dropped; ClientComMessage is a wrapper for session, ClientComMessage.init is false.
+		// keep redundant init: false so it can be searched for.
+		sub.done <- &ClientComMessage{sess: s, init: false}
 	}
 }
 

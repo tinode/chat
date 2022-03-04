@@ -14,7 +14,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/tinode/chat",
     packages=setuptools.find_packages(),
-    install_requires=['grpcio>=1.15.0'],
+    install_requires=['grpcio>=1.40.0'],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache 2.0",

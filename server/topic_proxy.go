@@ -263,14 +263,16 @@ func (t *Topic) proxyCtrlBroadcast(msg *ServerComMessage) {
 // updateAcsFromPresMsg modifies user acs in Topic's perUser struct based on the data in `pres`.
 func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 	uid := types.ParseUserId(pres.Src)
-	dacs := pres.Acs
 	if uid.IsZero() {
-		logs.Warn.Printf("proxy topic[%s]: received acs change for invalid user id '%s'", t.name, pres.Src)
+		if t.cat != types.TopicCatMe {
+			logs.Warn.Printf("proxy topic[%s]: received acs change for invalid user id '%s'", t.name, pres.Src)
+		}
 		return
 	}
 
 	// If t.perUser[uid] does not exist, pud is initialized with blanks, otherwise it gets existing values.
 	pud := t.perUser[uid]
+	dacs := pres.Acs
 	if err := pud.modeWant.ApplyMutation(dacs.Want); err != nil {
 		logs.Warn.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
 		return

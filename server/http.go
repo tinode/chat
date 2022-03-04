@@ -383,7 +383,6 @@ type debugTopic struct {
 	Topic    string   `json:"topic,omitempty"`
 	Xorig    string   `json:"xorig,omitempty"`
 	IsProxy  bool     `json:"is_proxy,omitempty"`
-	Cat      int      `json:"cat,omitempty"`
 	PerUser  []string `json:"per_user,omitempty"`
 	PerSubs  []string `json:"per_subs,omitempty"`
 	Sessions []string `json:"sessions,omitempty"`
@@ -448,7 +447,6 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 			Topic:    topic.name,
 			Xorig:    topic.xoriginal,
 			IsProxy:  topic.isProxy,
-			Cat:      int(topic.cat),
 			PerUser:  pud,
 			PerSubs:  ps,
 			Sessions: psd,
