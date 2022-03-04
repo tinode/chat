@@ -150,3 +150,48 @@ func (t *Topic) pushForReadRcpt(uid types.Uid, seq int, now time.Time) *push.Rec
 	receipt.To[uid] = push.Recipient{}
 	return receipt
 }
+
+// Process push notification.
+func sendPush(rcpt *push.Receipt) {
+	if rcpt == nil || globals.usersUpdate == nil {
+		return
+	}
+
+	var local *UserCacheReq
+
+	// In case of a cluster pushes will be initiated at the nodes which own the users.
+	// Sort users into local and remote.
+	if globals.cluster != nil {
+		local = &UserCacheReq{PushRcpt: &push.Receipt{
+			Payload: rcpt.Payload,
+			Channel: rcpt.Channel,
+			To:      make(map[types.Uid]push.Recipient),
+		}}
+		remote := &UserCacheReq{PushRcpt: &push.Receipt{
+			Payload: rcpt.Payload,
+			Channel: rcpt.Channel,
+			To:      make(map[types.Uid]push.Recipient),
+		}}
+
+		for uid, recipient := range rcpt.To {
+			if globals.cluster.isRemoteTopic(uid.UserId()) {
+				remote.PushRcpt.To[uid] = recipient
+			} else {
+				local.PushRcpt.To[uid] = recipient
+			}
+		}
+
+		if len(remote.PushRcpt.To) > 0 || remote.PushRcpt.Channel != "" {
+			globals.cluster.routeUserReq(remote)
+		}
+	} else {
+		local = &UserCacheReq{PushRcpt: rcpt}
+	}
+
+	if len(local.PushRcpt.To) > 0 || local.PushRcpt.Channel != "" {
+		select {
+		case globals.usersUpdate <- local:
+		default:
+		}
+	}
+}

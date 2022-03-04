@@ -799,7 +799,7 @@ func (t *Topic) sessToForeground(sess *Session) {
 // Send push notification to the P2P counterpart.
 // In case of a new channel subscription subscribe user to an FCM topic.
 // These notifications are always sent immediately even if background is requested.
-func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *ClientComMessage) {
+func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *ClientComMessage, now time.Time) {
 	modeWant, _ := types.ParseAcs([]byte(acs.Want))
 	modeGiven, _ := types.ParseAcs([]byte(acs.Given))
 	mode := modeWant & modeGiven
@@ -837,16 +837,12 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			t.presSingleUserOffline(uid2, mode2, status, nilPresParams, "", false)
 
 			// Also send a push notification to the other user.
-			if pushRcpt := t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
-				usersPush(pushRcpt)
-			}
+			sendPush(t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, now))
 		}
 	} else if t.cat == types.TopicCatGrp {
 		if sreg.Sub.Newsub {
 			// For new subscriptions, notify other group members.
-			if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
-				usersPush(pushRcpt)
-			}
+			sendPush(t.pushForGroupSub(asUid, now))
 		}
 	}
 
@@ -996,9 +992,8 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 
 	t.broadcastToSessions(data)
 
-	// usersPush will update unread message count and send push notification.
-	pushRcpt := t.pushForData(asUid, data.Data)
-	usersPush(pushRcpt)
+	// sendPush will update unread message count and send push notification.
+	sendPush(t.pushForData(asUid, data.Data))
 }
 
 // handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.
@@ -1090,7 +1085,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 		if read > 0 {
 			// Send push notification to other user devices.
-			t.pushForReadRcpt(asUid, read, msg.Timestamp)
+			sendPush(t.pushForReadRcpt(asUid, read, msg.Timestamp))
 		}
 
 		// Update cached count of unread messages (not tracking unread messages fror channels).
@@ -1318,7 +1313,7 @@ func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 
 	// Some notifications are always sent immediately.
 	if modeChanged != nil {
-		t.sendImmediateSubNotifications(asUid, modeChanged, msg)
+		t.sendImmediateSubNotifications(asUid, modeChanged, msg, now)
 	}
 
 	if !msg.sess.background && hasJoined {
@@ -1852,10 +1847,8 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		usersRegisterUser(target, true)
 
 		// Send push notification for the new subscription.
-		if pushRcpt := t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
-			// TODO: maybe skip user's devices which were online when this event has happened.
-			usersPush(pushRcpt)
-		}
+		// TODO: maybe skip user's devices which were online when this event has happened.
+		sendPush(t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now))
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
 		oldGiven = userData.modeGiven
