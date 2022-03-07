@@ -23,6 +23,7 @@ import (
 
 type CallPartyData struct {
 	partyId      int
+	uid          types.Uid
 	expires      time.Time
 	isOriginator bool
 }
@@ -1090,6 +1091,7 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	if err := store.Calls.Finish(t.currentCall.messageId); err != nil {
 		logs.Err.Printf("topic[%s], call id %d: cleanup failed %s", t.name, t.currentCall.seq, err)
 	}
+	originator := t.getCallOriginator()
 	var replaceWith string
 	if len(from) > 0 && len(t.currentCall.parties) == 2 {
 		replaceWith = "finished"
@@ -1099,7 +1101,9 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	head := make(map[string]interface{})
 	head["mime"] = constTinodeVideoCallMimeType
 	head["replace-seq"] = t.currentCall.seq
-	if err := t.saveAndBroadcastMessage(msg, asUid, false, nil, nil, head, replaceWith); err != nil {
+	msgCopy := *msg
+	msgCopy.AsUser = originator.UserId()
+	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, nil, head, replaceWith); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 
@@ -1138,7 +1142,19 @@ func (t *Topic) handleCallTimerEvent() {
 	}
 }
 
-func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid,) {
+func (t *Topic) getCallOriginator() types.Uid {
+	if t.currentCall == nil {
+		return types.ZeroUid
+	}
+	for _, p := range t.currentCall.parties {
+		if p.isOriginator {
+			return p.uid
+		}
+	}
+	return types.ZeroUid
+}
+
+func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	logs.Info.Println("--> 1")
 	if t.currentCall != nil {
 		msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
@@ -1174,6 +1190,7 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid,) {
 	}
 	t.currentCall.parties[msg.sess] = CallPartyData{
 		partyId:      int(callData.Parties[0].ObjHeader.Uid()),
+		uid:          asUid,
 		expires:      initiator.Expires,
 		isOriginator: true,
 	}
@@ -1258,6 +1275,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 		t.currentCall.parties[msg.sess] = CallPartyData{
 			partyId:      int(callData.Parties[0].ObjHeader.Uid()),
+			uid:          asUid,
 			expires:      initiator.Expires,
 			isOriginator: true,
 		}
@@ -1338,13 +1356,18 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			head := make(map[string]interface{})
 			head["mime"] = constTinodeVideoCallMimeType
 			head["replace-seq"] = call.SeqId
+
+			originator := t.getCallOriginator()
+			msgCopy := *msg
+			msgCopy.AsUser = originator.UserId()
 			//if err := t.; err != nil {
-			if err := t.saveAndBroadcastMessage(msg, asUid, false, nil, nil, head, replaceWith); err != nil {
+			if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, nil, head, replaceWith); err != nil {
 				return
 			}
 
 			t.currentCall.parties[msg.sess] = CallPartyData{
 				partyId:      int(party.ObjHeader.Uid()),
+				uid:          asUid,
 				expires:      expires,
 				isOriginator: false,
 			}
