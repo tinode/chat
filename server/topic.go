@@ -1091,7 +1091,7 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	if err := store.Calls.Finish(t.currentCall.messageId); err != nil {
 		logs.Err.Printf("topic[%s], call id %d: cleanup failed %s", t.name, t.currentCall.seq, err)
 	}
-	originator := t.getCallOriginator()
+	originator, _ := t.getCallOriginator()
 	var replaceWith string
 	if len(from) > 0 && len(t.currentCall.parties) == 2 {
 		replaceWith = "finished"
@@ -1103,6 +1103,8 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	head["replace-seq"] = t.currentCall.seq
 	msgCopy := *msg
 	msgCopy.AsUser = originator.UserId()
+
+	// "data" message.
 	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, nil, head, replaceWith); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
@@ -1111,6 +1113,7 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	for tgt, _ := range t.perUser {
 		t.callSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
 	}
+	// Info "call" hangup event.
 	resp := &ServerComMessage{
 		Info: &MsgServerInfo{
 			What:  "call",
@@ -1127,31 +1130,32 @@ func (t *Topic) handleCallTimerEvent() {
 		t.callTimer.Stop()
 		return
 	}
-	drop := false
-	now := time.Now()
-	for s, party := range t.currentCall.parties {
-		if now.After(party.expires) {
-			// Drop the call.
-			drop = true
-			logs.Err.Println("dropping call b/c session %s's lease has expired", s.sid)
-			break
-		}
-	}
-	if !drop {
+	uid, sess := t.getCallOriginator()
+	if sess == nil || uid.IsZero() {
+		t.callTimer.Stop()
 		return
 	}
+	dummy := &ClientComMessage{
+		Original: t.original(uid),
+		RcptTo: uid.UserId(),
+		AsUser: uid.UserId(),
+		Timestamp: types.TimeNow(),
+		sess: sess,
+	}
+
+	t.maybeEndCallInProgress(types.ZeroUid, "", dummy)
 }
 
-func (t *Topic) getCallOriginator() types.Uid {
+func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 	if t.currentCall == nil {
-		return types.ZeroUid
+		return types.ZeroUid, nil
 	}
-	for _, p := range t.currentCall.parties {
+	for sess, p := range t.currentCall.parties {
 		if p.isOriginator {
-			return p.uid
+			return p.uid, sess
 		}
 	}
-	return types.ZeroUid
+	return types.ZeroUid, nil
 }
 
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
@@ -1194,6 +1198,7 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		expires:      initiator.Expires,
 		isOriginator: true,
 	}
+	t.callTimer.Reset(15 * time.Second)
 	logs.Info.Println("--> current call party ", callData.Parties[0].ObjHeader.Uid())
 }
 
@@ -1357,7 +1362,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			head["mime"] = constTinodeVideoCallMimeType
 			head["replace-seq"] = call.SeqId
 
-			originator := t.getCallOriginator()
+			originator, _ := t.getCallOriginator()
 			msgCopy := *msg
 			msgCopy.AsUser = originator.UserId()
 			//if err := t.; err != nil {
@@ -1386,6 +1391,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			t.callSubsOffline(msg.AsUser, msg.sess.uid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
 		}
 		initiator.queueOut(forwardMsg)
+		t.callTimer.Stop()
 
     logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
 		//msg.sess.queueOut(NoErrParamsReply(msg, types.TimeNow(), params))
