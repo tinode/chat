@@ -140,7 +140,14 @@ All client software has support for [internationalization](docs/translations.md)
 
 More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali, Turkish.
 
-## Third-Party Licenses
+## Third-Party
+
+### Projects
+
+* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango)
+* [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) (outdated)
+
+### Licenses
 
 * Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/) and https://pixabay.com/ under their [license](https://pixabay.com/service/license/).
 * Web and Android background patterns are from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.
