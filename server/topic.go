@@ -142,7 +142,7 @@ type Topic struct {
 	// Countdown timer for destroying the topic when there are no more attached sessions to it.
 	killTimer *time.Timer
 
-	callTimer *time.Ticker
+	callTimer *time.Timer
 }
 
 // perUserData holds topic's cache of per-subscriber data
@@ -308,6 +308,11 @@ func (t *Topic) computePerUserAcsUnion() {
 // unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
+	if t.currentCall != nil {
+		if _, found := t.currentCall.parties[msg.sess]; found {
+			t.terminateCallInProgress()
+		}
+	}
 	t.handleLeaveRequest(msg, msg.sess)
 	if msg.init && msg.sess.inflightReqs != nil {
 		// If it's a client initiated request.
@@ -537,7 +542,7 @@ func (t *Topic) runLocal(hub *Hub) {
 	// Ticker for deferred presence notifications.
 	defrNotifTimer := time.NewTimer(time.Millisecond * 500)
 
-	t.callTimer = time.NewTicker(15 * time.Second)
+	t.callTimer = time.NewTimer(time.Second)
 	t.callTimer.Stop()
 
 	for {
@@ -560,14 +565,14 @@ func (t *Topic) runLocal(hub *Hub) {
 		case upd := <-t.supd:
 			t.handleSessionUpdate(upd, &currentUA, uaTimer)
 
-		case <-t.callTimer.C:
-			t.handleCallTimerEvent()
-
 		case <-uaTimer.C:
 			t.handleUATimerEvent(currentUA)
 
 		case <-t.killTimer.C:
 			t.handleTopicTimeout(hub, currentUA, uaTimer, defrNotifTimer)
+
+		case <-t.callTimer.C:
+			t.terminateCallInProgress()
 
 		case sd := <-t.exit:
 			t.handleTopicTermination(sd)
@@ -1125,16 +1130,16 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	t.currentCall = nil
 }
 
-func (t *Topic) handleCallTimerEvent() {
+func (t *Topic) terminateCallInProgress() {
+	logs.Info.Println("call timer event")
 	if t.currentCall == nil {
-		t.callTimer.Stop()
 		return
 	}
 	uid, sess := t.getCallOriginator()
 	if sess == nil || uid.IsZero() {
-		t.callTimer.Stop()
 		return
 	}
+	logs.Info.Printf("call timer event %s %s", uid.UserId(), sess.sid)
 	dummy := &ClientComMessage{
 		Original: t.original(uid),
 		RcptTo: uid.UserId(),
@@ -1199,7 +1204,6 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		isOriginator: true,
 	}
 	t.callTimer.Reset(15 * time.Second)
-	logs.Info.Println("--> current call party ", callData.Parties[0].ObjHeader.Uid())
 }
 
 func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
