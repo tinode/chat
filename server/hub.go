@@ -593,6 +593,13 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 				Anon: stopic.Access.Anon.String(),
 			}
 		}
+		// Report appropriate access level. Could be overriden below if subscription exists.
+		desc.Acs = &MsgAccessMode{}
+		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
+			desc.Acs.Mode = stopic.Access.Auth.String()
+		} else if sess.authLvl == auth.LevelAnon {
+			desc.Acs.Mode = stopic.Access.Anon.String()
+		}
 	} else {
 		// 'me' and p2p topics
 		uid := types.ZeroUid
@@ -631,6 +638,14 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.Trusted = suser.Trusted
 		if sess.authLvl == auth.LevelRoot {
 			desc.State = suser.State.String()
+		}
+
+		// Report appropriate access level. Could be overriden below if subscription exists.
+		desc.Acs = &MsgAccessMode{}
+		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
+			desc.Acs.Mode = suser.Access.Auth.String()
+		} else if sess.authLvl == auth.LevelAnon {
+			desc.Acs.Mode = suser.Access.Anon.String()
 		}
 	}
 
