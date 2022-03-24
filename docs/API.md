@@ -747,7 +747,7 @@ Joining (attaching to) a topic means for the session to start consuming content 
 
 Server replies to the `{sub}` with a `{ctrl}`.
 
-The `{sub}` message may include a `get` and `set` fields which mirror `{get}` and `{set}` messages. If included, server will treat them as a subsequent `{set}` and `{get}` messages on the same topic. They `get` is set the reply may include `{meta}` and `{data}` messages.
+The `{sub}` message may include a `get` and `set` fields which mirror `{get}` and `{set}` messages. If included, server will treat them as a subsequent `{set}` and `{get}` messages on the same topic. If the `get` is set, the reply may include `{meta}` and `{data}` messages.
 
 
 ```js
