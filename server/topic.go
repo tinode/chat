@@ -1217,7 +1217,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 	//if call.What == "invite" {
 	asUid := types.ParseUserId(msg.AsUser)
 
-	pud, userFound := t.perUser[asUid]
+	_, userFound := t.perUser[asUid]
 	logs.Info.Printf("found user for %s: %s - %t", msg.AsUser, asUid.UserId(), userFound)
 	if !userFound {
 		logs.Err.Printf("User %s not found in topic %s", msg.AsUser, t.name)
@@ -1295,9 +1295,9 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 
 			// Notify other clients that the call has been accepted.
 			t.callSubsOffline(msg.AsUser, msg.sess.uid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
+			t.callTimer.Stop()
 		}
 		initiator.queueOut(forwardMsg)
-		t.callTimer.Stop()
 
     logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
 	} else if call.Event == constCallEventOffer || call.Event == constCallEventAnswer || call.Event == constCallEventIceCandidate {
