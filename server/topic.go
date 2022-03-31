@@ -659,14 +659,19 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 			sess.queueOut(ErrLockedReply(msg, now))
 		}
 		return
-	} else if msg.init && msg.Leave.Unsub {
-		// User wants to leave and unsubscribe.
+	}
+
+	// User wants to leave and unsubscribe.
+	if msg.init && msg.Leave.Unsub {
 		// asUid must not be Zero.
 		if err := t.replyLeaveUnsub(sess, msg, asUid); err != nil {
 			logs.Err.Println("failed to unsub", err, sess.sid)
-			return
 		}
-	} else if pssd, _ := t.remSession(sess, asUid); pssd != nil {
+		return
+	}
+
+	// User wants to leave without unsubscribing.
+	if pssd, _ := t.remSession(sess, asUid); pssd != nil {
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
 			if msg.init {
@@ -3129,8 +3134,6 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	var oldWant types.AccessMode
 	var oldGiven types.AccessMode
 	if !asChan {
-		pud := t.perUser[asUid]
-
 		// Update cached unread count: negative value
 		if (pud.modeWant & pud.modeGiven).IsReader() {
 			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
@@ -3147,6 +3150,11 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
+
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markDeleted()
+	}
 
 	return nil
 }
