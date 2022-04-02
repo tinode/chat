@@ -466,6 +466,16 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	now := types.TimeNow()
 	atomic.StoreInt64(&s.lastAction, now.UnixNano())
 
+	var resp *ServerComMessage
+	if msg, resp = pluginFireHose(s, msg); resp != nil {
+		// Plugin provided a response. No further processing is needed.
+		s.queueOut(resp)
+		return
+	} else if msg == nil {
+		// Plugin requested to silently drop the request.
+		return
+	}
+
 	if msg.Extra == nil || msg.Extra.AsUser == "" {
 		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
@@ -491,16 +501,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		} else {
 			msg.AuthLvl = int(authLvl)
 		}
-	}
-
-	var resp *ServerComMessage
-	if msg, resp = pluginFireHose(s, msg); resp != nil {
-		// Plugin provided a response. No further processing is needed.
-		s.queueOut(resp)
-		return
-	} else if msg == nil {
-		// Plugin requested to silently drop the request.
-		return
 	}
 
 	msg.Timestamp = now
