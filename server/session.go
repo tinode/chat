@@ -466,6 +466,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	now := types.TimeNow()
 	atomic.StoreInt64(&s.lastAction, now.UnixNano())
 
+	// This should be the first block here, before any other checks.
 	var resp *ServerComMessage
 	if msg, resp = pluginFireHose(s, msg); resp != nil {
 		// Plugin provided a response. No further processing is needed.
