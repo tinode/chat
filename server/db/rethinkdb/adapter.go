@@ -728,7 +728,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uid.String()).
 		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
