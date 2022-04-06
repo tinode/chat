@@ -91,4 +91,4 @@ The test database has a stock user `xena` which has root access.
 
 
 ### Q: What is the proper way to format gRPC {pub content}?<br/>
-**A**: The gPRC sends `content` field of a `{pub}` message as a byte array while the client applications expect it to be valid JSON. Consequently, you have to format the field to be valid JSON before passing it to gRPC. For example, to send a plain text `Hello world` message you have to send a string `"Hello world"`. In most cases the string you pass to the gRPC call would look like `"\"Hello world\""` or `'"Hello world"'`.
+**A**: The gPRC sends `content` field of a `{pub}` message as a byte array while the client applications expect it to be valid JSON. Consequently, you have to format the field to be valid JSON before passing it to gRPC. For example, to send a plain text `Hello world` message you have to send a quoted string `"Hello world"`. In most cases the string you pass to the gRPC call would look like `"\"Hello world\""` or `'"Hello world"'`.
