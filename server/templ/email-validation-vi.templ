@@ -1,0 +1,62 @@
+{{/*
+  ENGLISH
+
+  This template defines content of the email sent to users as a request to confirm registration email address.
+  See https://golang.org/pkg/text/template/ for syntax.
+
+  The template must contain the following parts parts:
+   - 'subject': Subject line of an email message
+   - One or both of the following:
+     - 'body_html': HTML content of the message. A header "Content-type: text/html" will be added.
+     - 'body_plain': plain text content of the message. A header "Content-type: text/plain" will be added.
+
+   If both body_html and body_plain are included, both are sent as parts of 'multipart/alternative' message.
+*/}}
+
+{{define "subject" -}}
+Xác thực đăng ký tài khoản Tinode
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>Xin chào.</p>
+
+<p>Bạn nhận được tin nhắn này bởi vì có ai đó đã dùng email này để đăng ký tài khoản tại
+<a href="{{.HostUrl}}">Tinode</a>.</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">Bấm</a> để xác nhận
+hoặc đi tới liên kết
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+và nhập mã xác thực:</p>
+<blockquote>{{.Code}}</blockquote>
+<p>Có thể bạn cần nhập tên đăng nhập và mật khẩu.</p>
+
+<p>Nếu bạn không đăng ký tài khoản tại Tinode vui lòng bỏ qua tin nhắn này.</p>
+
+<p><a href="https://tinode.co/">Tinode Team</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+Xin chào.
+
+Bạn nhận được tin nhắn này bởi vì có ai đó đã dùng email này để đăng ký tài khoản tại Tinode ({{.HostUrl}}).
+
+Bấm vào liên kết {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} để xác nhận hoặc đi tới {{.HostUrl}}#cred?what=email
+và nhập mã xác thực
+
+	{{.Code}}
+
+Có thể bạn sẽ cần nhập tên đăng nhập và mật khẩu.
+
+Nếu bạn không đăng ký tài khoản tại Tinode vui lòng bỏ qua tin nhắn này.
+
+Tinode Team
+https://tinode.co/
+
+{{- end}}

@@ -1819,7 +1819,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	return subs, cur.Err()
 }
 
-// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
+// SubsUpdate updates part of a subscription object. Pass nil for fields which don't need to be updated
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
 	// to get round the hardcoded pass of "Private" key
 	update = normalizeUpdateMap(update)

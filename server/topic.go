@@ -697,15 +697,19 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 			sess.queueOut(ErrLockedReply(msg, now))
 		}
 		return
-	} else if msg.init && msg.Leave.Unsub {
-		// User wants to leave and unsubscribe.
+	}
+
+	// User wants to leave and unsubscribe.
+	if msg.init && msg.Leave.Unsub {
 		// asUid must not be Zero.
 		if err := t.replyLeaveUnsub(sess, msg, asUid); err != nil {
 			logs.Err.Println("failed to unsub", err, sess.sid)
-			return
 		}
-	} else if pssd, _ := t.remSession(sess, asUid); pssd != nil {
-		//t.maybeEndCallInProgress("")
+		return
+	}
+
+	// User wants to leave without unsubscribing.
+	if pssd, _ := t.remSession(sess, asUid); pssd != nil {
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
 			if msg.init {
@@ -1003,9 +1007,9 @@ func (t *Topic) broadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho 
 	t.broadcastToSessions(data)
 
 	// usersPush will update unread message count and send push notification.
-	pushRcpt := t.pushForData(asUid, data.Data)
-	usersPush(pushRcpt)
-
+	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
+		usersPush(pushRcpt)
+	}
 }
 
 func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, replyParams, head map[string]interface{}, content interface{}) error {
@@ -2295,7 +2299,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 	// Give subscriber a fuller description than to a stranger/channel reader.
 	if full {
 		if t.cat == types.TopicCatP2P {
-			// For p2p topics default access mode makes no sense.
+			// For p2p topics default access mode makes no sense: only participants have access to topic.
 			// Don't report it.
 		} else if t.cat == types.TopicCatMe || (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
@@ -3466,8 +3470,6 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	var oldWant types.AccessMode
 	var oldGiven types.AccessMode
 	if !asChan {
-		pud := t.perUser[asUid]
-
 		// Update cached unread count: negative value
 		if (pud.modeWant & pud.modeGiven).IsReader() {
 			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
@@ -3484,6 +3486,11 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
+
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markDeleted()
+	}
 
 	return nil
 }
