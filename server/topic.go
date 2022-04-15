@@ -1862,6 +1862,9 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		// Cache user's record
 		usersRegisterUser(target, true)
 
+		// Notify plugins of a new subscription.
+		pluginSubscription(sub, plgActCreate)
+
 		// Send push notification for the new subscription.
 		if pushRcpt := t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
 			// TODO: maybe skip user's devices which were online when this event has happened.
