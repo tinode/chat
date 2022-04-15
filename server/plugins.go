@@ -528,7 +528,7 @@ func pluginTopic(topic *Topic, action int) {
 			event = &pbx.TopicEvent{
 				Action: pluginActionToCrud(action),
 				Name:   topic.name,
-				Desc:   pbTopicSerialize(topic),
+				Desc:   pbTopicSerializeToDesc(topic),
 			}
 		}
 

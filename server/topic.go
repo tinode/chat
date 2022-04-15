@@ -3080,6 +3080,9 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 
 	t.evictUser(uid, true, "")
 
+	// Notify plugins.
+	pluginSubscription(&types.Subscription{Topic: t.name, User: uid.UserId()}, plgActDel)
+
 	return nil
 }
 
@@ -3158,6 +3161,9 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
 		t.markDeleted()
 	}
+
+	// Notify plugins.
+	pluginSubscription(&types.Subscription{Topic: t.name, User: asUid.UserId()}, plgActDel)
 
 	return nil
 }
