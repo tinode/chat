@@ -3080,6 +3080,11 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 
 	t.evictUser(uid, true, "")
 
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markDeleted()
+	}
+
 	// Notify plugins.
 	pluginSubscription(&types.Subscription{Topic: t.name, User: uid.UserId()}, plgActDel)
 
