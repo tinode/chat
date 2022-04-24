@@ -1021,8 +1021,11 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	// The call expects user IDs to be plain strings like "356zaYaumiU".
 	uids := make([]interface{}, len(ids))
+	counts := make(map[t.Uid]int, len(ids))
 	for i, id := range ids {
 		uids[i] = id.String()
+		// Ensure all original uids are always present.
+		counts[id] = 0
 	}
 
 	/*
@@ -1054,11 +1057,10 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 		Sum(func(row rdb.Term) rdb.Term { return row.Field("SeqId").Sub(row.Field("ReadSeqId")) }).
 		Run(a.conn)
 	if err != nil {
-		return nil, err
+		return counts, err
 	}
 	defer cursor.Close()
 
-	counts := make(map[t.Uid]int, len(ids))
 	var oneCount struct {
 		Group     string
 		Reduction int
@@ -1067,13 +1069,6 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 		counts[t.ParseUid(oneCount.Group)] = oneCount.Reduction
 	}
 	err = cursor.Err()
-
-	// Ensure all original uids are always present.
-	for _, uid := range ids {
-		if _, ok := counts[uid]; !ok {
-			counts[uid] = 0
-		}
-	}
 
 	return counts, err
 }

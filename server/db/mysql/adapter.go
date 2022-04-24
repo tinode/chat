@@ -1339,8 +1339,11 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // user IDs but with the unread count undefined and non-nil error.
 func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	uids := make([]interface{}, len(ids))
+	counts := make(map[t.Uid]int, len(ids))
 	for i, id := range ids {
 		uids[i] = store.DecodeUid(id)
+		// Ensure all original uids are always present.
+		counts[id] = 0
 	}
 
 	q, uids, _ := sqlx.In("SELECT s.userid, SUM(t.seqid)-SUM(s.readseqid) AS unreadcount FROM topics AS t, subscriptions AS s "+
@@ -1355,10 +1358,8 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 
 	rows, err := a.db.QueryxContext(ctx, q, uids...)
 	if err != nil {
-		return nil, err
+		return counts, err
 	}
-
-	counts := make(map[t.Uid]int, len(ids))
 
 	var userId int64
 	var unreadCount int
@@ -1372,13 +1373,6 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 		err = rows.Err()
 	}
 	rows.Close()
-
-	// Ensure all original uids are always present.
-	for _, uid := range ids {
-		if _, ok := counts[uid]; !ok {
-			counts[uid] = 0
-		}
-	}
 
 	return counts, err
 }
