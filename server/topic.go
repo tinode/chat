@@ -2201,12 +2201,11 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 		t.fndSetPublic(sess, core["Public"])
 	}
 
-	mode := types.ModeNone
+	pud := t.perUser[asUid]
+	mode := pud.modeGiven & pud.modeWant
 	if private, ok := sub["Private"]; ok {
-		pud := t.perUser[asUid]
 		pud.private = private
 		t.perUser[asUid] = pud
-		mode = pud.modeGiven & pud.modeWant
 	}
 
 	if sendCommon || sendPriv {

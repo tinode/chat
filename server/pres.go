@@ -555,6 +555,8 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, mode types.AccessMode,
 	what string, params *presParams, skipSid string,
 	offlineOnly bool) {
 
+	logs.Info.Println("presSingleUserOffline", t.name, uid, what, skipSid, mode)
+
 	var skipTopic string
 	if offlineOnly {
 		skipTopic = t.name
@@ -562,6 +564,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, mode types.AccessMode,
 
 	// ModeInvalid means the user is deleted (pud.deleted == true)
 	if mode != types.ModeInvalid && presOfflineFilter(mode, what, nil) {
+
 		user := uid.UserId()
 		actor := params.actor
 		target := params.target
