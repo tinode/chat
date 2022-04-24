@@ -604,7 +604,7 @@ def noteMsg(id, cmd, ignored):
     elif cmd.what == 'read':
         enum_what = pb.READ
         cmd.seq = int(cmd.seq)
-    elif what == 'recv':
+    elif cmd.what == 'recv':
         enum_what = pb.RECV
         cmd.seq = int(cmd.seq)
     return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq),
