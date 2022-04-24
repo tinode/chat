@@ -276,7 +276,7 @@ type UsersPersistenceInterface interface {
 	GetActiveCred(id types.Uid, method string) (*types.Credential, error)
 	GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error)
 	DelCred(id types.Uid, method, value string) error
-	GetUnreadCount(id types.Uid) (int, error)
+	GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error)
 }
 
 // usersMapper is a concrete type which implements UsersPersistenceInterface.
@@ -494,9 +494,9 @@ func (usersMapper) DelCred(id types.Uid, method, value string) error {
 	return adp.CredDel(id, method, value)
 }
 
-// GetUnreadCount returs user's total count of unread messages in all topics with the R permissions
-func (usersMapper) GetUnreadCount(id types.Uid) (int, error) {
-	return adp.UserUnreadCount(id)
+// GetUnreadCount returs users' total count of unread messages in all topics with the R permissions.
+func (usersMapper) GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error) {
+	return adp.UserUnreadCount(ids...)
 }
 
 // TopicsPersistenceInterface is an interface which defines methods for persistent storage of topics.

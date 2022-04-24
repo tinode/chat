@@ -620,18 +620,22 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) GetTopicsAny(id, opts inter
 }
 
 // GetUnreadCount mocks base method.
-func (m *MockUsersPersistenceInterface) GetUnreadCount(id types.Uid) (int, error) {
+func (m *MockUsersPersistenceInterface) GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUnreadCount", id)
-	ret0, _ := ret[0].(int)
+	varargs := []interface{}{}
+	for _, a := range ids {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetUnreadCount", varargs...)
+	ret0, _ := ret[0].(map[types.Uid]int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetUnreadCount indicates an expected call of GetUnreadCount.
-func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnreadCount(id interface{}) *gomock.Call {
+func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnreadCount(ids ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnreadCount", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).GetUnreadCount), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnreadCount", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).GetUnreadCount), ids...)
 }
 
 // Update mocks base method.

@@ -1335,25 +1335,52 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 }
 
 // UserUnreadCount returns the total number of unread messages in all topics with
-// the R permission.
-func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+// the R permission. If read fails, the counts are still returned with the original
+// user IDs but with the unread count undefined and non-nil error.
+func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
+	uids := make([]interface{}, len(ids))
+	for i, id := range ids {
+		uids[i] = store.DecodeUid(id)
+	}
+
+	q, uids, _ := sqlx.In("SELECT s.userid, SUM(t.seqid)-SUM(s.readseqid) AS unreadcount FROM topics AS t, subscriptions AS s "+
+		"WHERE s.userid IN (?) AND t.name=s.topic AND s.deletedat IS NULL AND t.state!=? AND "+
+		"INSTR(s.modewant, 'R')>0 AND INSTR(s.modegiven, 'R')>0 GROUP BY s.userid", uids, t.StateDeleted)
+	q = a.db.Rebind(q)
+
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	var count int
-	err := a.db.GetContext(ctx, &count, "SELECT SUM(t.seqid)-SUM(s.readseqid) FROM topics AS t, subscriptions AS s "+
-		"WHERE s.userid=? AND t.name=s.topic AND s.deletedat IS NULL AND t.state!=? AND "+
-		"INSTR(s.modewant, 'R')>0 AND INSTR(s.modegiven, 'R')>0", store.DecodeUid(uid), t.StateDeleted)
+
+	rows, err := a.db.QueryxContext(ctx, q, uids...)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := make(map[t.Uid]int, len(ids))
+
+	var userId int64
+	var unreadCount int
+	for rows.Next() {
+		if err = rows.Scan(&userId, &unreadCount); err != nil {
+			break
+		}
+		counts[store.EncodeUid(userId)] = unreadCount
+	}
 	if err == nil {
-		return count, nil
+		err = rows.Err()
+	}
+	rows.Close()
+
+	// Ensure all original uids are always present.
+	for _, uid := range ids {
+		if _, ok := counts[uid]; !ok {
+			counts[uid] = 0
+		}
 	}
 
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-
-	return -1, err
+	return counts, err
 }
 
 // *****************************
