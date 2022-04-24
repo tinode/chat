@@ -1016,45 +1016,61 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 }
 
 // UserUnreadCount returns the total number of unread messages in all topics with
-// the R permission.
-func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+// the R permission. If read fails, the counts are still returned with the original
+// user IDs but with the unread count undefined and non-nil error.
+func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
+	// The call expects user IDs to be plain strings like "356zaYaumiU".
+	uids := make([]interface{}, len(ids))
+	counts := make(map[t.Uid]int, len(ids))
+	for i, id := range ids {
+		uids[i] = id.String()
+		// Ensure all original uids are always present.
+		counts[id] = 0
+	}
+
 	/*
-		r.db("tinode").table("subscriptions").getAll("8L6HpDuF05c", {index: "User"})
-			.eqJoin("Topic", r.db("tinode").table("topics"), {index: "Id"})
-			.filter(
-				r.not(r.row.hasFields({"left": "DeletedAt"}).or(r.row("right")("State").eq(20)))
-			)
-			.zip()
-			.pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId")
-			.filter(r.js('(function(row) {return row.ModeWant&row.ModeGiven&1 > 0;})'))
-			.sum(function(x) {return x.getField("SeqId").sub(x.getField("ReadSeqId"));})
+		Query:
+			r.db("tinode").table("subscriptions").getAll("356zaYaumiU", "k4cvfaq8zCQ", {index: "User"})
+			  .eqJoin("Topic", r.db("tinode").table("topics"), {index: "Id"})
+			  .filter(
+			    r.not(r.row.hasFields({"left": "DeletedAt"}).or(r.row("right")("State").eq(20)))
+			  )
+			  .zip()
+			  .pluck("User", "ReadSeqId", "ModeWant", "ModeGiven", "SeqId")
+			  .filter(r.js('(function(row) {return row.ModeWant&row.ModeGiven&1 > 0;})'))
+			  .group("User")
+			  .sum(function(x) {return x.getField("SeqId").sub(x.getField("ReadSeqId"));})
+
+		Result:
+				[{group: "356zaYaumiU", reduction: 1}, {group: "k4cvfaq8zCQ", reduction: 0}]
 	*/
-	cursor, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uids...).
 		EqJoin("Topic", rdb.DB(a.dbName).Table("topics"), rdb.EqJoinOpts{Index: "Id"}).
 		// left: subscription; right: topic.
 		Filter(
 			rdb.Not(rdb.Row.HasFields(map[string]interface{}{"left": "DeletedAt"}).
 				Or(rdb.Row.Field("right").Field("State").Eq(t.StateDeleted)))).
 		Zip().
-		Pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId").
+		Pluck("User", "ReadSeqId", "ModeWant", "ModeGiven", "SeqId").
 		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & " + strconv.Itoa(int(t.ModeRead)) + ") > 0;})")).
+		Group("User").
 		Sum(func(row rdb.Term) rdb.Term { return row.Field("SeqId").Sub(row.Field("ReadSeqId")) }).
 		Run(a.conn)
 	if err != nil {
-		return -1, err
+		return counts, err
 	}
 	defer cursor.Close()
 
-	if cursor.IsNil() {
-		return 0, nil
+	var oneCount struct {
+		Group     string
+		Reduction int
 	}
-
-	var count int
-	if err = cursor.One(&count); err != nil {
-		return -1, err
+	for cursor.Next(&oneCount) {
+		counts[t.ParseUid(oneCount.Group)] = oneCount.Reduction
 	}
+	err = cursor.Err()
 
-	return count, nil
+	return counts, err
 }
 
 // *****************************

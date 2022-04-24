@@ -54,8 +54,9 @@ type Adapter interface {
 	// UserGetByCred returns user ID for the given validated credential.
 	UserGetByCred(method, value string) (t.Uid, error)
 	// UserUnreadCount returns the total number of unread messages in all topics with
-	// the R permission.
-	UserUnreadCount(uid t.Uid) (int, error)
+	// the R permission. If read fails, the counts are still returned with the original
+	// user IDs but with the unread count undefined and non-nil error.
+	UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error)
 
 	// Credential management
 

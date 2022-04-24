@@ -858,8 +858,9 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 }
 
 // UserUnreadCount returns the total number of unread messages in all topics with
-// the R permission.
-func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+// the R permission. If read fails, the counts are still returned with the original
+// user IDs but with the unread count undefined and non-nil error.
+func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	pipeline := b.A{
 		b.M{"$match": b.M{"user": uid.String()}},
 		// Join documents from two collection
