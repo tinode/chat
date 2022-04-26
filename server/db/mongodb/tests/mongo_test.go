@@ -294,9 +294,9 @@ func TestUserUnreadCount(t *testing.T) {
 		t.Error(mismatchErrorString("UnreadCount length", len(counts), 2))
 	}
 
-	for i := range counts {
-		if expected[counts[i].UserId] != counts[i].UnreadCount {
-			t.Error(mismatchErrorString("UnreadCount", counts[i].UserId, counts[0].UnreadCount))
+	for uid, unread := range counts {
+		if expected[uid] != unread {
+			t.Error(mismatchErrorString("UnreadCount", uid, unread))
 		}
 	}
 
