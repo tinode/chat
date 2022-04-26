@@ -1527,7 +1527,7 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 		sess:   s,
 	}
 
-	helper.ss.EXPECT().Get(chanName, uid, true).Return(nil, types.ErrInternal)
+	helper.ss.EXPECT().Get(chanName, uid, false).Return(nil, types.ErrInternal)
 
 	helper.topic.registerSession(join)
 	helper.finish()
@@ -1576,7 +1576,7 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 		sess:    s,
 	}
 
-	helper.ss.EXPECT().Create(gomock.Any()).Return(types.ErrInternal)
+	helper.ss.EXPECT().Get(topicName, uid, true).Return(nil, types.ErrInternal)
 
 	helper.topic.registerSession(join)
 	helper.finish()

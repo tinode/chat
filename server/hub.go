@@ -464,6 +464,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 						sess.queueOut(ErrUnknownReply(msg, now))
 						return err
 					}
+					// Inform plugin that the topic was deleted.
+					pluginTopic(&Topic{name: topic}, plgActDel)
 				} else if err := store.Subs.Delete(topic, asUid); err != nil {
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
@@ -487,6 +489,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 					presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
 				}
+
+				// Inform plugin that the subscription was deleted.
+				pluginSubscription(sub, plgActDel)
 			} else {
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
@@ -497,6 +502,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				// Notify subscribers that the group topic is gone.
 				presSubsOfflineOffline(msg.Original, tcat, subs, "gone", &presParams{}, sess.sid)
+
+				// Inform plugin that the topic was deleted.
+				pluginTopic(&Topic{name: topic}, plgActDel)
 			}
 
 			sess.queueOut(NoErrReply(msg, now))

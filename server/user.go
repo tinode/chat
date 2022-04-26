@@ -726,11 +726,9 @@ type bufferedUpdate struct {
 	inc bool
 }
 
-// Unread counter read result.
 type ioResult struct {
-	uid types.Uid
-	val int
-	err error
+	counts map[types.Uid]int
+	err    error
 }
 
 // Represents pending push notification receipt.
@@ -928,54 +926,69 @@ func userUpdater() {
 	// IO callback queue.
 	ioDone := make(chan *ioResult, 1024)
 
-	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
-		uce, ok := usersCache[uid]
-		if !ok {
-			logs.Err.Println("ERROR: attempt to update unread count for user who has not been loaded", uid)
-			return unreadUpdateError
-		}
-
-		if uce.unread < 0 {
-			// Unread counter not initialized yet. Maybe start a DB read?
-			if updateBuf, ioInProgress := perUserBuffers[uid]; ioInProgress {
-				// Buffer this update.
-				updateBuf = append(updateBuf, bufferedUpdate{val: val, inc: inc})
-				perUserBuffers[uid] = updateBuf
-			} else {
-				// Read the counter from DB.
-				updateBuf = []bufferedUpdate{}
-				perUserBuffers[uid] = updateBuf
-				go func() {
-					count, err := store.Users.GetUnreadCount(uid)
-					if err != nil {
-						logs.Warn.Println("users: failed to load unread count for user ", uid, ": ", err)
-					}
-					ioDone <- &ioResult{uid: uid, val: count, err: err}
-				}()
+	unreadUpdater := func(uids []types.Uid, val int, inc bool) map[types.Uid]int {
+		var dbPending []types.Uid
+		counts := make(map[types.Uid]int, len(uids))
+		for _, uid := range uids {
+			counts[uid] = 0
+			uce, ok := usersCache[uid]
+			if !ok {
+				logs.Err.Println("ERROR: attempt to update unread count for user who has not been loaded", uid)
+				counts[uid] = unreadUpdateError
+				continue
 			}
-			return unreadUpdateIOPending
 
-		} else if inc {
-			uce.unread += val
-		} else {
-			uce.unread = val
+			if uce.unread < 0 {
+				// Unread counter not initialized yet. Maybe start a DB read?
+				if updateBuf, ioInProgress := perUserBuffers[uid]; ioInProgress {
+					// Buffer this update.
+					updateBuf = append(updateBuf, bufferedUpdate{val: val, inc: inc})
+					perUserBuffers[uid] = updateBuf
+				} else {
+					// Schedule reading the counter from DB.
+					updateBuf = []bufferedUpdate{}
+					perUserBuffers[uid] = updateBuf
+					dbPending = append(dbPending, uid)
+				}
+				counts[uid] = unreadUpdateIOPending
+				continue
+
+			} else if inc {
+				uce.unread += val
+			} else {
+				uce.unread = val
+			}
+
+			usersCache[uid] = uce
+			counts[uid] = uce.unread
 		}
 
-		usersCache[uid] = uce
+		if len(dbPending) > 0 {
+			go func() {
+				dbUnread, err := store.Users.GetUnreadCount(dbPending...)
+				if err != nil {
+					logs.Warn.Println("users: failed to load unread count: ", err)
+				}
+				ioDone <- &ioResult{counts: dbUnread, err: err}
+			}()
+		}
 
-		return uce.unread
+		return counts
 	}
 
 	for {
 		select {
 		case io := <-ioDone:
 			// Unread counter read has completed.
-			updateBuf, ok := perUserBuffers[io.uid]
-			// Stop buffering updates. New updates will be handled normally.
-			delete(perUserBuffers, io.uid)
-			if io.err == nil {
+			for uid, count := range io.counts {
+				updateBuf, ok := perUserBuffers[uid]
+				// Stop buffering updates. New updates will be handled normally.
+				delete(perUserBuffers, uid)
+				if io.err != nil {
+					continue
+				}
+
 				// Update counter.
-				count := io.val
 				if ok {
 					for _, upd := range updateBuf {
 						if upd.inc {
@@ -985,29 +998,35 @@ func userUpdater() {
 						}
 					}
 				} else {
-					logs.Warn.Println("ERROR: io didn't have an update buffer, uid ", io.uid)
+					logs.Warn.Println("ERROR: io didn't have an update buffer, uid", uid)
 				}
-				if uce, ok := usersCache[io.uid]; ok {
+
+				if uce, ok := usersCache[uid]; ok {
 					if uce.unread >= 0 {
-						logs.Warn.Println("users: unread count double initialization, uid ", io.uid)
+						logs.Warn.Println("users: unread count double initialization, uid", uid)
 					}
 					uce.unread = count
-					usersCache[io.uid] = uce
+					usersCache[uid] = uce
 				} else {
-					logs.Warn.Println("users: missing users cache entry after IO completion, uid ", io.uid)
+					logs.Warn.Println("users: missing users cache entry after IO completion, uid", uid)
 				}
-			} else {
-				logs.Err.Printf("users: io failed for uid[%s]: %s", io.uid, io.err)
-			}
-			// Now that the unread counter is initialized, handle pending push notification receipts.
-			// Decrease pending IO counts in pending push receipts for this user.
-			if pendingReceipts, ok := perUserPendingReceipts[io.uid]; ok {
-				for _, pp := range pendingReceipts {
-					pp.pendingIOs--
-					receiptQueue.fix(pp.index)
+
+				// Now that the unread counter is initialized, handle pending push notification receipts.
+				// Decrease pending IO counts in pending push receipts for this user.
+				if pendingReceipts, ok := perUserPendingReceipts[uid]; ok {
+					for _, pp := range pendingReceipts {
+						pp.pendingIOs--
+						receiptQueue.fix(pp.index)
+					}
+					delete(perUserPendingReceipts, uid)
 				}
-				delete(perUserPendingReceipts, io.uid)
 			}
+
+			if io.err != nil {
+				logs.Err.Println("users: failed to read unread count:", io.err)
+				continue
+			}
+
 			// Send ready receipts.
 			for receiptQueue.Len() > 0 && receiptQueue[0].pendingIOs == 0 {
 				rcpt := heap.Pop(&receiptQueue).(*pendingReceipt).rcpt
@@ -1037,9 +1056,15 @@ func userUpdater() {
 			if upd.PushRcpt != nil {
 				// List of uids for which the unread count is being read from the DB.
 				pendingUsers := []types.Uid{}
-				for uid, rcptTo := range upd.PushRcpt.To {
+				allUids := make([]types.Uid, 0, len(upd.PushRcpt.To))
+				for uid := range upd.PushRcpt.To {
+					allUids = append(allUids, uid)
+				}
+
+				allUnread := unreadUpdater(allUids, 1, true)
+				for uid, unread := range allUnread {
+					rcptTo := upd.PushRcpt.To[uid]
 					// Handle update
-					unread := unreadUpdater(uid, 1, true)
 					if unread >= 0 {
 						rcptTo.Unread = unread
 						upd.PushRcpt.To[uid] = rcptTo
@@ -1047,6 +1072,7 @@ func userUpdater() {
 						pendingUsers = append(pendingUsers, uid)
 					}
 				}
+
 				if len(pendingUsers) == 0 {
 					// All data present in memory. Just send the push.
 					push.Push(upd.PushRcpt)
@@ -1103,8 +1129,8 @@ func userUpdater() {
 				continue
 			}
 
-			// Request to update unread count.
-			unreadUpdater(upd.UserId, upd.Unread, upd.Inc)
+			// Request to update unread count for one user.
+			unreadUpdater([]types.Uid{upd.UserId}, upd.Unread, upd.Inc)
 		}
 	}
 

@@ -195,10 +195,14 @@ def attachment(filename):
         stdoutln("Error processing attachment '" + filename + "':", err)
         return None
 
-# encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
+# encode_to_bytes converts the 'src' to a byte array.
+# An object/dictionary is first converted to json string then it's converted to bytes.
+# A string is directly converted to bytes.
 def encode_to_bytes(src):
     if src == None:
         return None
+    if isinstance(src, str):
+        return src.encode('utf-8')
     return json.dumps(src).encode('utf-8')
 
 # Parse credentials
@@ -601,7 +605,7 @@ def noteMsg(id, cmd, ignored):
     elif cmd.what == 'read':
         enum_what = pb.READ
         cmd.seq = int(cmd.seq)
-    elif what == 'recv':
+    elif cmd.what == 'recv':
         enum_what = pb.RECV
         cmd.seq = int(cmd.seq)
     return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq),

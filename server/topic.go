@@ -1853,6 +1853,9 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		// Cache user's record
 		usersRegisterUser(target, true)
 
+		// Notify plugins of a new subscription.
+		pluginSubscription(sub, plgActCreate)
+
 		// Send push notification for the new subscription.
 		// TODO: maybe skip user's devices which were online when this event has happened.
 		sendPush(t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now))
@@ -2187,12 +2190,11 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 		t.fndSetPublic(sess, core["Public"])
 	}
 
-	mode := types.ModeNone
+	pud := t.perUser[asUid]
+	mode := pud.modeGiven & pud.modeWant
 	if private, ok := sub["Private"]; ok {
-		pud := t.perUser[asUid]
 		pud.private = private
 		t.perUser[asUid] = pud
-		mode = pud.modeGiven & pud.modeWant
 	}
 
 	if sendCommon || sendPriv {
@@ -3066,6 +3068,14 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 
 	t.evictUser(uid, true, "")
 
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markDeleted()
+	}
+
+	// Notify plugins.
+	pluginSubscription(&types.Subscription{Topic: t.name, User: uid.UserId()}, plgActDel)
+
 	return nil
 }
 
@@ -3144,6 +3154,9 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
 		t.markDeleted()
 	}
+
+	// Notify plugins.
+	pluginSubscription(&types.Subscription{Topic: t.name, User: asUid.UserId()}, plgActDel)
 
 	return nil
 }

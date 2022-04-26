@@ -858,10 +858,40 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 }
 
 // UserUnreadCount returns the total number of unread messages in all topics with
-// the R permission.
-func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+// the R permission. If read fails, the counts are still returned with the original
+// user IDs but with the unread count undefined and non-nil error.
+func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
+	uids := make([]string, len(ids))
+	counts := make(map[t.Uid]int, len(ids))
+	for i, id := range ids {
+		uids[i] = id.String()
+		// Ensure all original uids are always present.
+		counts[id] = 0
+	}
+	/*
+		Query:
+			db.subscriptions.aggregate([
+				{ $match: { user: { $in: ["KnElfSSA21U", "0ZcCQmwI2RI"] } } },
+				{ $lookup: { from: "topics", localField: "topic", foreignField: "_id", as: "fromTopics"} },
+				{ $replaceRoot: { newRoot: { $mergeObjects: [ {$arrayElemAt: [ "$fromTopics", 0 ]} , "$$ROOT" ] } } },
+				{ $match: {
+						deletedat: { $exists: false },
+						state:     { $ne": t.StateDeleted },
+						modewant:  { $bitsAllSet: [ t.ModeRead ] },
+						modegiven: { $bitsAllSet: [ t.ModeRead ] }
+					}
+				},
+				{ $project: { _id: 0, user: 1, readseqid: 1, seqid: 1} },
+				{ $group: { _id: "$user", unreadCount: { $sum: { $subtract: [ "$seqid", "$readseqid" ] } } } }
+			])
+
+		Result:
+			{ "_id" : "KnElfSSA21U", "unreadCount" : 0 }
+			{ "_id" : "0ZcCQmwI2RI", "unreadCount" : 7 }
+	*/
+
 	pipeline := b.A{
-		b.M{"$match": b.M{"user": uid.String()}},
+		b.M{"$match": b.M{"user": b.M{"$in": uids}}},
 		// Join documents from two collection
 		b.M{"$lookup": b.M{
 			"from":         "topics",
@@ -872,6 +902,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 		// Merge two documents into one
 		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fromTopics", 0}}, "$$ROOT"}}}},
 
+		// Keep only those records which affect the result.
 		b.M{"$match": b.M{
 			"deletedat": b.M{"$exists": false},
 			"state":     b.M{"$ne": t.StateDeleted},
@@ -879,25 +910,27 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 			"modewant":  b.M{"$bitsAllSet": b.A{t.ModeRead}},
 			"modegiven": b.M{"$bitsAllSet": b.A{t.ModeRead}}}},
 
-		b.M{"$group": b.M{"_id": nil, "unreadCount": b.M{"$sum": b.M{"$subtract": b.A{"$seqid", "$readseqid"}}}}},
+		// Remove unused fields.
+		b.M{"$project": b.M{"_id": 0, "user": 1, "readseqid": 1, "seqid": 1}},
+		// GROUP BY user.
+		b.M{"$group": b.M{"_id": "$user", "unreadCount": b.M{"$sum": b.M{"$subtract": b.A{"$seqid", "$readseqid"}}}}},
 	}
 	cur, err := a.db.Collection("subscriptions").Aggregate(a.ctx, pipeline)
 	if err != nil {
-		return 0, err
+		return counts, err
 	}
 	defer cur.Close(a.ctx)
 
-	var result []struct {
-		Id          interface{} `bson:"_id"`
-		UnreadCount int         `bson:"unreadCount"`
+	for cur.Next(a.ctx) {
+		var oneCount struct {
+			Id          string `bson:"_id"`
+			UnreadCount int    `bson:"unreadCount"`
+		}
+		cur.Decode(&oneCount)
+		counts[t.ParseUid(oneCount.Id)] = oneCount.UnreadCount
 	}
-	if err = cur.All(a.ctx, &result); err != nil {
-		return 0, err
-	}
-	if len(result) == 0 { // Not found
-		return 0, nil
-	}
-	return result[0].UnreadCount, nil
+
+	return counts, nil
 }
 
 // Credential management
