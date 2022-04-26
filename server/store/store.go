@@ -511,8 +511,6 @@ type TopicsPersistenceInterface interface {
 	Update(topic string, update map[string]interface{}) error
 	OwnerChange(topic string, newOwner types.Uid) error
 	Delete(topic string, hard bool) error
-
-	//GetCallData(callId int) (*types.CallData, error)
 }
 
 // topicsMapper is a concrete type implementing TopicsPersistenceInterface.
@@ -645,9 +643,7 @@ func (subsMapper) Delete(topic string, user types.Uid) error {
 // MessagesPersistenceInterface is an interface which defines methods for persistent storage of messages.
 type MessagesPersistenceInterface interface {
 	Save(msg *types.Message, attachmentURLs []string, readBySender bool) error
-	//Update(messageId int, status int) error
 	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
-	Get(id int) (*types.Message, error)
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
 }
@@ -702,11 +698,6 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 	return nil
 }
 
-/*
-func (messagesMapper) Update(messageId int, status int) error {
-
-}
-*/
 // DeleteList deletes multiple messages defined by a list of ranges.
 func (messagesMapper) DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error {
 	var toDel *types.DelMessage
@@ -742,10 +733,6 @@ func (messagesMapper) DeleteList(topic string, delID int, forUser types.Uid, ran
 	}
 
 	return err
-}
-
-func (messagesMapper) Get(id int) (*types.Message, error) {
-	return adp.MessageGet(id)
 }
 
 // GetAll returns multiple messages.
@@ -1058,110 +1045,6 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 	return nil
 }
 
-// CallsPersistenceInterface is an interface which defines methods for persistent storage of calls.
-type CallsPersistenceInterface interface {
-	/*
-		Create(topic *types.Topic, owner types.Uid, private interface{}) error
-		CreateP2P(initiator, invited *types.Subscription) error
-		Get(topic string) (*types.Topic, error)
-		GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
-		GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
-		GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
-		GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
-		Update(topic string, update map[string]interface{}) error
-		OwnerChange(topic string, newOwner types.Uid) error
-		Delete(topic string, hard bool) error
-	*/
-	GetCallData(callId int) (*types.CallData, error)
-	Start(topicName string, asUid types.Uid, callData *types.CallData, readBySender bool) (*types.Message, error)
-	Accept(party *types.CallParty) error
-	Finish(messageId int) error
-	ExtendLease(partyId int, until time.Time) error
-	//Update(callId int, sid string, uid types.Uid, expires time.Time)
-}
-
-// callsMapper is a concrete type implementing CallsPersistenceInterface.
-type callsMapper struct{}
-
-var Calls CallsPersistenceInterface
-
-func (callsMapper) GetCallData(callId int) (*types.CallData, error) {
-	var msg *types.Message
-	var parties []types.CallParty
-	var err error
-	if msg, err = adp.MessageGet(callId); err != nil {
-		return nil, err
-	}
-	if parties, err = adp.CallPartiesGetAll(callId); err != nil {
-		return nil, err
-	}
-	res := &types.CallData{
-		ObjHeader: types.ObjHeader{CreatedAt: msg.ObjHeader.CreatedAt, UpdatedAt: msg.ObjHeader.UpdatedAt},
-		SeqId:     msg.SeqId,
-		Parties:   parties,
-		//CreatedAt:
-		//UpdatedAt:
-		//Status: msg.Status,
-	}
-	return res, nil
-}
-
-func (callsMapper) Start(topicName string, asUid types.Uid, callData *types.CallData, readBySender bool) (*types.Message, error) {
-	callData.InitTimes()
-	m := &types.Message{
-		ObjHeader: types.ObjHeader{CreatedAt: callData.CreatedAt, UpdatedAt: callData.UpdatedAt},
-		SeqId:     callData.SeqId,
-		Topic:     topicName,
-		From:      asUid.String(),
-		Head:      map[string]interface{}{"mime": "application/tinode-tele-call"},
-		//Status:    callData.Status,
-		Content:   "☎️",
-	} //, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
-
-	// transaction.
-
-	if err := Messages.Save(m, []string{}, readBySender); err != nil {
-		return nil, err
-	}
-
-	callData.MessageId = int(types.ParseUid(m.ObjHeader.Id))
-
-	//var party *types.CallParty
-	for i := 0; i < len(callData.Parties); i++ {
-		p := &callData.Parties[i]
-		p.InitTimes()
-		p.MessageId = int(types.ParseUid(m.ObjHeader.Id))
-		//party = &p
-		if err := adp.CallPartiesAdd(p); err != nil {
-			return nil, err
-		}
-		//logs.Info.Printf("set new party uid to %s", p.Uid())
-	}
-
-	return m, nil
-}
-
-func (callsMapper) Accept(party *types.CallParty) error {
-	party.InitTimes()
-  /*
-	if err := adp.MessageUpdateStatus(party.MessageId, 2); err != nil {
-		return err
-	}
-	return adp.CallPartiesAdd(party)
-  */
-  return nil//Messages.Save()
-}
-
-func (callsMapper) Finish(messageId int) error {
-	//err := adp.MessageUpdateStatus(messageId, 3)
-	logs.Err.Printf("msg id %d:  setting status to %d; error = %s", messageId, 3,nil)
-	return nil//err
-}
-
-func (callsMapper) ExtendLease(partyId int, until time.Time) error {
-	return adp.CallExtendLease(partyId, until)
-}
-
 func init() {
 	Store = storeObj{}
 	Users = usersMapper{}
@@ -1170,5 +1053,4 @@ func init() {
 	Messages = messagesMapper{}
 	Devices = deviceMapper{}
 	Files = fileMapper{}
-	Calls = callsMapper{}
 }

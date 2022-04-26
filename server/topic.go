@@ -277,8 +277,6 @@ func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
 			msg.Pres.Topic = t.original(uid)
 		case msg.Info != nil:
 			msg.Info.Topic = t.original(uid)
-		//case msg.Tele != nil:
-		//	msg.Tele.Topic = t.original(uid)
 		}
 	}
 }
@@ -1047,7 +1045,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 	}
 
 	t.broadcastMessage(msg, asUid, noEcho, replyParams, head, content)
-  return nil
+	return nil
 }
 
 // handlePubBroadcast fans out {pub} -> {data} messages to recipients in a master topic.
@@ -1070,7 +1068,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == constTinodeVideoCallMimeType
 	if isCall {
 		if t.currentCall != nil {
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 		params = make(map[string]interface{})
@@ -1097,9 +1095,6 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 		return
 	}
 	t.callTimer.Stop()
-	if err := store.Calls.Finish(t.currentCall.messageId); err != nil {
-		logs.Err.Printf("topic[%s], call id %d: cleanup failed %s", t.name, t.currentCall.seq, err)
-	}
 	originator, _ := t.getCallOriginator()
 	var replaceWith string
 	if len(from) > 0 && len(t.currentCall.parties) == 2 {
@@ -1117,7 +1112,6 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, nil, head, replaceWith); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
-
 
 	for tgt, _ := range t.perUser {
 		t.callSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
@@ -1145,11 +1139,11 @@ func (t *Topic) terminateCallInProgress() {
 	}
 	logs.Info.Printf("call timer event %s %s", uid.UserId(), sess.sid)
 	dummy := &ClientComMessage{
-		Original: t.original(uid),
-		RcptTo: uid.UserId(),
-		AsUser: uid.UserId(),
+		Original:  t.original(uid),
+		RcptTo:    uid.UserId(),
+		AsUser:    uid.UserId(),
 		Timestamp: types.TimeNow(),
-		sess: sess,
+		sess:      sess,
 	}
 
 	t.maybeEndCallInProgress(types.ZeroUid, "", dummy)
@@ -1170,7 +1164,7 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	logs.Info.Println("--> 1")
 	if t.currentCall != nil {
-		msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+		msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 		return
 	}
 
@@ -1218,25 +1212,24 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 
 	// TODO: Check if it's a p2p topic.
 	call := msg.Note
-	//if call.What == "invite" {
 	asUid := types.ParseUserId(msg.AsUser)
 
 	_, userFound := t.perUser[asUid]
 	logs.Info.Printf("found user for %s: %s - %t", msg.AsUser, asUid.UserId(), userFound)
 	if !userFound {
 		logs.Err.Printf("User %s not found in topic %s", msg.AsUser, t.name)
-		msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+		msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 		return
 	}
 
-  logs.Info.Printf("\tcall: %+v", call)
-
-	if call.Event == "invite" {
-    logs.Err.Printf("topic[%s]: call invitations are routed via pub messages: %+v", t.name, call)
-	} else if call.Event == constCallEventRinging || call.Event == constCallEventAccept {
+	logs.Info.Printf("\tcall: %+v", call)
+	switch call.Event {
+	case constCallEventRinging:
+		fallthrough
+	case constCallEventAccept:
 		if t.currentCall == nil {
 			logs.Err.Printf("no call present: %s - seq: %d", t.name, call.SeqId)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 		logs.Info.Printf("\t+ forwarding %s from %s", call.Event, msg.sess.sid)
@@ -1250,12 +1243,12 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 
 		if initiator == nil {
 			logs.Err.Printf("could not find call originator: %s -> %+v", t.name, t.currentCall)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 		if initiator == msg.sess || initiator.uid == msg.sess.uid {
 			logs.Err.Printf("could not forward 'ringing' or 'accept' to self: %s -> %+v", t.name, t.currentCall)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 		logs.Info.Printf("\t- forwarding %s to %s", call.Event, initiator.sid)
@@ -1303,11 +1296,15 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		}
 		initiator.queueOut(forwardMsg)
 
-    logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
-	} else if call.Event == constCallEventOffer || call.Event == constCallEventAnswer || call.Event == constCallEventIceCandidate {
+		logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
+	case constCallEventOffer:
+		fallthrough
+	case constCallEventAnswer:
+		fallthrough
+	case constCallEventIceCandidate:
 		if t.currentCall == nil {
 			logs.Err.Printf("no call in progress: %s - seq: %d", t.name, call.SeqId)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 		var otherEnd *Session
@@ -1327,7 +1324,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 		otherEnd.queueOut(
 			&ServerComMessage{
 				Info: &MsgServerInfo{
-					Topic: t.original(otherEnd.uid),
+					Topic:   t.original(otherEnd.uid),
 					From:    msg.AsUser,
 					What:    "call",
 					Event:   call.Event,
@@ -1335,21 +1332,22 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 					Payload: call.Payload,
 				},
 			})
-	} else if call.Event == constCallEventHangUp {
+	case constCallEventHangUp:
 		if t.currentCall == nil {
 			logs.Err.Printf("hangup --> no call in progress: %s - seq: %d", t.name, call.SeqId)
-			msg.sess.queueOut(ErrTeleBusyReply(msg, types.TimeNow()))
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
 
 		t.maybeEndCallInProgress(asUid, msg.AsUser, msg)
+	default:
+		logs.Err.Printf("topic[%s]: unexpected call event: %s", t.name, call.Event)
 	}
 }
 
 // handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.
 // This is a NON-proxy broadcast (at master topic).
 func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
-  logs.Info.Printf("\tnote msg: %+v", msg.Note)
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
 		return
@@ -3550,7 +3548,6 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	for s := range t.sessions {
 		if pssd, removed := t.remSession(s, uid); pssd != nil {
 			if removed {
-				//t.maybeEndCallInProgress("")
 				s.detachSession(t.name)
 			}
 			if s.sid != skip {

@@ -499,18 +499,11 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 	}
 }
 
-func (t *Topic) callSubsOffline(from string, target types.Uid, event string, seq int, sdp json.RawMessage, skipSid string, offlineOnly bool) {
-	/*
-	  var target types.Uid
-		for uid, _ := range t.perUser {
-	    if uid.UserId() != from {
-	      target = uid
-	      break
-	    }
-	  }
-	*/
+// Publish {info what=call} to topic subscribers's sessions on subscriber's 'me'.
+func (t *Topic) callSubsOffline(from string, target types.Uid, event string, seq int,
+                                sdp json.RawMessage, skipSid string, offlineOnly bool) {
 	if target.IsZero() {
-		logs.Err.Printf("could not find target: topic %s - from %s", t.name, from)
+		logs.Err.Printf("callSubs could not find target: topic %s - from %s", t.name, from)
 		return
 	}
 	msg := &ServerComMessage{
@@ -522,8 +515,6 @@ func (t *Topic) callSubsOffline(from string, target types.Uid, event string, seq
 			Event:   event,
 			SeqId:   seq,
 			Payload: sdp,
-			//SkipTopic: t.name,
-			//IceCandidate: msg.Call.IceCandidate,
 		},
 		RcptTo:  target.UserId(),
 		SkipSid: skipSid,
