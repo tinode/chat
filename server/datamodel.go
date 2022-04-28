@@ -304,7 +304,7 @@ const (
 	constCallEventIceCandidate = "ice-candidate"
 	constCallEventHangUp = "hang-up"
 
-  constTinodeVideoCallMimeType = "application/tinode-video-call"
+	constTinodeVideoCallMimeType = "application/x-tinode-webrtc"
 )
 
 // MsgClientNote is a client-generated notification for topic subscribers {note}.

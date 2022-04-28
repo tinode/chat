@@ -11,6 +11,7 @@ package main
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -1102,9 +1103,8 @@ func (t *Topic) maybeEndCallInProgress(asUid types.Uid, from string, msg *Client
 	} else {
 		replaceWith = "disconnected"
 	}
-	head := make(map[string]interface{})
-	head["mime"] = constTinodeVideoCallMimeType
-	head["replace-seq"] = t.currentCall.seq
+
+	head := replacementMessageHead(t.currentCall.seq, constTinodeVideoCallMimeType)
 	msgCopy := *msg
 	msgCopy.AsUser = originator.UserId()
 
@@ -1204,6 +1204,15 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	t.callTimer.Reset(15 * time.Second)
 }
 
+func replacementMessageHead(replacedSeq int, mime string) map[string]interface{} {
+	head := make(map[string]interface{})
+	if len(mime) > 0 {
+		head["mime"] = mime
+	}
+	head["replace"] = ":" + strconv.Itoa(replacedSeq)
+	return head
+}
+
 func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
@@ -1215,24 +1224,20 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
 
 	_, userFound := t.perUser[asUid]
-	logs.Info.Printf("found user for %s: %s - %t", msg.AsUser, asUid.UserId(), userFound)
 	if !userFound {
 		logs.Err.Printf("User %s not found in topic %s", msg.AsUser, t.name)
 		msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 		return
 	}
 
-	logs.Info.Printf("\tcall: %+v", call)
 	switch call.Event {
 	case constCallEventRinging:
 		fallthrough
 	case constCallEventAccept:
 		if t.currentCall == nil {
-			logs.Err.Printf("no call present: %s - seq: %d", t.name, call.SeqId)
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
-		logs.Info.Printf("\t+ forwarding %s from %s", call.Event, msg.sess.sid)
 		var initiator *Session
 		for sess, p := range t.currentCall.parties {
 			if p.isOriginator {
@@ -1251,7 +1256,6 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
-		logs.Info.Printf("\t- forwarding %s to %s", call.Event, initiator.sid)
 		forwardMsg := &ServerComMessage{
 			Info: &MsgServerInfo{
 				Topic: t.original(initiator.uid),
@@ -1272,9 +1276,7 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 				Expires:      expires,
 			}
 			replaceWith := "accepted"
-			head := make(map[string]interface{})
-			head["mime"] = constTinodeVideoCallMimeType
-			head["replace-seq"] = call.SeqId
+			head := replacementMessageHead(call.SeqId, constTinodeVideoCallMimeType)
 
 			originator, _ := t.getCallOriginator()
 			msgCopy := *msg
@@ -1295,8 +1297,6 @@ func (t *Topic) handleCallBroadcast(msg *ClientComMessage) {
 			t.callTimer.Stop()
 		}
 		initiator.queueOut(forwardMsg)
-
-		logs.Info.Printf("Answering to %+v, with call %+v", msg, call)
 	case constCallEventOffer:
 		fallthrough
 	case constCallEventAnswer:
