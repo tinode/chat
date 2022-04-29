@@ -91,7 +91,7 @@ See [instructions](./docker/README.md)
 ## Running a Standalone Server
 
 1. Make sure your database is running:
- - **MySQL**: https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/programs-server.html
+ - **MySQL**: https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/mysql-server.html
 	```
 	mysql.server start
 	```

@@ -285,7 +285,7 @@ func TestCredGetAll(t *testing.T) {
 
 func TestUserUnreadCount(t *testing.T) {
 	uids := []types.Uid{types.ParseUserId("usr" + users[1].Id), types.ParseUserId("usr" + users[2].Id)}
-	expected := map[types.Uid]int{uids[0]: 5, uids[1]: 100}
+	expected := map[types.Uid]int{uids[0]: 0, uids[1]: 166}
 	counts, err := adp.UserUnreadCount(uids...)
 	if err != nil {
 		t.Fatal(err)
@@ -294,19 +294,23 @@ func TestUserUnreadCount(t *testing.T) {
 		t.Error(mismatchErrorString("UnreadCount length", len(counts), 2))
 	}
 
-	for i := range counts {
-		if expected[counts[i].UserId] != counts[i].UnreadCount {
-			t.Error(mismatchErrorString("UnreadCount", counts[i].UserId, counts[0].UnreadCount))
+	for uid, unread := range counts {
+		if expected[uid] != unread {
+			t.Error(mismatchErrorString("UnreadCount", unread, expected[uid]))
 		}
 	}
 
-	// Test not found
-	counts, err = adp.UserUnreadCount(types.ParseUserId("dummyuserid"))
+	// Test not found (even if the account is not found, the call must return one record).
+	uid := types.ParseUserId("dummyuserid")
+	counts, err = adp.UserUnreadCount(uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(counts) != 0 {
-		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 0))
+	if len(counts) != 1 {
+		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 1))
+	}
+	if counts[uid] != 0 {
+		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[uid], 0))
 	}
 }
 
