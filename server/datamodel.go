@@ -294,22 +294,8 @@ type MsgClientDel struct {
 	Hard bool `json:"hard,omitempty"`
 }
 
-// Call constants.
-const (
-	constCallEventInvite = "invite"
-	constCallEventRinging = "ringing"
-	constCallEventAccept = "accept"
-	constCallEventOffer  = "offer"
-	constCallEventAnswer = "answer"
-	constCallEventIceCandidate = "ice-candidate"
-	constCallEventHangUp = "hang-up"
-
-	constTinodeVideoCallMimeType = "application/x-tinode-webrtc"
-)
-
 // MsgClientNote is a client-generated notification for topic subscribers {note}.
 type MsgClientNote struct {
-	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
 	Id string `json:"id,omitempty"`
 
 	Topic string `json:"topic"`
@@ -347,7 +333,6 @@ type ClientComMessage struct {
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
-	//Call  *MsgClientCall  `json:"call"`
 	// Optional data.
 	Extra *MsgClientExtra `json:"extra"`
 

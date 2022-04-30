@@ -1231,8 +1231,13 @@ func (s *Session) note(msg *ClientComMessage) {
 			logs.Err.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.Note.What == "recv" || (msg.Note.What == "call" && (msg.Note.Event == "ringing" || msg.Note.Event == "hang-up")) {
-		// Client received a pres notification about a new message, initiated a fetch
+		// One of the folowing events happened:
+		// 1. Client received a pres notification about a new message, initiated a fetch
 		// from the server (and detached from the topic) and acknowledges receipt.
+		// 2. Client is either terminating the current video call or
+		// letting the initiator of the call know that it is ringing/notifying
+		// the user about the call.
+		//
 		// Hub will forward to topic, if appropriate.
 		select {
 		case globals.hub.routeCli <- msg:

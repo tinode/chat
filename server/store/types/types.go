@@ -1142,25 +1142,6 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 	return
 }
 
-// CallParty represents a video call participant.
-type CallParty struct {
-	ObjHeader    `bson:",inline"`
-	MessageId    int
-	User         string
-	Sid          string
-	IsOriginator bool
-	Expires      time.Time
-}
-
-// CallData contains video call metadata.
-type CallData struct {
-	ObjHeader `bson:",inline"`
-	MessageId int
-	SeqId     int
-	Parties   []CallParty
-	Status    int
-}
-
 // SoftDelete is a single DB record of soft-deletetion.
 type SoftDelete struct {
 	User  string

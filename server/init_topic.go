@@ -293,11 +293,6 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 				readID:    subs[i].ReadSeqId,
 			}
 		}
-
-		//
-		//if subs, err = store.Topics.GetUsers(t.name, nil); err != nil {
-
-		//stopic.CallId
 	} else {
 		// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 		// or the subscription was deleted)
