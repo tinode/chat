@@ -219,6 +219,11 @@ func IsChannel(name string) bool {
 	return strings.HasPrefix(name, "chn")
 }
 
+// IsP2PTopic checks if the given topic name is a reference to a P2P topic.
+func IsP2PTopic(name string) bool {
+	return strings.HasPrefix(name, "usr")
+}
+
 // ChnToGrp gets group topic name from channel name.
 // If it's a non-channel group topic, the name is returned unchanged.
 func ChnToGrp(chn string) string {

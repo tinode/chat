@@ -500,10 +500,15 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 }
 
 // Publish {info what=call} to topic subscribers's sessions on subscriber's 'me'.
-func (t *Topic) callSubsOffline(from string, target types.Uid, event string, seq int,
-                                sdp json.RawMessage, skipSid string, offlineOnly bool) {
+func (t *Topic) infoCallSubsOffline(from string, target types.Uid, event string, seq int,
+	sdp json.RawMessage, skipSid string, offlineOnly bool) {
 	if target.IsZero() {
 		logs.Err.Printf("callSubs could not find target: topic %s - from %s", t.name, from)
+		return
+	}
+	pud := t.perUser[target]
+	mode := pud.modeGiven & pud.modeWant
+	if pud.deleted || !mode.IsPresencer() || !mode.IsReader() {
 		return
 	}
 	msg := &ServerComMessage{

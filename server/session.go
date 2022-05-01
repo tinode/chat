@@ -1209,12 +1209,12 @@ func (s *Session) note(msg *ClientComMessage) {
 		if msg.Note.SeqId != 0 {
 			return
 		}
-	case "read", "recv":
+	case "read", "recv", "call":
 		if msg.Note.SeqId <= 0 {
 			return
 		}
-	case "call":
-		if msg.Note.SeqId <= 0 {
+		if msg.Note.What == "call" && !types.IsP2PTopic(msg.Original) {
+			// Calls are only available in P2P topics.
 			return
 		}
 	default:
@@ -1269,7 +1269,7 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		routeTo = msg.AsUser
 	} else if msg.Original == "fnd" {
 		routeTo = types.ParseUserId(msg.AsUser).FndName()
-	} else if strings.HasPrefix(msg.Original, "usr") {
+	} else if types.IsP2PTopic(msg.Original) {
 		// p2p topic
 		uid1 := types.ParseUserId(msg.AsUser)
 		uid2 := types.ParseUserId(msg.Original)

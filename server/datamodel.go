@@ -1566,7 +1566,7 @@ func ErrCallBusyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) 
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
 			Code:      486, // Busy here.
-			Text:      "Busy Here",
+			Text:      "busy here",
 			Topic:     topic,
 			Timestamp: serverTs,
 		},

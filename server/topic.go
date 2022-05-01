@@ -85,7 +85,7 @@ type Topic struct {
 
 	// Present video call data. Null when there's no call in progress or being established.
 	// Only available for p2p topics.
-	currentCall *VideoCall
+	currentCall *videoCall
 
 	// Channel for receiving client messages from sessions or other topics, buffered = 256.
 	clientMsg chan *ClientComMessage
@@ -204,23 +204,23 @@ type sessionUpdate struct {
 	userAgent string
 }
 
-// Video call participant.
-type CallPartyData struct {
+// callPartyData describes a video call participant.
+type callPartyData struct {
 	// ID of the call participant (asUid); not necessarily the session owner.
 	uid types.Uid
 	// True if this session/user initiated the call.
 	isOriginator bool
 }
 
-// Describes video call that's being established or in progress.
-type VideoCall struct {
+// videoCall describes video call that's being established or in progress.
+type videoCall struct {
 	// Call participants.
-	parties map[*Session]CallPartyData
+	parties map[*Session]callPartyData
 	// Call message seq ID.
 	seq int
 }
 
-func (call *VideoCall) messageHead() map[string]interface{} {
+func (call *videoCall) messageHead() map[string]interface{} {
 	head := make(map[string]interface{})
 	head["mime"] = constTinodeVideoCallMimeType
 	head["replace"] = ":" + strconv.Itoa(call.seq)
@@ -228,7 +228,7 @@ func (call *VideoCall) messageHead() map[string]interface{} {
 }
 
 // Generates server info message template for the video call event.
-func (call *VideoCall) infoMessage(event string) *ServerComMessage {
+func (call *videoCall) infoMessage(event string) *ServerComMessage {
 	return &ServerComMessage{
 		Info: &MsgServerInfo{
 			What:  "call",
@@ -257,7 +257,7 @@ const (
 
 	// Messages representing call states.
 	// Call is established.
-	constCallMsgAcceted = "accepted"
+	constCallMsgAccepted = "accepted"
 	// Call in progress has successfully finished.
 	constCallMsgFinished = "finished"
 	// Call is dropped.
@@ -1008,65 +1008,16 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
-func (t *Topic) broadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, replyParams, head map[string]interface{}, content interface{}) {
-	logs.Info.Printf("about to send response to msg %+v", msg)
-	if msg.Id != "" && msg.sess != nil {
-		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-		reply.Ctrl.Params = map[string]interface{}{"seq": t.lastID}
-		if replyParams != nil {
-			// Add extra reply params.
-			for k, v := range replyParams {
-				reply.Ctrl.Params.(map[string]interface{})[k] = v
-			}
-		}
-		logs.Info.Printf("sending ctrl noerraccepted to sid %s: %+v", msg.sess.sid, reply)
-		msg.sess.queueOut(reply)
-	}
-
-	data := &ServerComMessage{
-		Data: &MsgServerData{
-			Topic:     msg.Original,
-			From:      msg.AsUser,
-			Timestamp: msg.Timestamp,
-			SeqId:     t.lastID,
-			Head:      head,
-			Content:   content,
-		},
-		// Internal-only values.
-		Id:        msg.Id,
-		RcptTo:    msg.RcptTo,
-		AsUser:    msg.AsUser,
-		Timestamp: msg.Timestamp,
-		sess:      msg.sess,
-	}
-	//if msg.Pub.NoEcho {
-	if noEcho {
-		data.SkipSid = msg.sess.sid
-	}
-
-	// Message sent: notify offline 'R' subscrbers on 'me'.
-	t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.AsUser},
-		&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
-
-	// Tell the plugins that a message was accepted for delivery
-	pluginMessage(data.Data, plgActCreate)
-
-	t.broadcastToSessions(data)
-
-	// usersPush will update unread message count and send push notification.
-	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
-		usersPush(pushRcpt)
-	}
-}
-
-func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, replyParams, head map[string]interface{}, content interface{}) error {
+// Saves a new message (defined by head, content and attachments) in the topic
+// in response to a client request (msg, asUid) and broadcasts it to the attached sessions.
+func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]interface{}, content interface{}) error {
 	pud, userFound := t.perUser[asUid]
 	// Anyone is allowed to post to 'sys' topic.
 	if t.cat != types.TopicCatSys {
 		// If it's not 'sys' check write permission.
 		if !(pud.modeWant & pud.modeGiven).IsWriter() {
 			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-			return errors.New("permission denied")
+			return types.ErrPermissionDenied
 		}
 	}
 
@@ -1093,7 +1044,45 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		t.perUser[asUid] = pud
 	}
 
-	t.broadcastMessage(msg, asUid, noEcho, replyParams, head, content)
+	if msg.Id != "" && msg.sess != nil {
+		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
+		reply.Ctrl.Params = map[string]interface{}{"seq": t.lastID}
+		msg.sess.queueOut(reply)
+	}
+
+	data := &ServerComMessage{
+		Data: &MsgServerData{
+			Topic:     msg.Original,
+			From:      msg.AsUser,
+			Timestamp: msg.Timestamp,
+			SeqId:     t.lastID,
+			Head:      head,
+			Content:   content,
+		},
+		// Internal-only values.
+		Id:        msg.Id,
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.Timestamp,
+		sess:      msg.sess,
+	}
+	if noEcho {
+		data.SkipSid = msg.sess.sid
+	}
+
+	// Message sent: notify offline 'R' subscrbers on 'me'.
+	t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.AsUser},
+		&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
+
+	// Tell the plugins that a message was accepted for delivery
+	pluginMessage(data.Data, plgActCreate)
+
+	t.broadcastToSessions(data)
+
+	// usersPush will update unread message count and send push notification.
+	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
+		usersPush(pushRcpt)
+	}
 	return nil
 }
 
@@ -1112,16 +1101,12 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	//
-	var params map[string]interface{} = nil
 	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == constTinodeVideoCallMimeType
 	if isCall {
 		if t.currentCall != nil {
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
 		}
-		params = make(map[string]interface{})
-		params["sip-code"] = 100
 	}
 
 	// Save to DB at master topic.
@@ -1130,7 +1115,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		attachments = msg.Extra.Attachments
 	}
 
-	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, params, msg.Pub.Head, msg.Pub.Content); err != nil {
+	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content); err != nil {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
 	}
@@ -1147,7 +1132,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 	t.callEstablishmentTimer.Stop()
 	originator, _ := t.getCallOriginator()
 	var replaceWith string
-	if len(from) > 0 && len(t.currentCall.parties) == 2 {
+	if from != "" && len(t.currentCall.parties) == 2 {
 		// This is a call in progress.
 		replaceWith = constCallMsgFinished
 	} else {
@@ -1155,11 +1140,11 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 		replaceWith = constCallMsgDisconnected
 	}
 
-	// Send message message indicating the call has ended.
+	// Send a message indicating the call has ended.
 	head := t.currentCall.messageHead()
 	msgCopy := *msg
 	msgCopy.AsUser = originator.UserId()
-	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, nil, head, replaceWith); err != nil {
+	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, head, replaceWith); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 
@@ -1169,7 +1154,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 
 	// Let all other sessions know the call is over.
 	for tgt, _ := range t.perUser {
-		t.callSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
+		t.infoCallSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
 	}
 	t.currentCall = nil
 }
@@ -1225,13 +1210,13 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	}
 
 	tgt := t.p2pOtherUser(asUid)
-	t.callSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
+	t.infoCallSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
 	// Call being establshed.
-	t.currentCall = &VideoCall{
-		parties: make(map[*Session]CallPartyData),
+	t.currentCall = &videoCall{
+		parties: make(map[*Session]callPartyData),
 		seq:     t.lastID,
 	}
-	t.currentCall.parties[msg.sess] = CallPartyData{
+	t.currentCall.parties[msg.sess] = callPartyData{
 		uid:          asUid,
 		isOriginator: true,
 	}
@@ -1269,9 +1254,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	}
 
 	switch call.Event {
-	case constCallEventRinging:
-		fallthrough
-	case constCallEventAccept:
+	case constCallEventRinging, constCallEventAccept:
 		// Invariants:
 		// 1. Call has been initiated but not been established yet.
 		if len(t.currentCall.parties) != 1 {
@@ -1297,30 +1280,26 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		if call.Event == constCallEventAccept {
 			// The call has been accepted.
 			// Send a replacement {data} message to the topic.
-			replaceWith := constCallMsgAcceted
+			replaceWith := constCallMsgAccepted
 			head := t.currentCall.messageHead()
 			msgCopy := *msg
 			msgCopy.AsUser = originatorUid.UserId()
-			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, nil,
+			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil,
 				head, replaceWith); err != nil {
 				return
 			}
 			// Add callee data to t.currentCall.
-			t.currentCall.parties[msg.sess] = CallPartyData{
+			t.currentCall.parties[msg.sess] = callPartyData{
 				uid:          asUid,
 				isOriginator: false,
 			}
 
 			// Notify other clients that the call has been accepted.
-			t.callSubsOffline(msg.AsUser, msg.sess.uid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
+			t.infoCallSubsOffline(msg.AsUser, asUid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
 			t.callEstablishmentTimer.Stop()
 		}
 		originator.queueOut(forwardMsg)
-	case constCallEventOffer:
-		fallthrough
-	case constCallEventAnswer:
-		fallthrough
-	case constCallEventIceCandidate:
+	case constCallEventOffer, constCallEventAnswer, constCallEventIceCandidate:
 		// Call metadata exchange. Either side of the call may send these events.
 		// Simply forward them to the other session.
 		var otherUid types.Uid
