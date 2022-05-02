@@ -1208,6 +1208,12 @@ func (s *Session) note(msg *ClientComMessage) {
 		if msg.Note.SeqId != 0 {
 			return
 		}
+	case "call":
+		if types.GetTopicCat(msg.RcptTo) != types.TopicCatP2P {
+			// Calls are only available in P2P topics.
+			return
+		}
+		fallthrough
 	case "read", "recv":
 		if msg.Note.SeqId <= 0 {
 			return
@@ -1225,9 +1231,14 @@ func (s *Session) note(msg *ClientComMessage) {
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
 			logs.Err.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.Note.What == "recv" {
-		// Client received a pres notification about a new message, initiated a fetch
+	} else if msg.Note.What == "recv" || (msg.Note.What == "call" && (msg.Note.Event == "ringing" || msg.Note.Event == "hang-up")) {
+		// One of the folowing events happened:
+		// 1. Client received a pres notification about a new message, initiated a fetch
 		// from the server (and detached from the topic) and acknowledges receipt.
+		// 2. Client is either terminating the current video call or
+		// letting the initiator of the call know that it is ringing/notifying
+		// the user about the call.
+		//
 		// Hub will forward to topic, if appropriate.
 		select {
 		case globals.hub.routeCli <- msg:

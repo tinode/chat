@@ -81,6 +81,10 @@ type Topic struct {
 	// subscribed on behalf of another user.
 	sessions map[*Session]perSessionData
 
+	// Present video call data. Null when there's no call in progress or being established.
+	// Only available for p2p topics.
+	currentCall *videoCall
+
 	// Channel for receiving client messages from sessions or other topics, buffered = 256.
 	clientMsg chan *ClientComMessage
 	// Channel for receiving server messages generated on the server or received from other cluster nodes, buffered = 64.
@@ -117,6 +121,9 @@ type Topic struct {
 
 	// Countdown timer for destroying the topic when there are no more attached sessions to it.
 	killTimer *time.Timer
+
+	// Countdown timer for terminating iniatated (but not established) calls.
+	callEstablishmentTimer *time.Timer
 }
 
 // perUserData holds topic's cache of per-subscriber data
@@ -193,6 +200,14 @@ type shutDown struct {
 type sessionUpdate struct {
 	sess      *Session
 	userAgent string
+}
+
+// callPartyData describes a video call participant.
+type callPartyData struct {
+	// ID of the call participant (asUid); not necessarily the session owner.
+	uid types.Uid
+	// True if this session/user initiated the call.
+	isOriginator bool
 }
 
 var (
@@ -280,6 +295,11 @@ func (t *Topic) computePerUserAcsUnion() {
 // unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
+	if t.currentCall != nil {
+		if _, found := t.currentCall.parties[msg.sess]; found {
+			t.terminateCallInProgress()
+		}
+	}
 	t.handleLeaveRequest(msg, msg.sess)
 	if msg.init && msg.sess.inflightReqs != nil {
 		// If it's a client initiated request.
@@ -509,6 +529,9 @@ func (t *Topic) runLocal(hub *Hub) {
 	// Ticker for deferred presence notifications.
 	defrNotifTimer := time.NewTimer(time.Millisecond * 500)
 
+	t.callEstablishmentTimer = time.NewTimer(time.Second)
+	t.callEstablishmentTimer.Stop()
+
 	for {
 		select {
 		case msg := <-t.reg:
@@ -534,6 +557,9 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case <-t.killTimer.C:
 			t.handleTopicTimeout(hub, currentUA, uaTimer, defrNotifTimer)
+
+		case <-t.callEstablishmentTimer.C:
+			t.terminateCallInProgress()
 
 		case sd := <-t.exit:
 			t.handleTopicTermination(sd)
@@ -909,49 +935,32 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
-// handlePubBroadcast fans out {pub} -> {data} messages to recipients in a master topic.
-// This is a NON-proxy broadcast.
-func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
-	asUid := types.ParseUserId(msg.AsUser)
-	if t.isInactive() {
-		// Ignore broadcast - topic is paused or being deleted.
-		msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
-		return
-	}
-
+// Saves a new message (defined by head, content and attachments) in the topic
+// in response to a client request (msg, asUid) and broadcasts it to the attached sessions.
+func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]interface{}, content interface{}) error {
 	pud, userFound := t.perUser[asUid]
 	// Anyone is allowed to post to 'sys' topic.
 	if t.cat != types.TopicCatSys {
 		// If it's not 'sys' check write permission.
 		if !(pud.modeWant & pud.modeGiven).IsWriter() {
 			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-			return
+			return types.ErrPermissionDenied
 		}
 	}
 
-	if t.isReadOnly() {
-		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-		return
-	}
-
-	// Save to DB at master topic.
-	var attachments []string
-	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
-		attachments = msg.Extra.Attachments
-	}
 	if err := store.Messages.Save(
 		&types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
 			SeqId:     t.lastID + 1,
 			Topic:     t.name,
 			From:      asUid.String(),
-			Head:      msg.Pub.Head,
-			Content:   msg.Pub.Content,
+			Head:      head,
+			Content:   content,
 		}, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
 		logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
 		msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
-		return
+		return err
 	}
 
 	t.lastID++
@@ -964,7 +973,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 
 	if msg.Id != "" && msg.sess != nil {
 		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-		reply.Ctrl.Params = map[string]int{"seq": t.lastID}
+		reply.Ctrl.Params = map[string]interface{}{"seq": t.lastID}
 		msg.sess.queueOut(reply)
 	}
 
@@ -974,8 +983,8 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 			From:      msg.AsUser,
 			Timestamp: msg.Timestamp,
 			SeqId:     t.lastID,
-			Head:      msg.Pub.Head,
-			Content:   msg.Pub.Content,
+			Head:      head,
+			Content:   content,
 		},
 		// Internal-only values.
 		Id:        msg.Id,
@@ -984,7 +993,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		Timestamp: msg.Timestamp,
 		sess:      msg.sess,
 	}
-	if msg.Pub.NoEcho {
+	if noEcho {
 		data.SkipSid = msg.sess.sid
 	}
 
@@ -1000,6 +1009,45 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	// sendPush will update unread message count and send push notification.
 	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
 		sendPush(pushRcpt)
+	}
+	return nil
+}
+
+// handlePubBroadcast fans out {pub} -> {data} messages to recipients in a master topic.
+// This is a NON-proxy broadcast.
+func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
+	asUid := types.ParseUserId(msg.AsUser)
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
+		return
+	}
+
+	if t.isReadOnly() {
+		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+		return
+	}
+
+	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == constTinodeVideoCallMimeType
+	if isCall {
+		if t.currentCall != nil {
+			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
+			return
+		}
+	}
+
+	// Save to DB at master topic.
+	var attachments []string
+	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
+		attachments = msg.Extra.Attachments
+	}
+
+	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content); err != nil {
+		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
+		return
+	}
+	if isCall {
+		t.handleCallInvite(msg, asUid)
 	}
 }
 
@@ -1036,6 +1084,12 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 	// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
 	if (msg.Note.What == "read" || msg.Note.What == "recv") && !mode.IsReader() {
+		return
+	}
+
+	if msg.Note.What == "call" {
+		// Handle calls separately.
+		t.handleCallEvent(msg)
 		return
 	}
 

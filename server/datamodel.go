@@ -304,6 +304,10 @@ type MsgClientNote struct {
 	SeqId int `json:"seq,omitempty"`
 	// Client's count of unread messages to report back to the server. Used in push notifications on iOS.
 	Unread int `json:"unread,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used in video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 // MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
@@ -756,10 +760,14 @@ type MsgServerInfo struct {
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from"`
-	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used by video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 
 	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.
 	// They are still serialized for intra-cluster communication.
@@ -786,6 +794,9 @@ func (src *MsgServerInfo) describe() string {
 	s += " what=" + src.What + " from=" + src.From
 	if src.SeqId > 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	if len(src.Payload) > 0 {
+		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
 	}
 	return s
 }
@@ -1546,6 +1557,26 @@ func ErrPolicyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 // with explicit server and incoming request timestamps in response to a client request (422).
 func ErrPolicyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrPolicyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrCallBusyExplicitTs indicates a "busy" reply to a video call request (486).
+func ErrCallBusyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Id:        id,
+			Code:      486, // Busy here.
+			Text:      "busy here",
+			Topic:     topic,
+			Timestamp: serverTs,
+		},
+		Id:        id,
+		Timestamp: incomingReqTs,
+	}
+}
+
+// ErrCallBusyReply indicates a "busy" reply in response to a video call request (486)
+func ErrCallBusyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrCallBusyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrUnknown database or other server error (500).
