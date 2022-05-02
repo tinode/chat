@@ -296,6 +296,7 @@ type MsgClientDel struct {
 
 // MsgClientNote is a client-generated notification for topic subscribers {note}.
 type MsgClientNote struct {
+	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
 	Topic string `json:"topic"`
 	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
 	What string `json:"what"`
