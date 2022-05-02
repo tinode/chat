@@ -582,7 +582,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	case msg.Note != nil:
 		handler = s.note
-		msg.Id = msg.Note.Id
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
 
@@ -1209,12 +1208,14 @@ func (s *Session) note(msg *ClientComMessage) {
 		if msg.Note.SeqId != 0 {
 			return
 		}
-	case "read", "recv", "call":
-		if msg.Note.SeqId <= 0 {
+	case "call":
+		if types.GetTopicCat(msg.RcptTo) != types.TopicCatP2P {
+			// Calls are only available in P2P topics.
 			return
 		}
-		if msg.Note.What == "call" && !types.IsP2PTopic(msg.Original) {
-			// Calls are only available in P2P topics.
+		fallthrough
+	case "read", "recv":
+		if msg.Note.SeqId <= 0 {
 			return
 		}
 	default:
@@ -1269,7 +1270,7 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		routeTo = msg.AsUser
 	} else if msg.Original == "fnd" {
 		routeTo = types.ParseUserId(msg.AsUser).FndName()
-	} else if types.IsP2PTopic(msg.Original) {
+	} else if strings.HasPrefix(msg.Original, "usr") {
 		// p2p topic
 		uid1 := types.ParseUserId(msg.AsUser)
 		uid2 := types.ParseUserId(msg.Original)
