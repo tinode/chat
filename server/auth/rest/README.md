@@ -73,7 +73,7 @@ add logical renaming and disable `rest` at the original name:
 ```js
 ...
 "auth_config": {
-  "logical_names": ["basic:rest", "rest:"],
+  "logical_names": ["rest:basic", "basic:"],
   "rest": { ... },
   ...
 },
