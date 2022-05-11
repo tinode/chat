@@ -362,7 +362,7 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 // Cases:
 // 1. Topic being deleted
 // 1.1 Topic is online
-// 1.1.1 If the requester is the owner or if it's the last sub in a p2p topic:
+// 1.1.1 If the requester is the owner or if it's the last sub in a p2p topic (p2p may be sent internally when the last user unsubscribes):
 // 1.1.1.1 Tell topic to stop accepting requests.
 // 1.1.1.2 Hub deletes the topic from database
 // 1.1.1.3 Hub unregisters the topic
@@ -388,28 +388,38 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	now := types.TimeNow()
 
 	if reason == StopDeleted {
-		asUid := types.ParseUserId(msg.AsUser)
+		var asUid types.Uid
+		if msg != nil {
+			asUid = types.ParseUserId(msg.AsUser)
+		}
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			// Case 1.1: topic is online
-			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
+			if (!asUid.IsZero() && t.owner == asUid) || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
 				t.markPaused(true)
-				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+				hard := true
+				if msg != nil && msg.Del != nil {
+					hard = msg.Del.Hard
+				}
+				if err := store.Topics.Delete(topic, hard); err != nil {
 					t.markPaused(false)
-					sess.queueOut(ErrUnknownReply(msg, now))
+					if sess != nil {
+						sess.queueOut(ErrUnknownReply(msg, now))
+					}
 					return err
 				}
-
-				sess.queueOut(NoErrReply(msg, now))
+				if sess != nil {
+					sess.queueOut(NoErrReply(msg, now))
+				}
 
 				h.topicDel(topic)
 				t.markDeleted()
 				t.exit <- &shutDown{reason: StopDeleted}
 				statsInc("LiveTopics", -1)
 			} else {
-				// Case 1.1.2: requester is NOT the owner
+				// Case 1.1.2: requester is NOT the owner or not empty P2P.
 				msg.MetaWhat = constMsgDelTopic
 				msg.sess = sess
 				t.meta <- msg
@@ -428,7 +438,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			}
 
 			// For P2P topics get all subscribers: we need to know how many are left and notify them.
-			// For gourp topics (and channels) get just the user's subscription.
+			// For group topics (and channels) get just the user's subscription.
 			subs, err := store.Topics.GetSubs(topic, opts)
 			if err != nil {
 				sess.queueOut(ErrUnknownReply(msg, now))

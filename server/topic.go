@@ -3068,13 +3068,14 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 
 	t.evictUser(uid, true, "")
 
-	// If all P2P users were deleted, suspend the topic to let it shut down.
-	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
-		t.markDeleted()
-	}
-
 	// Notify plugins.
 	pluginSubscription(&types.Subscription{Topic: t.name, User: uid.UserId()}, plgActDel)
+
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markPaused(true)
+		globals.hub.unreg <- &topicUnreg{del: true, sess: nil, rcptTo: t.name, pkt: nil}
+	}
 
 	return nil
 }
@@ -3150,13 +3151,14 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
 
-	// If all P2P users were deleted, suspend the topic to let it shut down.
-	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
-		t.markDeleted()
-	}
-
 	// Notify plugins.
 	pluginSubscription(&types.Subscription{Topic: t.name, User: asUid.UserId()}, plgActDel)
+
+	// If all P2P users were deleted, suspend the topic to let it shut down.
+	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
+		t.markPaused(true)
+		globals.hub.unreg <- &topicUnreg{del: true, sess: nil, rcptTo: t.name, pkt: nil}
+	}
 
 	return nil
 }
