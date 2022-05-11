@@ -162,7 +162,7 @@ type Session struct {
 
 // Subscription is a mapper of sessions to topics.
 type Subscription struct {
-	// Channel to communicate with the topic, copy of Topic.broadcast
+	// Channel to communicate with the topic, copy of Topic.clientMsg
 	broadcast chan<- *ClientComMessage
 
 	// Session sends a signal to Topic when this session is unsubscribed
@@ -172,7 +172,7 @@ type Subscription struct {
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *ClientComMessage
 
-	// Channel to ping topic with session's updates
+	// Channel to ping topic with session's updates, copy of Topic.supd
 	supd chan<- *sessionUpdate
 }
 
