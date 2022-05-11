@@ -50,6 +50,8 @@ type newAccount struct {
 	Anon string `json:"anon,omitempty"`
 	// User's Public data
 	Public interface{} `json:"public,omitempty"`
+	// User's Trusted data
+	Trusted interface{} `json:"trusted,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
 }
@@ -206,9 +208,10 @@ func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Re
 		// Create account, get UID, report UID back to the server.
 
 		user := types.User{
-			State:  resp.Record.State,
-			Public: resp.NewAcc.Public,
-			Tags:   resp.Record.Tags,
+			State:   resp.Record.State,
+			Public:  resp.NewAcc.Public,
+			Trusted: resp.NewAcc.Trusted,
+			Tags:    resp.Record.Tags,
 		}
 		user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
 		user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
