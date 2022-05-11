@@ -388,11 +388,14 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	now := types.TimeNow()
 
 	if reason == StopDeleted {
-		asUid := types.ParseUserId(msg.AsUser)
+		var asUid types.Uid
+		if msg != nil {
+			asUid = types.ParseUserId(msg.AsUser)
+		}
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			// Case 1.1: topic is online
-			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
+			if (!asUid.IsZero() && t.owner == asUid) || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
 				t.markPaused(true)
