@@ -2945,27 +2945,16 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 	return nil
 }
 
-// Shut down the topic in response to {del what="topic"} request
-// See detailed description at hub.topicUnreg()
-// 1. Checks if the requester is the owner. If so:
-// 1.2 Evict all sessions
-// 1.3 Ask hub to unregister self
-// 1.4 Exit the run() loop
-// 2. If requester is not the owner:
-// 2.1 If this is a p2p topic:
-// 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
-// 2.1.2 If the other subscription does not exist, delete topic
-// 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
+// Handle request to delete the topic {del what="topic"}.
+// 1. If requester is the owner then it should have been handled at the hub, log an error.
+// 2. If requester is not the owner, treat it like {leave unsub=true}.
 func (t *Topic) replyDelTopic(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	if t.owner != asUid {
-		// Cases 2.1.1 and 2.2
-		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(sess, msg, asUid)
-		}
+		return t.replyLeaveUnsub(sess, msg, asUid)
 	}
 
-	// Notifications are sent from the topic loop.
-
+	// This is an indication of a bug.
+	logs.Err.Println("replyDelTopic called by owner (SHOULD NOT HAPPEN!)")
 	return nil
 }
 

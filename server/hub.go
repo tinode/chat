@@ -397,11 +397,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			// Case 1.1: topic is online
 			if (!asUid.IsZero() && t.owner == asUid) || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
-
 				t.markPaused(true)
 				hard := true
 				if msg != nil && msg.Del != nil {
-					hard = msg.Del.Hard
+					// Soft-deleting does not make sense for p2p topics.
+					hard = msg.Del.Hard || t.cat == types.TopicCatP2P
 				}
 				if err := store.Topics.Delete(topic, hard); err != nil {
 					t.markPaused(false)
@@ -446,6 +446,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			}
 
 			if len(subs) == 0 {
+				if tcat == types.TopicCatP2P {
+					// No subscribers: delete.
+					store.Topics.Delete(topic, true)
+				}
 				sess.queueOut(InfoNoActionReply(msg, now))
 				return nil
 			}
