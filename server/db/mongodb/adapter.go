@@ -54,6 +54,7 @@ const (
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
+	// Connection string URI https://www.mongodb.com/docs/manual/reference/connection-string/
 	Uri            string      `json:"uri,omitempty"`
 	Addresses      interface{} `json:"addresses,omitempty"`
 	ConnectTimeout int         `json:"timeout,omitempty"`
@@ -169,11 +170,11 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
-	// Check URI at last if need to override other options
+	// Connection string URI overrides any other options configured earlier.
 	if config.Uri != "" {
 		opts.ApplyURI(config.Uri)
-		serverAPIOptions := mdbopts.ServerAPI(mdbopts.ServerAPIVersion1)
-		opts.SetServerAPIOptions(serverAPIOptions)
+		// serverAPIOptions := mdbopts.ServerAPI(mdbopts.ServerAPIVersion1)
+		// opts.SetServerAPIOptions(serverAPIOptions)
 	}
 
 	a.ctx = context.Background()
