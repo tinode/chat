@@ -177,6 +177,11 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		// opts.SetServerAPIOptions(serverAPIOptions)
 	}
 
+	// Make sure the options are sane.
+	if err = opts.Validate(); err != nil {
+		return err
+	}
+
 	a.ctx = context.Background()
 	a.conn, err = mdb.Connect(a.ctx, &opts)
 	a.db = a.conn.Database(a.dbName)
