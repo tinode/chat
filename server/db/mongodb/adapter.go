@@ -170,11 +170,11 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
+	opts.SetServerAPIOptions(mdbopts.ServerAPI(mdbopts.ServerAPIVersion1))
+
 	// Connection string URI overrides any other options configured earlier.
 	if config.Uri != "" {
 		opts.ApplyURI(config.Uri)
-		// serverAPIOptions := mdbopts.ServerAPI(mdbopts.ServerAPIVersion1)
-		// opts.SetServerAPIOptions(serverAPIOptions)
 	}
 
 	// Make sure the options are sane.
