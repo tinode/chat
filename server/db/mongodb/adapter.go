@@ -72,6 +72,9 @@ type configType struct {
 	TlsCertFile        string `json:"tls_cert_file,omitempty"`
 	TlsPrivateKey      string `json:"tls_private_key,omitempty"`
 	InsecureSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+
+	// The only version supported at this time is "1".
+	APIVersion mdbopts.ServerAPIVersion `json:"api_version,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -170,11 +173,13 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
-	opts.SetServerAPIOptions(mdbopts.ServerAPI(mdbopts.ServerAPIVersion1))
-
 	// Connection string URI overrides any other options configured earlier.
 	if config.Uri != "" {
 		opts.ApplyURI(config.Uri)
+	}
+
+	if config.APIVersion != "" {
+		opts.SetServerAPIOptions(mdbopts.ServerAPI(config.APIVersion))
 	}
 
 	// Make sure the options are sane.
