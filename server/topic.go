@@ -1613,26 +1613,38 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			userData.modeWant = modeWant
 		}
 
+		// Create a subscription object to notify plugins.
+		sub := types.Subscription{
+			User:  asUid.String(),
+			Topic: t.name,
+		}
+
 		// Save changes to DB
 		update := map[string]interface{}{}
 		if isNullValue(private) {
 			update["Private"] = nil
 			userData.private = nil
+			sub.Private = private
 		} else if private != nil {
 			update["Private"] = private
 			userData.private = private
+			sub.Private = private
 		}
 		if userData.modeWant != oldWant {
 			update["ModeWant"] = userData.modeWant
+			sub.ModeWant = userData.modeWant
 		}
 		if userData.modeGiven != oldGiven {
 			update["ModeGiven"] = userData.modeGiven
+			sub.ModeGiven = userData.modeGiven
 		}
+
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update); err != nil {
 				sess.queueOut(ErrUnknownReply(pkt, now))
 				return nil, err
 			}
+			pluginSubscription(&sub, plgActUpd)
 		}
 
 		// No transactions in RethinkDB, but two owners are better than none
