@@ -1969,6 +1969,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			desc.Public = t.public
 			desc.Trusted = t.trusted
 		} else if full && t.cat == types.TopicCatP2P {
+			// FIXME: when a P2P participant updates desc at 'me', these cached values are not updated.
 			desc.Public = pud.public
 			desc.Trusted = pud.trusted
 		}
@@ -2334,7 +2335,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 		}
 	case types.TopicCatP2P:
-		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
+		// TODO(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
 		// No need to load Public for p2p topics.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.

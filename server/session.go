@@ -670,7 +670,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		s.queueOut(InfoNotJoined(msg.Id, msg.Original, msg.Timestamp))
 	} else {
 		// Session wants to unsubscribe from the topic it did not join
-		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
+		// TODO(gene): allow topic to unsubscribe without joining first; send to hub to unsub
 		logs.Warn.Println("s.leave:", "must attach first", s.sid)
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 	}
