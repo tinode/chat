@@ -16,7 +16,6 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -801,20 +800,11 @@ func (t *Topic) sessToForeground(sess *Session) {
 	}
 }
 
-// Subscribe or unsubscribe user to/from FCM topic (channel).
-func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
-	push.ChannelSub(&push.ChannelReq{
-		Uid:     uid,
-		Channel: types.GrpToChn(t.name),
-		Unsub:   !sub,
-	})
-}
-
 // Send immediate presence notification in response to a subscription.
 // Send push notification to the P2P counterpart.
 // In case of a new channel subscription subscribe user to an FCM topic.
 // These notifications are always sent immediately even if background is requested.
-func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *ClientComMessage) {
+func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *ClientComMessage, now time.Time) {
 	modeWant, _ := types.ParseAcs([]byte(acs.Want))
 	modeGiven, _ := types.ParseAcs([]byte(acs.Given))
 	mode := modeWant & modeGiven
@@ -852,16 +842,12 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			t.presSingleUserOffline(uid2, mode2, status, nilPresParams, "", false)
 
 			// Also send a push notification to the other user.
-			if pushRcpt := t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
-				usersPush(pushRcpt)
-			}
+			sendPush(t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, now))
 		}
 	} else if t.cat == types.TopicCatGrp {
 		if sreg.Sub.Newsub {
 			// For new subscriptions, notify other group members.
-			if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
-				usersPush(pushRcpt)
-			}
+			sendPush(t.pushForGroupSub(asUid, now))
 		}
 	}
 
@@ -1011,9 +997,9 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 
 	t.broadcastToSessions(data)
 
-	// usersPush will update unread message count and send push notification.
+	// sendPush will update unread message count and send push notification.
 	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
-		usersPush(pushRcpt)
+		sendPush(pushRcpt)
 	}
 }
 
@@ -1103,6 +1089,11 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 		// Read/recv updated: notify user's other sessions of the change
 		t.presPubMessageCount(asUid, mode, read, recv, msg.sess.sid)
+
+		if read > 0 {
+			// Send push notification to other user devices.
+			sendPush(t.pushForReadRcpt(asUid, read, msg.Timestamp))
+		}
 
 		// Update cached count of unread messages (not tracking unread messages fror channels).
 		if !asChan {
@@ -1329,7 +1320,7 @@ func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 
 	// Some notifications are always sent immediately.
 	if modeChanged != nil {
-		t.sendImmediateSubNotifications(asUid, modeChanged, msg)
+		t.sendImmediateSubNotifications(asUid, modeChanged, msg, now)
 	}
 
 	if !msg.sess.background && hasJoined {
@@ -1878,10 +1869,8 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		pluginSubscription(sub, plgActCreate)
 
 		// Send push notification for the new subscription.
-		if pushRcpt := t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
-			// TODO: maybe skip user's devices which were online when this event has happened.
-			usersPush(pushRcpt)
-		}
+		// TODO: maybe skip user's devices which were online when this event has happened.
+		sendPush(t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now))
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
 		oldGiven = userData.modeGiven
@@ -3339,109 +3328,6 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 		// Notify target's other sessions on 'me'.
 		t.presSingleUserOffline(uid, newWant&newGiven, "acs", params, skip, true)
 	}
-}
-
-// Prepares a payload to be delivered to a mobile device as a push notification in response to a {data} message.
-func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receipt {
-	// Passing `Topic` as `t.name` for group topics and P2P topics. The p2p topic name is later rewritten for
-	// each recipient then the payload is created: p2p recepient sees the topic as the ID of the other user.
-
-	// Initialize the push receipt.
-	contentType, _ := data.Head["mime"].(string)
-	receipt := push.Receipt{
-		To: make(map[types.Uid]push.Recipient, t.subsCount()),
-		Payload: push.Payload{
-			What:        push.ActMsg,
-			Silent:      false,
-			Topic:       t.name,
-			From:        data.From,
-			Timestamp:   data.Timestamp,
-			SeqId:       data.SeqId,
-			ContentType: contentType,
-			Content:     data.Content,
-		},
-	}
-
-	if t.isChan {
-		// Channel readers should get a push on a channel name (as an FCM topic push).
-		receipt.Channel = types.GrpToChn(t.name)
-	}
-
-	for uid, pud := range t.perUser {
-		online := pud.online
-		if uid == fromUid && online == 0 {
-			// Make sure the sender's devices receive a silent push.
-			online = 1
-		}
-
-		// Send only to those who have notifications enabled.
-		mode := pud.modeWant & pud.modeGiven
-		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
-			receipt.To[uid] = push.Recipient{
-				// Number of attached sessions the data message will be delivered to.
-				// Push notifications sent to users with non-zero online sessions will be marked silent.
-				Delivered: online,
-			}
-		}
-	}
-	if len(receipt.To) > 0 || receipt.Channel != "" {
-		return &receipt
-	}
-	// If there are no recipient there is no need to send the push notification.
-	return nil
-}
-
-func (t *Topic) preparePushForSubReceipt(fromUid types.Uid, now time.Time) *push.Receipt {
-	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
-	// not the t.original(fromUid) because it's the topic name as seen by the recipient, not by the sender.
-	topic := t.xoriginal
-	if t.cat == types.TopicCatP2P {
-		topic = fromUid.UserId()
-	}
-
-	// Initialize the push receipt.
-	receipt := &push.Receipt{
-		To: make(map[types.Uid]push.Recipient, t.subsCount()),
-		Payload: push.Payload{
-			What:      push.ActSub,
-			Silent:    false,
-			Topic:     topic,
-			From:      fromUid.UserId(),
-			Timestamp: now,
-			SeqId:     t.lastID,
-		},
-	}
-	return receipt
-}
-
-// Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a p2p topic.
-func (t *Topic) pushForP2PSub(fromUid, toUid types.Uid, want, given types.AccessMode, now time.Time) *push.Receipt {
-	receipt := t.preparePushForSubReceipt(fromUid, now)
-	receipt.Payload.ModeWant = want
-	receipt.Payload.ModeGiven = given
-
-	receipt.To[toUid] = push.Recipient{}
-
-	return receipt
-}
-
-// Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a group topic.
-func (t *Topic) pushForGroupSub(fromUid types.Uid, now time.Time) *push.Receipt {
-	receipt := t.preparePushForSubReceipt(fromUid, now)
-	for uid, pud := range t.perUser {
-		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid == fromUid {
-			continue
-		}
-		mode := pud.modeWant & pud.modeGiven
-		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
-			receipt.To[uid] = push.Recipient{}
-		}
-	}
-	if len(receipt.To) > 0 || receipt.Channel != "" {
-		return receipt
-	}
-	return nil
 }
 
 // FIXME: this won't work correctly with multiplexing sessions.

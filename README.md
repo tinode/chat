@@ -82,7 +82,7 @@ When you register a new account you are asked for an email address to send valid
   * [Web](https://github.com/tinode/webapp/) (React.js)
   * Scriptable [command line](tn-cli/) (Python)
 * User features:
-  * One-on-one and group messaging.
+  * One-on-one and group messaging. Voice messages.
   * Channels with unlimited number of read-only subscribers.
   * Granular access control with permissions for various actions.
   * User search/discovery.
@@ -114,7 +114,7 @@ When you register a new account you are asked for an email address to send valid
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * Video or audio calling.
-* Voice and video messages, location sharing.
+* Location sharing.
 * Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
@@ -141,7 +141,14 @@ All client software has support for [internationalization](docs/translations.md)
 
 More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali, Turkish.
 
-## Third-Party Licenses
+## Third-Party
+
+### Projects
+
+* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango)
+* [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) (outdated)
+
+### Licenses
 
 * Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/) and https://pixabay.com/ under their [license](https://pixabay.com/service/license/).
 * Web and Android background patterns are from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.

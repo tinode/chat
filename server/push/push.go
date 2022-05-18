@@ -15,6 +15,8 @@ const (
 	ActMsg = "msg"
 	// New subscription.
 	ActSub = "sub"
+	// Messages read: clear unread count.
+	ActRead = "read"
 )
 
 // MaxPayloadLength is the maximum length of push payload in multibyte characters.
