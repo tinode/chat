@@ -49,12 +49,12 @@ If `tp` is provided, it means the style is a basic text decoration:
  * `DL`: deleted or strikethrough text: ~~strikethrough~~.
  * `EM`: emphasized text, usually represented as italic: _italic_.
  * `FM`: form / set of fields; may also be represented as an entity.
- * `HD`: hidden text.
+ * `HD`: hidden content.
  * `HL`: highlighted text, such as text in a different color or with a different background; the color cannot be specified.
  * `RW`: logical grouping of formats, a row; may also be represented as an entity.
  * `ST`: strong or bold text: **bold**.
 
-If key is provided, it's a 0-based index into the `ent` field which contains extended style parameters such as an image or an URL:
+If key is provided, it's a 0-based index into the `ent` array which contains extended style parameters such as an image or an URL:
  * `AU`: embedded audio.
  * `BN`: interactive button.
  * `EX`: generic attachment.
@@ -64,6 +64,7 @@ If key is provided, it's a 0-based index into the `ent` field which contains ext
  * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co).
  * `MN`: mention such as [@tinode](#).
  * `RW`: logical grouping of formats, a row; may also be represented as a basic decoration.
+ * `VC`: reserved for video and audio calls (not implemented yet).
 
 Examples:
  * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
@@ -71,6 +72,8 @@ Examples:
  * `{ "at":-1, "len":0, "key":4 }`: show the `ent[4]` as a file attachment, don't apply any styling to text.
 
 The clients should be able to handle missing `at`, `key`, and `len` values. Missing values are assumed to be equal to `0`.
+
+The indexes `at` and `len` are measured in [Unicode code points](https://developer.mozilla.org/en-US/docs/Glossary/Code_point), not bytes or characters. The behavior of multi-codepoint glyphs such as emojis with Fitzpatrick skin tone modifiers, variation selectors, or grouped with `ZWJ` is currently undefined.
 
 #### `FM`: a form, an ordered set or fields
 
@@ -134,7 +137,7 @@ The `data.su` describes how interactive form elements behave after the click. An
 In general, an entity is a text decoration which requires additional (possibly large) data. An entity is represented by an object with two fields: `tp` indicates type of the entity, `data` is type-dependent styling information. Unknown fields are ignored.
 
 #### `AU`: embedded audio record
-`IM` is an image. The `data` contains the following fields:
+`AU` is an audio record. The `data` contains the following fields:
 ```js
 {
   "tp": "AU",
@@ -281,6 +284,7 @@ Mention `data` contains a single `val` field with ID of the mentioned user:
 ```js
 { "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }
 ```
+
 
 #### `HT`: hashtag, e.g. [#tinode](#)
 Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
