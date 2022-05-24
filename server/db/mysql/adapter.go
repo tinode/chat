@@ -1940,7 +1940,7 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
 	args := []interface{}{topic}
 	if isChan {
-		args = append(args, types.GrpToChn(topic))
+		args = append(args, t.GrpToChn(topic))
 	}
 
 	if hard {

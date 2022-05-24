@@ -1742,7 +1742,7 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 		// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
 		filter["$or"] = b.A{
 			b.M{"topic": topic},
-			b.M{"topic": types.GrpToChn(topic)},
+			b.M{"topic": t.GrpToChn(topic)},
 		}
 	} else {
 		filter["topic"] = topic
