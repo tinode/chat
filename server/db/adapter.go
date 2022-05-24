@@ -115,7 +115,7 @@ type Adapter interface {
 	// TopicShare creates topc subscriptions
 	TopicShare(subs []*t.Subscription) error
 	// TopicDelete deletes topic, subscription, messages
-	TopicDelete(topic string, hard bool) error
+	TopicDelete(topic string, isChan, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	// TopicUpdate updates topic record.

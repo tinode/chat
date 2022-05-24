@@ -403,7 +403,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					// Soft-deleting does not make sense for p2p topics.
 					hard = msg.Del.Hard || t.cat == types.TopicCatP2P
 				}
-				if err := store.Topics.Delete(topic, hard); err != nil {
+				if err := store.Topics.Delete(topic, t.isChan, hard); err != nil {
 					t.markPaused(false)
 					if sess != nil {
 						sess.queueOut(ErrUnknownReply(msg, now))
@@ -448,7 +448,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			if len(subs) == 0 {
 				if tcat == types.TopicCatP2P {
 					// No subscribers: delete.
-					store.Topics.Delete(topic, true)
+					store.Topics.Delete(topic, false, true)
 				}
 				sess.queueOut(InfoNoActionReply(msg, now))
 				return nil
@@ -474,7 +474,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
-					if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+					if err := store.Topics.Delete(topic, false, msg.Del.Hard); err != nil {
 						sess.queueOut(ErrUnknownReply(msg, now))
 						return err
 					}
@@ -507,9 +507,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Inform plugin that the subscription was deleted.
 				pluginSubscription(sub, plgActDel)
 			} else {
-				// Case 1.2.1.1: owner, delete the group topic from db.
-				// Only group topics have owners.
-				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+				// Case 1.2.1.1: owner, delete the group topic from db. Only group topics have owners.
+				// We don't know if the group topic is a channel, but cleaning it as a channel does no harm
+				// other than a small performance penalty.
+				if err := store.Topics.Delete(topic, true, msg.Del.Hard); err != nil {
 					sess.queueOut(ErrUnknownReply(msg, now))
 					return err
 				}

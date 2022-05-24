@@ -56,6 +56,7 @@ func initUsers() {
 	users[2].State = types.StateDeleted
 	users[2].StateAt = &deletedAt
 }
+
 func initCreds() {
 	creds = append(creds, &types.Credential{ // 0
 		User:   users[0].Id,
@@ -96,6 +97,7 @@ func initCreds() {
 	creds[3].CreatedAt = now.Add(-10 * time.Minute)
 	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
 }
+
 func initAuthRecords() {
 	recs = append(recs, authRecord{
 		Id:      "basic:alice",
@@ -114,6 +116,7 @@ func initAuthRecords() {
 		Expires: now.Add(24 * time.Hour),
 	})
 }
+
 func initTopics() {
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{

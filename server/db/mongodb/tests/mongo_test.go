@@ -1077,7 +1077,7 @@ func TestMessageDeleteList(t *testing.T) {
 }
 
 func TestTopicDelete(t *testing.T) {
-	err := adp.TopicDelete(topics[1].Id, false)
+	err := adp.TopicDelete(topics[1].Id, false, false)
 	if err != nil {
 		t.Fatal()
 	}
@@ -1095,7 +1095,7 @@ func TestTopicDelete(t *testing.T) {
 		}
 	}
 
-	err = adp.TopicDelete(topics[0].Id, true)
+	err = adp.TopicDelete(topics[0].Id, true, true)
 	if err != nil {
 		t.Fatal()
 	}

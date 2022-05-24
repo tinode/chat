@@ -776,17 +776,17 @@ func (mr *MockTopicsPersistenceInterfaceMockRecorder) CreateP2P(initiator, invit
 }
 
 // Delete mocks base method.
-func (m *MockTopicsPersistenceInterface) Delete(topic string, hard bool) error {
+func (m *MockTopicsPersistenceInterface) Delete(topic string, isChan, hard bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", topic, hard)
+	ret := m.ctrl.Call(m, "Delete", topic, isChan, hard)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockTopicsPersistenceInterfaceMockRecorder) Delete(topic, hard interface{}) *gomock.Call {
+func (mr *MockTopicsPersistenceInterfaceMockRecorder) Delete(topic, isChan, hard interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).Delete), topic, hard)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).Delete), topic, isChan, hard)
 }
 
 // Get mocks base method.

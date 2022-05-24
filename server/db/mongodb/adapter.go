@@ -1736,13 +1736,23 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 }
 
 // TopicDelete deletes topic, subscription, messages
-func (a *adapter) TopicDelete(topic string, hard bool) error {
-	err := a.subsDelete(a.ctx, b.M{"topic": topic}, hard)
+func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
+	filter := b.M{}
+	if isChan {
+		// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
+		filter["$or"] = b.A{
+			b.M{"topic": topic},
+			b.M{"topic": types.GrpToChn(topic)},
+		}
+	} else {
+		filter["topic"] = topic
+	}
+	err := a.subsDelete(a.ctx, filter, hard)
 	if err != nil {
 		return err
 	}
 
-	filter := b.M{"_id": topic}
+	filter = b.M{"_id": topic}
 	if hard {
 		if err = a.MessageDeleteList(topic, nil); err != nil {
 			return err

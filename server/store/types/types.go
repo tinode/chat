@@ -1059,7 +1059,7 @@ type Topic struct {
 	// Timestamp when the last message has passed through the topic
 	TouchedAt time.Time
 
-	// Use bearer token or use ACL
+	// Indicates that the topic is a channel.
 	UseBt bool
 
 	// Topic owner. Could be zero

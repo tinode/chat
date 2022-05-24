@@ -1921,7 +1921,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 }
 
 // TopicDelete deletes specified topic.
-func (a *adapter) TopicDelete(topic string, hard bool) error {
+func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -1937,8 +1937,17 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 		}
 	}()
 
+	// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
+	args := []interface{}{topic}
+	if isChan {
+		args = append(args, types.GrpToChn(topic))
+	}
+
 	if hard {
-		if _, err = tx.Exec("DELETE FROM subscriptions WHERE topic=?", topic); err != nil {
+		// Delete subscriptions. If this is a channel, delete both group subscriptions and channel subscriptions.
+		q, args, _ := sqlx.In("DELETE FROM subscriptions WHERE topic IN (?)", args)
+		q = tx.Rebind(q)
+		if _, err = tx.Exec(q, args...); err != nil {
 			return err
 		}
 
@@ -1955,8 +1964,10 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 		}
 	} else {
 		now := t.TimeNow()
-		if _, err = tx.Exec("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=?",
-			now, now, topic); err != nil {
+
+		q, args, _ := sqlx.In("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, args)
+		q = tx.Rebind(q)
+		if _, err = tx.Exec(q, args...); err != nil {
 			return err
 		}
 
