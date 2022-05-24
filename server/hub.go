@@ -427,24 +427,22 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		} else {
 			// Case 1.2: topic is offline.
 
-			tcat := topicCat(topic)
+			// Is user a channel subscriber? Use chnABC instead of grpABC and get only this user's subscription.
 			var opts *types.QueryOpt
-			if tcat == types.TopicCatGrp {
+			if types.IsChannel(msg.Original) {
+				topic = msg.Original
 				opts = &types.QueryOpt{User: asUid}
-				// Is user a channel subscriber? Use chnABC instead of grpABC.
-				if types.IsChannel(msg.Original) {
-					topic = msg.Original
-				}
 			}
 
-			// For P2P topics get all subscribers: we need to know how many are left and notify them.
-			// For group topics (and channels) get just the user's subscription.
+			// Get all subscribers of non-channel topics: we need to know how many are left and notify them.
+			// Get only one subscription for channel users.
 			subs, err := store.Topics.GetSubs(topic, opts)
 			if err != nil {
 				sess.queueOut(ErrUnknownReply(msg, now))
 				return err
 			}
 
+			tcat := topicCat(topic)
 			if len(subs) == 0 {
 				if tcat == types.TopicCatP2P {
 					// No subscribers: delete.
@@ -454,9 +452,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				return nil
 			}
 
+			// Find subscription of the current user.
 			var sub *types.Subscription
 			user := asUid.String()
-			for i := 0; i < len(subs); i++ {
+			for i := range subs {
 				if subs[i].User == user {
 					sub = &subs[i]
 					break
@@ -516,7 +515,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				}
 
 				// Notify subscribers that the group topic is gone.
-				presSubsOfflineOffline(msg.Original, tcat, subs, "gone", &presParams{}, sess.sid)
+				presSubsOfflineOffline(topic, tcat, subs, "gone", &presParams{}, sess.sid)
 
 				// Inform plugin that the topic was deleted.
 				pluginTopic(&Topic{name: topic}, plgActDel)
