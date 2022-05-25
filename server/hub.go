@@ -387,6 +387,8 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, reason int) error {
 	now := types.TimeNow()
 
+	// TODO: when channel is deleted unsubscribe all devices from channel's FCM topic.
+
 	if reason == StopDeleted {
 		var asUid types.Uid
 		if msg != nil {
@@ -412,6 +414,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				}
 				if sess != nil {
 					sess.queueOut(NoErrReply(msg, now))
+				}
+
+				if t.isChan {
+					// Notify channel subscribers that the channel is deleted.
+					sendPush(pushForChanDelete(t.name, now))
 				}
 
 				h.topicDel(topic)
@@ -516,6 +523,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				// Notify subscribers that the group topic is gone.
 				presSubsOfflineOffline(topic, tcat, subs, "gone", &presParams{}, sess.sid)
+
+				// Notify channel subscribers that the channel is deleted.
+				// The push will not be delivered to anybody if the topic is not a channel.
+				sendPush(pushForChanDelete(topic, now))
 
 				// Inform plugin that the topic was deleted.
 				pluginTopic(&Topic{name: topic}, plgActDel)

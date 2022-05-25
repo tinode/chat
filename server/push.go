@@ -126,6 +126,23 @@ func (t *Topic) pushForGroupSub(fromUid types.Uid, now time.Time) *push.Receipt 
 	return nil
 }
 
+// Prepares payload to be delivered to a mobile device as a push notification in response to owner deleting a channel.
+func pushForChanDelete(topicName string, now time.Time) *push.Receipt {
+	topicName = types.GrpToChn(topicName)
+	// Initialize the push receipt.
+	return &push.Receipt{
+		Payload: push.Payload{
+			What:      push.ActSub,
+			Silent:    true,
+			Topic:     topicName,
+			Timestamp: now,
+			ModeWant:  types.ModeNone,
+			ModeGiven: types.ModeNone,
+		},
+		Channel: topicName,
+	}
+}
+
 // Prepares payload to be delivered to a mobile device as a push notification in response to receiving "read" notification.
 func (t *Topic) pushForReadRcpt(uid types.Uid, seq int, now time.Time) *push.Receipt {
 	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,

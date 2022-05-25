@@ -78,9 +78,10 @@ type Payload struct {
 	// Actual Data.Content of the message, if requested
 	Content interface{} `json:"content,omitempty"`
 
-	// New subscription notification
+	// Subscription change notification.
 
-	// Access mode when notifying of new subscriptions.
+	// New access mode when notifying of a subscription change.
+	// ModeNone for both means the subscription is removed.
 	ModeWant  t.AccessMode `json:"want,omitempty"`
 	ModeGiven t.AccessMode `json:"given,omitempty"`
 }
