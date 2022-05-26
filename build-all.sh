@@ -85,7 +85,7 @@ do
   rm -f ./releases/tmp/keygen*
 
   # Keygen is database-independent
-  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o ./releases/tmp ./keygen > /dev/null
+  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o ./releases/tmp/keygen ./keygen > /dev/null
 
   for dbtag in "${dbtags[@]}"
   do
