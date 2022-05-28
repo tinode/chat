@@ -251,7 +251,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 	t.broadcastToSessions(resp)
 
 	// Let all other sessions know the call is over.
-	for tgt, _ := range t.perUser {
+	for tgt := range t.perUser {
 		t.infoCallSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
 	}
 	t.currentCall = nil
