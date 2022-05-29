@@ -1028,7 +1028,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	isCall := msg.Pub.Head != nil && msg.Pub.Head["mime"] == constTinodeVideoCallMimeType
+	isCall := msg.Pub.Head != nil && msg.Pub.Head["webrtc"] != nil
 	if isCall {
 		if t.currentCall != nil {
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
