@@ -1221,7 +1221,7 @@ func ErrAuthRequiredReply(msg *ClientComMessage, ts time.Time) *ServerComMessage
 }
 
 // ErrAuthFailed authentication failed
-// with explicit server and incoming request timestamps (400).
+// with explicit server and incoming request timestamps (401).
 func ErrAuthFailed(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
