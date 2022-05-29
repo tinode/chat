@@ -52,12 +52,20 @@ type videoCall struct {
 	parties map[*Session]callPartyData
 	// Call message seq ID.
 	seq int
+	// Call message content.
+	content interface{}
+	// Time when the call was accepted.
+	acceptedAt time.Time
 }
 
-func (call *videoCall) messageHead() map[string]interface{} {
+func (call *videoCall) messageHead(newState string, duration int64) map[string]interface{} {
 	head := make(map[string]interface{})
 	head["mime"] = constTinodeVideoCallMimeType
 	head["replace"] = ":" + strconv.Itoa(call.seq)
+	head["webrtc"] = newState
+	if duration > 0 {
+		head["webrtc-duration"] = duration
+	}
 	return head
 }
 
@@ -103,8 +111,10 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	t.infoCallSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
 	// Call being establshed.
 	t.currentCall = &videoCall{
-		parties: make(map[*Session]callPartyData),
-		seq:     t.lastID,
+		parties:    make(map[*Session]callPartyData),
+		seq:        t.lastID,
+		content:    msg.Pub.Content,
+		acceptedAt: time.Now(),
 	}
 	t.currentCall.parties[msg.sess] = callPartyData{
 		uid:          asUid,
@@ -119,19 +129,16 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	if t.currentCall == nil {
 		// Must initiate call first.
-		//msg.sess.queueOut(ErrOperationNotAllowedReply(msg, types.TimeNow()))
 		return
 	}
 	if t.isInactive() {
 		// Topic is paused or being deleted.
-		//msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 		return
 	}
 
 	call := msg.Note
 	if t.currentCall.seq != call.SeqId {
 		// Call not found.
-		//msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		return
 	}
 
@@ -140,7 +147,6 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	_, userFound := t.perUser[asUid]
 	if !userFound {
 		// User not found in topic.
-		//msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		return
 	}
 
@@ -149,19 +155,16 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		// Invariants:
 		// 1. Call has been initiated but not been established yet.
 		if len(t.currentCall.parties) != 1 {
-			//msg.sess.queueOut(ErrOperationNotAllowedReply(msg, types.TimeNow()))
 			return
 		}
 		originatorUid, originator := t.getCallOriginator()
 		if originator == nil {
 			logs.Warn.Printf("topic[%s]: video call (seq %d) has no originator. Terminating.", t.name, t.currentCall.seq)
-			//msg.sess.queueOut(ErrOperationNotAllowedReply(msg, types.TimeNow()))
 			t.terminateCallInProgress()
 			return
 		}
 		// 2. These events may only arrive from the callee.
 		if originator == msg.sess || originatorUid == asUid {
-			//msg.sess.queueOut(ErrOperationNotAllowedReply(msg, types.TimeNow()))
 			return
 		}
 		// Prepare a {info} message to forward to the call originator.
@@ -172,11 +175,11 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			// The call has been accepted.
 			// Send a replacement {data} message to the topic.
 			replaceWith := constCallMsgAccepted
-			head := t.currentCall.messageHead()
+			head := t.currentCall.messageHead(replaceWith, 0)
 			msgCopy := *msg
 			msgCopy.AsUser = originatorUid.UserId()
 			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil,
-				head, replaceWith); err != nil {
+				head, t.currentCall.content); err != nil {
 				return
 			}
 			// Add callee data to t.currentCall.
@@ -203,13 +206,9 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			}
 		}
 		if otherEnd == nil {
-			//msg.sess.queueOut(ErrUserNotFoundReply(msg, types.TimeNow()))
 			return
 		}
-		// All is good.
-		//msg.sess.queueOut(NoErrReply(msg, types.TimeNow()))
-
-		// Send {info} message to the otherEnd.
+		// All is good. Send {info} message to the otherEnd.
 		forwardMsg := t.currentCall.infoMessage(call.Event)
 		forwardMsg.Info.From = msg.AsUser
 		forwardMsg.Info.Topic = t.original(otherUid)
@@ -230,19 +229,21 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 	t.callEstablishmentTimer.Stop()
 	originator, _ := t.getCallOriginator()
 	var replaceWith string
+	var callDuration int64
 	if from != "" && len(t.currentCall.parties) == 2 {
 		// This is a call in progress.
 		replaceWith = constCallMsgFinished
+		callDuration = time.Now().Sub(t.currentCall.acceptedAt).Milliseconds()
 	} else {
 		// Call hasn't been established. Just drop it.
 		replaceWith = constCallMsgDisconnected
 	}
 
 	// Send a message indicating the call has ended.
-	head := t.currentCall.messageHead()
+	head := t.currentCall.messageHead(replaceWith, callDuration)
 	msgCopy := *msg
 	msgCopy.AsUser = originator.UserId()
-	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, head, replaceWith); err != nil {
+	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, head, t.currentCall.content); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 
