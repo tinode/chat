@@ -31,10 +31,10 @@ const (
 	// Call finished by either side or server.
 	constCallEventHangUp = "hang-up"
 
-	// Messages representing call states.
+	// Message headers representing call states.
 	// Call is established.
 	constCallMsgAccepted = "accepted"
-	// Call in progress has successfully finished.
+	// Previously establied call has successfully finished.
 	constCallMsgFinished = "finished"
 	// Call is dropped.
 	constCallMsgDisconnected = "disconnected"
