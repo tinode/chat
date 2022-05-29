@@ -162,7 +162,7 @@ type Session struct {
 
 // Subscription is a mapper of sessions to topics.
 type Subscription struct {
-	// Channel to communicate with the topic, copy of Topic.broadcast
+	// Channel to communicate with the topic, copy of Topic.clientMsg
 	broadcast chan<- *ClientComMessage
 
 	// Session sends a signal to Topic when this session is unsubscribed
@@ -172,7 +172,7 @@ type Subscription struct {
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *ClientComMessage
 
-	// Channel to ping topic with session's updates
+	// Channel to ping topic with session's updates, copy of Topic.supd
 	supd chan<- *sessionUpdate
 }
 
@@ -670,7 +670,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		s.queueOut(InfoNotJoined(msg.Id, msg.Original, msg.Timestamp))
 	} else {
 		// Session wants to unsubscribe from the topic it did not join
-		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
+		// TODO(gene): allow topic to unsubscribe without joining first; send to hub to unsub
 		logs.Warn.Println("s.leave:", "must attach first", s.sid)
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 	}

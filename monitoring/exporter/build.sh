@@ -1,17 +1,15 @@
 #!/bin/bash
 
-# Cross-compiling script using https://github.com/mitchellh/gox
 # This scripts build and archives binaries and supporting files.
 
-# Check if gox is installed. Abort otherwise.
-command -v gox >/dev/null 2>&1 || {
-  echo >&2 "This script requires https://github.com/mitchellh/gox. Please install it before running."; exit 1;
-}
+# Supported OSs: mac (darwin), windows, linux.
+goplat=( darwin darwin windows linux )
 
-# Supported OSs: darwin windows linux
-goplat=( darwin windows linux )
-# Supported CPU architectures: amd64
-goarc=( amd64 )
+# CPUs architectures: amd64 and arm64. The same order as OSs.
+goarc=( amd64 arm64 amd64 amd64 )
+
+# Number of platform+architectures.
+buildCount=${#goplat[@]}
 
 for line in $@; do
   eval "$line"
@@ -32,35 +30,41 @@ GOSRC=${GOPATH}/src/github.com/tinode
 
 pushd ${GOSRC}/chat > /dev/null
 
-# Make sure earlier build is deleted
+# Make sure earlier builds are deleted.
 rm -f ./releases/${version}/exporter*
 
-for plat in "${goplat[@]}"
+for (( i=0; i<${buildCount}; i++ ));
 do
-  for arc in "${goarc[@]}"
-  do
-    # Remove previous build
-    rm -f $GOPATH/bin/exporter
-    # Build
-    gox -osarch="${plat}/${arc}" \
-      -ldflags "-s -w -X main.buildstamp=`git describe --tags`" \
-      -output $GOPATH/bin/exporter ./monitoring/exporter > /dev/null
+  plat="${goplat[$i]}"
+  arc="${goarc[$i]}"
 
-      # Copy binary to release folder for pushing to Github.
-      if [ "$plat" = "windows" ]; then
-        # Copy binaries
-        cp $GOPATH/bin/exporter.exe ./releases/${version}/exporter."${plat}-${arc}".exe
-      else
-        plat2=$plat
-        # Rename 'darwin' tp 'mac'
-        if [ "$plat" = "darwin" ]; then
-          plat2=mac
-        fi
-        # Copy binaries
-        cp $GOPATH/bin/exporter ./releases/${version}/exporter."${plat2}-${arc}"
-      fi
+  echo "Building ${plat}/${arc}..."
 
-  done
+  # Remove possibly existing binaries from earlier builds.
+  rm -f ./releases/tmp/exporter*
+
+  # Environment to cros-compile for the platform.
+  env GOOS="${plat}" GOARCH="${arc}" go build \
+    -ldflags "-s -w -X main.buildstamp=`git describe --tags`" \
+    -o ./releases/tmp/exporter ./monitoring/exporter > /dev/null
+
+  # Build archive. All platforms but Windows use tar for archiving. Windows uses zip.
+  if [ "$plat" = "windows" ]; then
+    # Generate a zip archive
+    pushd ./releases/tmp > /dev/null
+    zip -q -r ../${version}/exporter."${plat}-${arc}".zip ./*
+    popd > /dev/null
+  else
+    plat2=$plat
+    # Rename 'darwin' tp 'mac'
+    if [ "$plat" = "darwin" ]; then
+      plat2=mac
+    fi
+
+    # Generate a tar.gz archive
+    tar -C ./releases/tmp -zcf ./releases/${version}/exporter."${plat2}-${arc}".tar.gz .
+  fi
+
 done
 
 popd > /dev/null

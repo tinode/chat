@@ -44,25 +44,27 @@ The message to be sent is converted to plain Unicode text with all markup stripp
 Inline formatting is an array of individual styles in the `fmt` field. Each style is represented by an object with at least `at` and `len` fields. The `at` value means 0-based offset into `txt`, `len` is the number of characters to apply formatting to. The third value of style is either `tp` or `key`.
 
 If `tp` is provided, it means the style is a basic text decoration:
- * `ST`: strong or bold text: **bold**.
- * `EM`: emphasized text, usually represented as italic: _italic_.
- * `DL`: deleted or strikethrough text: ~~strikethrough~~.
- * `CO`: code or monotyped text, possibly with different background: `monotype`.
  * `BR`: line break.
- * `RW`: logical grouping of formats, a row; may also be represented as an entity.
- * `HD`: hidden text.
- * `HL`: highlighted text, such as text in a different color or with a different background; the color cannot be specified.
+ * `CO`: code or monotyped text, possibly with different background: `monotype`.
+ * `DL`: deleted or strikethrough text: ~~strikethrough~~.
+ * `EM`: emphasized text, usually represented as italic: _italic_.
  * `FM`: form / set of fields; may also be represented as an entity.
+ * `HD`: hidden content.
+ * `HL`: highlighted text, such as text in a different color or with a different background; the color cannot be specified.
+ * `RW`: logical grouping of formats, a row; may also be represented as an entity.
+ * `ST`: strong or bold text: **bold**.
 
-If key is provided, it's a 0-based index into the `ent` field which contains extended style parameters such as an image or an URL:
- * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co).
- * `MN`: mention such as [@tinode](#).
- * `HT`: hashtag, e.g. [#hashtag](#).
- * `IM`: inline image.
+If key is provided, it's a 0-based index into the `ent` array which contains extended style parameters such as an image or an URL:
+ * `AU`: embedded audio.
+ * `BN`: interactive button.
  * `EX`: generic attachment.
  * `FM`: form / set of fields; may also be represented as a basic decoration.
- * `BN`: interactive button.
+ * `HT`: hashtag, e.g. [#hashtag](#).
+ * `IM`: inline image.
+ * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co).
+ * `MN`: mention such as [@tinode](#).
  * `RW`: logical grouping of formats, a row; may also be represented as a basic decoration.
+ * `VC`: reserved for video and audio calls (not implemented yet).
 
 Examples:
  * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
@@ -71,7 +73,10 @@ Examples:
 
 The clients should be able to handle missing `at`, `key`, and `len` values. Missing values are assumed to be equal to `0`.
 
+The indexes `at` and `len` are measured in [Unicode code points](https://developer.mozilla.org/en-US/docs/Glossary/Code_point), not bytes or characters. The behavior of multi-codepoint glyphs such as emojis with Fitzpatrick skin tone modifiers, variation selectors, or grouped with `ZWJ` is currently undefined.
+
 #### `FM`: a form, an ordered set or fields
+
 Form provides means to add paragraph-level formatting to a logical group of elements. It may be represented as a text decoration or as an entity.
 <table>
 <tr><th>Do you agree?</th></tr>
@@ -131,90 +136,39 @@ The `data.su` describes how interactive form elements behave after the click. An
 
 In general, an entity is a text decoration which requires additional (possibly large) data. An entity is represented by an object with two fields: `tp` indicates type of the entity, `data` is type-dependent styling information. Unknown fields are ignored.
 
-#### `LN`: link (URL)
-`LN` is an URL. The `data` contains a single `url` field:
-`{ "tp": "LN", "data": { "url": "https://www.example.com/abc#fragment" } }`
-The `url` could be any valid URL that the client knows how to interpret, for instance it could be email or phone URL too: `email:alice@example.com` or `tel:+17025550001`.
-
-_IMPORTANT Security Consideration_: the `url` field may be maliciously constructed. The client should disable certain URL schemes such as `javascript:` and `data:`.
-
-#### `IM`: inline image or attached image with inline preview
-`IM` is an image. The `data` contains the following fields:
+#### `AU`: embedded audio record
+`AU` is an audio record. The `data` contains the following fields:
 ```js
 {
-  "tp": "IM",
+  "tp": "AU",
   "data": {
-    "mime": "image/png",
+    "mime": "audio/ogg",
     "val": "Rt53jUU...iVBORw0KGgoA==",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.jpg",
-    "width": 512,
-    "height": 512,
-    "name": "sample_image.png",
+    "ref": "https://api.tinode.co/file/s/abc1234567.ogg",
+    "duration": 180000,
+    "name": "some_audio.ogg",
     "size": 123456
   }
 }
 ```
- * `mime`: data type, such as 'image/jpeg'.
- * `val`: optional in-band image data: base64-encoded image bits.
- * `ref`: optional reference to out-of-band image data. Either `val` or `ref` must be present.
- * `width`, `height`: linear dimensions of the image in pixels
+ * `mime`: data type, such as 'audio/ogg'.
+ * `val`: optional in-band audio data: base64-encoded audio bits.
+ * `ref`: optional reference to out-of-band audio data. Either `val` or `ref` must be present.
+ * `duration`: duration of the record in milliseconds.
  * `name`: optional name of the original file.
- * `size`: optional size of the file in bytes
+ * `size`: optional size of the file in bytes.
 
-To create a message with just a single image and no text, use the following Drafty:
+To create a message with just a single audio record and no text, use the following Drafty:
 ```js
 {
   txt: " ",
   fmt: [{len: 1}],
-  ent: [{tp: "IM", data: {<your image data here>}]}
+  ent: [{tp: "AU", data: {<your audio data here>}]}
 }
 ```
 
 _IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only. The client should present content of `val` field to the user only if it's correctly converted to an image.
 
-
-#### `EX`: file attachment
-`EX` is an attachment which the client should not try to interpret. The `data` contains the following fields:
-```js
-{
-  "tp": "EX",
-  "data": {
-    "mime", "text/plain",
-    "val", "Q3l0aG9uPT0w...PT00LjAuMAo=",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.txt",
-    "name", "requirements.txt",
-    "size": 1234
-  }
-}
-```
-* `mime`: data type, such as 'application/octet-stream'.
-* `val`: optional in-band base64-encoded file data.
-* `ref`: optional reference to out-of-band file data. Either `val` or `ref` must be present.
-* `name`: optional name of the original file.
-* `size`: optional size of the file in bytes.
-
-To generate a message with the file attachment shown as a downloadable file, use the following format:
-```js
-{
-  at: -1,
-  len: 0,
-  key: <EX entity reference>
-}
-```
-
-_IMPORTANT Security Consideration_: the `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only.
-
-#### `MN`: mention such as [@alice](#)
-Mention `data` contains a single `val` field with ID of the mentioned user:
-```js
-{ "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }
-```
-
-#### `HT`: hashtag, e.g. [#tinode](#)
-Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
-```js
-{ "tp":"HT", "data":{ "val":"tinode" } }
-```
 
 #### `BN`: interactive button
 `BN` offers an option to send data to a server, either origin server or another one. The `data` contains the following fields:
@@ -248,3 +202,92 @@ If the `name` is provided but `val` is not, `val` is assumed to be `1`. If `name
 The button in the example above will send an HTTP GET to https://www.example.com/path/?foo=bar&confirmation=some-value&uid=usrFsk73jYRR&topic=grpnG99YhENiQU&seq=3 assuming the current user ID is `usrFsk73jYRR`, the topic is `grpnG99YhENiQU`, and the sequence ID of message with the button is `3`.
 
 _IMPORTANT Security Consideration_: the client should restrict URL scheme in the `url` field to `http` and `https` only.
+
+
+#### `EX`: file attachment
+`EX` is an attachment which the client should not try to interpret. The `data` contains the following fields:
+```js
+{
+  "tp": "EX",
+  "data": {
+    "mime", "text/plain",
+    "val", "Q3l0aG9uPT0w...PT00LjAuMAo=",
+    "ref": "https://api.tinode.co/file/s/abcdef12345.txt",
+    "name", "requirements.txt",
+    "size": 1234
+  }
+}
+```
+* `mime`: data type, such as 'application/octet-stream'.
+* `val`: optional in-band base64-encoded file data.
+* `ref`: optional reference to out-of-band file data. Either `val` or `ref` must be present.
+* `name`: optional name of the original file.
+* `size`: optional size of the file in bytes.
+
+To generate a message with the file attachment shown as a downloadable file, use the following format:
+```js
+{
+  at: -1,
+  len: 0,
+  key: <EX entity reference>
+}
+```
+
+_IMPORTANT Security Consideration_: the `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only.
+
+
+#### `IM`: inline image or attached image with inline preview
+`IM` is an image. The `data` contains the following fields:
+```js
+{
+  "tp": "IM",
+  "data": {
+    "mime": "image/png",
+    "val": "Rt53jUU...iVBORw0KGgoA==",
+    "ref": "https://api.tinode.co/file/s/abcdef12345.jpg",
+    "width": 512,
+    "height": 512,
+    "name": "sample_image.png",
+    "size": 123456
+  }
+}
+```
+ * `mime`: data type, such as 'image/jpeg'.
+ * `val`: optional in-band image data: base64-encoded image bits.
+ * `ref`: optional reference to out-of-band image data. Either `val` or `ref` must be present.
+ * `width`, `height`: linear dimensions of the image in pixels.
+ * `name`: optional name of the original file.
+ * `size`: optional size of the file in bytes.
+
+To create a message with just a single image and no text, use the following Drafty:
+```js
+{
+  txt: " ",
+  fmt: [{len: 1}],
+  ent: [{tp: "IM", data: {<your image data here>}]}
+}
+```
+
+_IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only. The client should present content of `val` field to the user only if it's correctly converted to an image.
+
+
+#### `LN`: link (URL)
+`LN` is an URL. The `data` contains a single `url` field:
+`{ "tp": "LN", "data": { "url": "https://www.example.com/abc#fragment" } }`
+The `url` could be any valid URL that the client knows how to interpret, for instance it could be email or phone URL too: `email:alice@example.com` or `tel:+17025550001`.
+
+_IMPORTANT Security Consideration_: the `url` field may be maliciously constructed. The client should disable certain URL schemes such as `javascript:` and `data:`.
+
+
+#### `MN`: mention such as [@alice](#)
+Mention `data` contains a single `val` field with ID of the mentioned user:
+```js
+{ "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }
+```
+
+
+#### `HT`: hashtag, e.g. [#tinode](#)
+Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
+```js
+{ "tp":"HT", "data":{ "val":"tinode" } }
+```

@@ -811,51 +811,6 @@ func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 	}
 }
 
-// Process push notification.
-func usersPush(rcpt *push.Receipt) {
-	if globals.usersUpdate == nil {
-		return
-	}
-
-	var local *UserCacheReq
-
-	// In case of a cluster pushes will be initiated at the nodes which own the users.
-	// Sort users into local and remote.
-	if globals.cluster != nil {
-		local = &UserCacheReq{PushRcpt: &push.Receipt{
-			Payload: rcpt.Payload,
-			Channel: rcpt.Channel,
-			To:      make(map[types.Uid]push.Recipient),
-		}}
-		remote := &UserCacheReq{PushRcpt: &push.Receipt{
-			Payload: rcpt.Payload,
-			Channel: rcpt.Channel,
-			To:      make(map[types.Uid]push.Recipient),
-		}}
-
-		for uid, recipient := range rcpt.To {
-			if globals.cluster.isRemoteTopic(uid.UserId()) {
-				remote.PushRcpt.To[uid] = recipient
-			} else {
-				local.PushRcpt.To[uid] = recipient
-			}
-		}
-
-		if len(remote.PushRcpt.To) > 0 || remote.PushRcpt.Channel != "" {
-			globals.cluster.routeUserReq(remote)
-		}
-	} else {
-		local = &UserCacheReq{PushRcpt: rcpt}
-	}
-
-	if len(local.PushRcpt.To) > 0 || local.PushRcpt.Channel != "" {
-		select {
-		case globals.usersUpdate <- local:
-		default:
-		}
-	}
-}
-
 // Start tracking a single user. Used for cache management.
 // 'add' increments/decrements user's count of subscribed topics.
 func usersRegisterUser(uid types.Uid, add bool) {

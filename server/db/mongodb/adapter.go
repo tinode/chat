@@ -54,6 +54,8 @@ const (
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
+	// Connection string URI https://www.mongodb.com/docs/manual/reference/connection-string/
+	Uri            string      `json:"uri,omitempty"`
 	Addresses      interface{} `json:"addresses,omitempty"`
 	ConnectTimeout int         `json:"timeout,omitempty"`
 
@@ -70,6 +72,9 @@ type configType struct {
 	TlsCertFile        string `json:"tls_cert_file,omitempty"`
 	TlsPrivateKey      string `json:"tls_private_key,omitempty"`
 	InsecureSkipVerify bool   `json:"tls_skip_verify,omitempty"`
+
+	// The only version supported at this time is "1".
+	APIVersion mdbopts.ServerAPIVersion `json:"api_version,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -166,6 +171,20 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if a.maxMessageResults <= 0 {
 		a.maxMessageResults = defaultMaxMessageResults
+	}
+
+	// Connection string URI overrides any other options configured earlier.
+	if config.Uri != "" {
+		opts.ApplyURI(config.Uri)
+	}
+
+	if config.APIVersion != "" {
+		opts.SetServerAPIOptions(mdbopts.ServerAPI(config.APIVersion))
+	}
+
+	// Make sure the options are sane.
+	if err = opts.Validate(); err != nil {
+		return err
 	}
 
 	a.ctx = context.Background()
@@ -1717,13 +1736,23 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 }
 
 // TopicDelete deletes topic, subscription, messages
-func (a *adapter) TopicDelete(topic string, hard bool) error {
-	err := a.subsDelete(a.ctx, b.M{"topic": topic}, hard)
+func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
+	filter := b.M{}
+	if isChan {
+		// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
+		filter["$or"] = b.A{
+			b.M{"topic": topic},
+			b.M{"topic": t.GrpToChn(topic)},
+		}
+	} else {
+		filter["topic"] = topic
+	}
+	err := a.subsDelete(a.ctx, filter, hard)
 	if err != nil {
 		return err
 	}
 
-	filter := b.M{"_id": topic}
+	filter = b.M{"_id": topic}
 	if hard {
 		if err = a.MessageDeleteList(topic, nil); err != nil {
 			return err

@@ -88,3 +88,7 @@ The test database has a stock user `xena` which has root access.
 
 ### Q: What is the difference between a group topic and a channel?<br/>
 **A**: Channel is a special case of a group topic. Normal group topics allow limited number of subscribers (128 by default). Each subscriber can be managed individually: invited, removed, banned, promoted to administrator or owner, other access permissions can be personally adjusted. Group topics with enabled channel functionality additionally permit an unlimited number of `readers`. The readers have read-only access to the topic, they cannot be managed individually, cannot be invited or removed, they cannot post messages. Readers do not generate presence notifications when joining or un-joining the topic and do not receive presence notifications from normal group members. Readers receive channel messages with `From` field set to `null`, i.e. they do not know who personally posted any given message to the channel. Readers cannot delete channel messages.
+
+
+### Q: What is the proper way to format gRPC {pub content}?<br/>
+**A**: The gPRC sends `content` field of a `{pub}` message as a byte array while the client applications expect it to be valid JSON. Consequently, you have to format the field to be valid JSON before passing it to gRPC. For example, to send a plain text `Hello world` message you have to send a quoted string `"Hello world"`. In most cases the string you pass to the gRPC call would look like `"\"Hello world\""` or `'"Hello world"'`.

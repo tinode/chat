@@ -362,7 +362,7 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 // Cases:
 // 1. Topic being deleted
 // 1.1 Topic is online
-// 1.1.1 If the requester is the owner or if it's the last sub in a p2p topic:
+// 1.1.1 If the requester is the owner or if it's the last sub in a p2p topic (p2p may be sent internally when the last user unsubscribes):
 // 1.1.1.1 Tell topic to stop accepting requests.
 // 1.1.1.2 Hub deletes the topic from database
 // 1.1.1.3 Hub unregisters the topic
@@ -387,29 +387,46 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, reason int) error {
 	now := types.TimeNow()
 
+	// TODO: when channel is deleted unsubscribe all devices from channel's FCM topic.
+
 	if reason == StopDeleted {
-		asUid := types.ParseUserId(msg.AsUser)
+		var asUid types.Uid
+		if msg != nil {
+			asUid = types.ParseUserId(msg.AsUser)
+		}
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			// Case 1.1: topic is online
-			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
+			if (!asUid.IsZero() && t.owner == asUid) || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
-
 				t.markPaused(true)
-				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+				hard := true
+				if msg != nil && msg.Del != nil {
+					// Soft-deleting does not make sense for p2p topics.
+					hard = msg.Del.Hard || t.cat == types.TopicCatP2P
+				}
+				if err := store.Topics.Delete(topic, t.isChan, hard); err != nil {
 					t.markPaused(false)
-					sess.queueOut(ErrUnknownReply(msg, now))
+					if sess != nil {
+						sess.queueOut(ErrUnknownReply(msg, now))
+					}
 					return err
 				}
+				if sess != nil {
+					sess.queueOut(NoErrReply(msg, now))
+				}
 
-				sess.queueOut(NoErrReply(msg, now))
+				if t.isChan {
+					// Notify channel subscribers that the channel is deleted.
+					sendPush(pushForChanDelete(t.name, now))
+				}
 
 				h.topicDel(topic)
 				t.markDeleted()
 				t.exit <- &shutDown{reason: StopDeleted}
 				statsInc("LiveTopics", -1)
 			} else {
-				// Case 1.1.2: requester is NOT the owner
+				// Case 1.1.2: requester is NOT the owner or not empty P2P.
 				msg.MetaWhat = constMsgDelTopic
 				msg.sess = sess
 				t.meta <- msg
@@ -417,32 +434,35 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		} else {
 			// Case 1.2: topic is offline.
 
-			tcat := topicCat(topic)
+			// Is user a channel subscriber? Use chnABC instead of grpABC and get only this user's subscription.
 			var opts *types.QueryOpt
-			if tcat == types.TopicCatGrp {
+			if types.IsChannel(msg.Original) {
+				topic = msg.Original
 				opts = &types.QueryOpt{User: asUid}
-				// Is user a channel subscriber? Use chnABC instead of grpABC.
-				if types.IsChannel(msg.Original) {
-					topic = msg.Original
-				}
 			}
 
-			// For P2P topics get all subscribers: we need to know how many are left and notify them.
-			// For gourp topics (and channels) get just the user's subscription.
+			// Get all subscribers of non-channel topics: we need to know how many are left and notify them.
+			// Get only one subscription for channel users.
 			subs, err := store.Topics.GetSubs(topic, opts)
 			if err != nil {
 				sess.queueOut(ErrUnknownReply(msg, now))
 				return err
 			}
 
+			tcat := topicCat(topic)
 			if len(subs) == 0 {
+				if tcat == types.TopicCatP2P {
+					// No subscribers: delete.
+					store.Topics.Delete(topic, false, true)
+				}
 				sess.queueOut(InfoNoActionReply(msg, now))
 				return nil
 			}
 
+			// Find subscription of the current user.
 			var sub *types.Subscription
 			user := asUid.String()
-			for i := 0; i < len(subs); i++ {
+			for i := range subs {
 				if subs[i].User == user {
 					sub = &subs[i]
 					break
@@ -460,7 +480,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
-					if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+					if err := store.Topics.Delete(topic, false, msg.Del.Hard); err != nil {
 						sess.queueOut(ErrUnknownReply(msg, now))
 						return err
 					}
@@ -493,15 +513,20 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Inform plugin that the subscription was deleted.
 				pluginSubscription(sub, plgActDel)
 			} else {
-				// Case 1.2.1.1: owner, delete the group topic from db.
-				// Only group topics have owners.
-				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
+				// Case 1.2.1.1: owner, delete the group topic from db. Only group topics have owners.
+				// We don't know if the group topic is a channel, but cleaning it as a channel does no harm
+				// other than a small performance penalty.
+				if err := store.Topics.Delete(topic, true, msg.Del.Hard); err != nil {
 					sess.queueOut(ErrUnknownReply(msg, now))
 					return err
 				}
 
 				// Notify subscribers that the group topic is gone.
-				presSubsOfflineOffline(msg.Original, tcat, subs, "gone", &presParams{}, sess.sid)
+				presSubsOfflineOffline(topic, tcat, subs, "gone", &presParams{}, sess.sid)
+
+				// Notify channel subscribers that the channel is deleted.
+				// The push will not be delivered to anybody if the topic is not a channel.
+				sendPush(pushForChanDelete(topic, now))
 
 				// Inform plugin that the topic was deleted.
 				pluginTopic(&Topic{name: topic}, plgActDel)

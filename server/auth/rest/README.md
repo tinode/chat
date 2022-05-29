@@ -120,8 +120,9 @@ add logical renaming and disable `rest` at the original name:
     // Default access mode
     "auth": "JRWPS",
     "anon": "N",
-    "public": {...}, // user's public data, see /docs/API.md#public-and-private-fields
-    "private": {...} // user's private data, see /docs/API.md#public-and-private-fields
+    "public": {...}, // user's public data, see /docs/API.md#trusted-public-and-private-fields
+    "trusted": {...}, // user's trusted data, see /docs/API.md#trusted-public-and-private-fields
+    "private": {...} // user's private data, see /docs/API.md#trusted-public-and-private-fields
   }
 }
 ```
@@ -222,8 +223,9 @@ be used by client (Tinode) to create the account. The server may optionally retu
   "newacc": {
     "auth": "JRWPS",
     "anon": "N",
-    "public": {/* see /docs/API.md#public-and-private-fields */},
-    "private": {/* see /docs/API.md#public-and-private-fields */}
+    "public": {/* see /docs/API.md#trusted-public-and-private-fields */},
+    "trusted": {/* see /docs/API.md#trusted-public-and-private-fields */},
+    "private": {/* see /docs/API.md#trusted-public-and-private-fields */}
   }
 }
 ```

@@ -510,7 +510,7 @@ type TopicsPersistenceInterface interface {
 	GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
 	Update(topic string, update map[string]interface{}) error
 	OwnerChange(topic string, newOwner types.Uid) error
-	Delete(topic string, hard bool) error
+	Delete(topic string, isChan, hard bool) error
 }
 
 // topicsMapper is a concrete type implementing TopicsPersistenceInterface.
@@ -597,8 +597,8 @@ func (topicsMapper) OwnerChange(topic string, newOwner types.Uid) error {
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
-func (topicsMapper) Delete(topic string, hard bool) error {
-	return adp.TopicDelete(topic, hard)
+func (topicsMapper) Delete(topic string, isChan, hard bool) error {
+	return adp.TopicDelete(topic, isChan, hard)
 }
 
 // SubsPersistenceInterface is an interface which defines methods for persistent storage of subscriptions.

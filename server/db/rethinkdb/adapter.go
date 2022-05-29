@@ -1494,9 +1494,9 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 }
 
 // TopicDelete deletes topic.
-func (a *adapter) TopicDelete(topic string, hard bool) error {
+func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	var err error
-	if err = a.subsDelForTopic(topic, hard); err != nil {
+	if err = a.subsDelForTopic(topic, isChan, hard); err != nil {
 		return err
 	}
 
@@ -1715,9 +1715,16 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 }
 
 // subsDelForTopic marks all subscriptions to the given topic as deleted.
-func (a *adapter) subsDelForTopic(topic string, hard bool) error {
+func (a *adapter) subsDelForTopic(topic string, isChan, hard bool) error {
 	var err error
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+
+	q := rdb.DB(a.dbName).Table("subscriptions")
+	if isChan {
+		// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
+		q = q.GetAllByIndex("Topic", topic, t.GrpToChn(topic))
+	} else {
+		q = q.GetAllByIndex("Topic", topic)
+	}
 	if hard {
 		_, err = q.Delete().RunWrite(a.conn)
 	} else {
