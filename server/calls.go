@@ -42,8 +42,6 @@ const (
 	// How long the server will wait for call establishment
 	// after call initiation before it drops the call.
 	constCallEstablishmentTimeout = 15 * time.Second
-	// Call message mime type.
-	constTinodeVideoCallMimeType = "application/x-tinode-webrtc"
 )
 
 // videoCall describes video call that's being established or in progress.
@@ -54,13 +52,17 @@ type videoCall struct {
 	seq int
 	// Call message content.
 	content interface{}
+	// Call message content mime type.
+	contentMime interface{}
 	// Time when the call was accepted.
 	acceptedAt time.Time
 }
 
-func (call *videoCall) messageHead(newState string, duration int64) map[string]interface{} {
+func (call *videoCall) messageHead(newState string, duration int) map[string]interface{} {
 	head := make(map[string]interface{})
-	head["mime"] = constTinodeVideoCallMimeType
+	if call.contentMime != nil {
+		head["mime"] = call.contentMime
+	}
 	head["replace"] = ":" + strconv.Itoa(call.seq)
 	head["webrtc"] = newState
 	if duration > 0 {
@@ -111,10 +113,11 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	t.infoCallSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
 	// Call being establshed.
 	t.currentCall = &videoCall{
-		parties:    make(map[*Session]callPartyData),
-		seq:        t.lastID,
-		content:    msg.Pub.Content,
-		acceptedAt: time.Now(),
+		parties:     make(map[*Session]callPartyData),
+		seq:         t.lastID,
+		content:     msg.Pub.Content,
+		contentMime: msg.Pub.Head["mime"],
+		acceptedAt:  time.Now(),
 	}
 	t.currentCall.parties[msg.sess] = callPartyData{
 		uid:          asUid,
@@ -240,7 +243,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 	}
 
 	// Send a message indicating the call has ended.
-	head := t.currentCall.messageHead(replaceWith, callDuration)
+	head := t.currentCall.messageHead(replaceWith, int(callDuration))
 	msgCopy := *msg
 	msgCopy.AsUser = originator.UserId()
 	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, head, t.currentCall.content); err != nil {
