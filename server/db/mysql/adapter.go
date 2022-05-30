@@ -1163,7 +1163,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Disable the other user's subscription to a disabled p2p topic.
 		if _, err = tx.Exec("UPDATE subscriptions AS s_one LEFT JOIN subscriptions AS s_two "+
 			"ON s_one.topic=s_two.topic "+
-			"SET s_two.updatedat=?, s_two.deletedat=? WHERE s_one.userid=?",
+			"SET s_two.updatedat=?, s_two.deletedat=? WHERE s_one.userid=? AND s_one.topic LIKE 'p2p%'",
 			now, now, decoded_uid); err != nil {
 			return err
 		}
