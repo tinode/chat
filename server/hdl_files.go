@@ -92,13 +92,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 				},
 			})
 		}
-		logs.Info.Println("media serve: completed with status", statusCode)
+		logs.Info.Println("media serve: completed with status", statusCode, "uid=", uid)
 		return
 	}
 
 	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
 		wrt.WriteHeader(http.StatusOK)
-		logs.Info.Println("media serve: completed", req.Method)
+		logs.Info.Println("media serve: completed", req.Method, "uid=", uid)
 		return
 	}
 
@@ -114,7 +114,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Disposition", "attachment")
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 
-	logs.Info.Println("media serve: OK")
+	logs.Info.Println("media serve: OK, uid=", uid)
 }
 
 // largeFileReceive receives files from client over HTTP(S) and passes them to the configured media handler.
