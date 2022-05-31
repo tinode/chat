@@ -38,10 +38,6 @@ const (
 	constCallMsgFinished = "finished"
 	// Call is dropped.
 	constCallMsgDisconnected = "disconnected"
-
-	// How long the server will wait for call establishment
-	// after call initiation before it drops the call.
-	constCallEstablishmentTimeout = 15 * time.Second
 )
 
 // videoCall describes video call that's being established or in progress.
@@ -59,14 +55,15 @@ type videoCall struct {
 }
 
 func (call *videoCall) messageHead(newState string, duration int) map[string]interface{} {
-	head := make(map[string]interface{})
-	if call.contentMime != nil {
-		head["mime"] = call.contentMime
+	head := map[string]interface{}{
+		"replace": ":" + strconv.Itoa(call.seq),
+		"webrtc":  newState,
 	}
-	head["replace"] = ":" + strconv.Itoa(call.seq)
-	head["webrtc"] = newState
 	if duration > 0 {
 		head["webrtc-duration"] = duration
+	}
+	if call.contentMime != nil {
+		head["mime"] = call.contentMime
 	}
 	return head
 }
@@ -124,7 +121,7 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		isOriginator: true,
 	}
 	// Wait for constCallEstablishmentTimeout for the other side to accept the call.
-	t.callEstablishmentTimer.Reset(constCallEstablishmentTimeout)
+	t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
 }
 
 // Handles events on existing video call (acceptance, termination, metadata exchange).

@@ -104,6 +104,9 @@ const (
 	// Default country code to fall back to if the "default_country_code" field
 	// isn't specified in the config.
 	defaultCountryCode = "US"
+
+	// Default timeout to drop an unanswered call, seconds.
+	defaultCallEstablishmentTimeout = 30
 )
 
 // Build version number defined by the compiler:
@@ -176,6 +179,9 @@ var globals struct {
 
 	// Country code to assign to sessions by default.
 	defaultCountryCode string
+
+	// Time before the call is dropped if not answered.
+	callEstablishmentTimeout int
 }
 
 type validatorConfig struct {
@@ -245,6 +251,8 @@ type configType struct {
 	// when the country isn't specified by the client explicitly and
 	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
+	// Timeout in seconds before a call is dropped if not answered.
+	CallEstablishmentTimeout int `json:"call_establishment_timeout"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -506,6 +514,11 @@ func main() {
 	globals.defaultCountryCode = config.DefaultCountryCode
 	if globals.defaultCountryCode == "" {
 		globals.defaultCountryCode = defaultCountryCode
+	}
+
+	globals.callEstablishmentTimeout = config.CallEstablishmentTimeout
+	if globals.callEstablishmentTimeout <= 0 {
+		globals.callEstablishmentTimeout = defaultCallEstablishmentTimeout
 	}
 
 	if config.Media != nil {
