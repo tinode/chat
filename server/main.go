@@ -126,6 +126,14 @@ type credValidator struct {
 	addToTags       bool
 }
 
+// ICE server config (video calling).
+type iceServer struct {
+	Username       string   `json:"username,omitempty"`
+	Credential     string   `json:"credential,omitempty"`
+	CredentialType string   `json:"credential_type,omitempty"`
+	Urls           []string `json:"urls,omitempty"`
+}
+
 var globals struct {
 	// Topics cache and processing.
 	hub *Hub
@@ -182,8 +190,12 @@ var globals struct {
 
 	// Time before the call is dropped if not answered.
 	callEstablishmentTimeout int
+
+	// ICE servers config (video calling)
+	iceServers []iceServer
 }
 
+// Credential validator config.
 type validatorConfig struct {
 	// TRUE or FALSE to set
 	AddToTags bool `json:"add_to_tags"`
@@ -193,6 +205,7 @@ type validatorConfig struct {
 	Config json.RawMessage `json:"config"`
 }
 
+// Large file handler config.
 type mediaConfig struct {
 	// The name of the handler to use for file uploads.
 	UseHandler string `json:"use_handler"`
@@ -255,14 +268,15 @@ type configType struct {
 	CallEstablishmentTimeout int `json:"call_establishment_timeout"`
 
 	// Configs for subsystems
-	Cluster   json.RawMessage             `json:"cluster_config"`
-	Plugin    json.RawMessage             `json:"plugins"`
-	Store     json.RawMessage             `json:"store_config"`
-	Push      json.RawMessage             `json:"push"`
-	TLS       json.RawMessage             `json:"tls"`
-	Auth      map[string]json.RawMessage  `json:"auth_config"`
-	Validator map[string]*validatorConfig `json:"acc_validation"`
-	Media     *mediaConfig                `json:"media"`
+	Cluster    json.RawMessage             `json:"cluster_config"`
+	Plugin     json.RawMessage             `json:"plugins"`
+	Store      json.RawMessage             `json:"store_config"`
+	Push       json.RawMessage             `json:"push"`
+	TLS        json.RawMessage             `json:"tls"`
+	Auth       map[string]json.RawMessage  `json:"auth_config"`
+	Validator  map[string]*validatorConfig `json:"acc_validation"`
+	Media      *mediaConfig                `json:"media"`
+	ICEServers []iceServer                 `json:"ice_servers"`
 }
 
 func main() {
@@ -554,6 +568,8 @@ func main() {
 		push.Stop()
 		logs.Info.Println("Stopped push notifications")
 	}()
+
+	globals.iceServers = config.ICEServers
 
 	// Keep inactive LP sessions for 15 seconds
 	globals.sessionStore = NewSessionStore(idleSessionTimeout + 15*time.Second)
