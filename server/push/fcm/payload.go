@@ -168,6 +168,13 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 		// Rich content for clients version 0.17 and above.
 		data["rc"], err = drafty.Preview(pl.Content, push.MaxPayloadLength)
+
+		if pl.Webrtc != "" {
+			data["webrtc"] = pl.Webrtc
+		}
+		if pl.Replace != "" {
+			data["replace"] = pl.Replace
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -43,6 +43,12 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			Content:     data.Content,
 		},
 	}
+	if webrtc, found := data.Head["webrtc"].(string); found {
+		receipt.Payload.Webrtc = webrtc
+	}
+	if replace, found := data.Head["replace"].(string); found {
+		receipt.Payload.Replace = replace
+	}
 
 	if t.isChan {
 		// Channel readers should get a push on a channel name (as an FCM topic push).
