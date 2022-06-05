@@ -192,6 +192,9 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 	sess, count := globals.sessionStore.NewSession(ws, "")
 	if globals.useXForwardedFor {
 		sess.remoteAddr = req.Header.Get("X-Forwarded-For")
+		if !isRoutableIP(sess.remoteAddr) {
+			sess.remoteAddr = ""
+		}
 	}
 	if sess.remoteAddr == "" {
 		sess.remoteAddr = req.RemoteAddr
