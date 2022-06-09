@@ -755,6 +755,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"maxTagCount":        globals.maxTagCount,
 			"maxFileUploadSize":  globals.maxFileUploadSize,
 			"iceServers":         globals.iceServers,
+			"callTineout":        globals.callEstablishmentTimeout,
 		}
 
 		// Set ua & platform in the beginning of the session.
