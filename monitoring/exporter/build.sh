@@ -50,10 +50,8 @@ do
 
   # Build archive. All platforms but Windows use tar for archiving. Windows uses zip.
   if [ "$plat" = "windows" ]; then
-    # Generate a zip archive
-    pushd ./releases/tmp > /dev/null
-    zip -q -r ../${version}/exporter."${plat}-${arc}".zip ./*
-    popd > /dev/null
+    # Just copy the binary with .exe appended.
+    cp ./releases/tmp/exporter ./releases/${version}/exporter."${plat}-${arc}".exe
   else
     plat2=$plat
     # Rename 'darwin' tp 'mac'
@@ -61,8 +59,8 @@ do
       plat2=mac
     fi
 
-    # Generate a tar.gz archive
-    tar -C ./releases/tmp -zcf ./releases/${version}/exporter."${plat2}-${arc}".tar.gz .
+    # Just copy the binary.
+    cp ./releases/tmp/exporter ./releases/${version}/exporter."${plat2}-${arc}"
   fi
 
 done
