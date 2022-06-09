@@ -77,6 +77,10 @@ type Payload struct {
 	ContentType string `json:"mime"`
 	// Actual Data.Content of the message, if requested
 	Content interface{} `json:"content,omitempty"`
+	// State of the video call (available in video call messages only).
+	Webrtc string `json:webrtc,omitempty`
+	// Seq id the message is supposed to replace.
+	Replace string `json:replace,omitempty`
 
 	// Subscription change notification.
 

@@ -36,8 +36,12 @@ const (
 	constCallMsgAccepted = "accepted"
 	// Previously establied call has successfully finished.
 	constCallMsgFinished = "finished"
-	// Call is dropped.
+	// Call is dropped (e.g. because of an error).
 	constCallMsgDisconnected = "disconnected"
+	// Call is missed (the callee didn't pick up the phone).
+	constCallMsgMissed = "missed"
+	// Call is declined (the callee hung up before picking up).
+	constCallMsgDeclined = "declined"
 )
 
 // videoCall describes video call that's being established or in progress.
@@ -160,7 +164,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		originatorUid, originator := t.getCallOriginator()
 		if originator == nil {
 			logs.Warn.Printf("topic[%s]: video call (seq %d) has no originator. Terminating.", t.name, t.currentCall.seq)
-			t.terminateCallInProgress()
+			t.terminateCallInProgress(false)
 			return
 		}
 		// 2. These events may only arrive from the callee.
@@ -215,14 +219,14 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		forwardMsg.Info.Payload = call.Payload
 		otherEnd.queueOut(forwardMsg)
 	case constCallEventHangUp:
-		t.maybeEndCallInProgress(msg.AsUser, msg)
+		t.maybeEndCallInProgress(msg.AsUser, msg, false)
 	default:
 		logs.Warn.Printf("topic[%s]: video call (seq %d) received unexpected call event: %s", t.name, t.currentCall.seq, call.Event)
 	}
 }
 
 // Ends current call in response to a client hangup request (msg).
-func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
+func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callDidTimeout bool) {
 	if t.currentCall == nil {
 		return
 	}
@@ -235,8 +239,24 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 		replaceWith = constCallMsgFinished
 		callDuration = time.Now().Sub(t.currentCall.acceptedAt).Milliseconds()
 	} else {
-		// Call hasn't been established. Just drop it.
-		replaceWith = constCallMsgDisconnected
+		if from != "" {
+			// User originated hang-up.
+			if from == originator.UserId() {
+				// Originator/caller requested event.
+				replaceWith = constCallMsgMissed
+			} else {
+				// Callee requested event.
+				replaceWith = constCallMsgDeclined
+			}
+		} else {
+			// Server initiated disconnect.
+			// Call hasn't been established. Just drop it.
+			if callDidTimeout {
+				replaceWith = constCallMsgMissed
+			} else {
+				replaceWith = constCallMsgDisconnected
+			}
+		}
 	}
 
 	// Send a message indicating the call has ended.
@@ -259,7 +279,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage) {
 }
 
 // Server initiated call termination.
-func (t *Topic) terminateCallInProgress() {
+func (t *Topic) terminateCallInProgress(callDidTimeout bool) {
 	if t.currentCall == nil {
 		return
 	}
@@ -279,5 +299,5 @@ func (t *Topic) terminateCallInProgress() {
 		sess:      sess,
 	}
 
-	t.maybeEndCallInProgress("", dummy)
+	t.maybeEndCallInProgress("", dummy, callDidTimeout)
 }

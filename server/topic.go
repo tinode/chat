@@ -297,7 +297,7 @@ func (t *Topic) computePerUserAcsUnion() {
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
 	if t.currentCall != nil {
 		if _, found := t.currentCall.parties[msg.sess]; found {
-			t.terminateCallInProgress()
+			t.terminateCallInProgress(false)
 		}
 	}
 	t.handleLeaveRequest(msg, msg.sess)
@@ -559,7 +559,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.handleTopicTimeout(hub, currentUA, uaTimer, defrNotifTimer)
 
 		case <-t.callEstablishmentTimer.C:
-			t.terminateCallInProgress()
+			t.terminateCallInProgress(true)
 
 		case sd := <-t.exit:
 			t.handleTopicTermination(sd)
