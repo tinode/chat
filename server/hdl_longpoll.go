@@ -209,6 +209,9 @@ func getRemoteAddr(req *http.Request) string {
 	var addr string
 	if globals.useXForwardedFor {
 		addr = req.Header.Get("X-Forwarded-For")
+		if !isRoutableIP(addr) {
+			addr = ""
+		}
 	}
 	if addr != "" {
 		return addr
