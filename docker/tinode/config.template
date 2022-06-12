@@ -141,10 +141,15 @@
 		}
 	],
 
+	"webrtc": {
+		"enabled": $WEBRTC_ENABLED,
+		"call_establishment_timeout": 30,
+		"ice_servers_file": "$ICE_SERVERS_FILE"
+	},
+
 	"cluster_config": {
 		"self": "",
 		"nodes": [
-			// Name and TCP address of each node.
 			{"name": "tinode-0", "addr": "tinode-0:12000"},
 			{"name": "tinode-1", "addr": "tinode-1:12001"},
 			{"name": "tinode-2", "addr": "tinode-2:12002"}
@@ -171,5 +176,4 @@
 			"service_addr": "tcp://localhost:40051"
 		}
 	]
-
 }

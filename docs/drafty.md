@@ -64,7 +64,7 @@ If key is provided, it's a 0-based index into the `ent` array which contains ext
  * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co).
  * `MN`: mention such as [@tinode](#).
  * `RW`: logical grouping of formats, a row; may also be represented as a basic decoration.
- * `VC`: reserved for video and audio calls (not implemented yet).
+ * `VC`: video (and audio) calls.
 
 Examples:
  * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
@@ -291,3 +291,27 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
 ```js
 { "tp":"HT", "data":{ "val":"tinode" } }
 ```
+
+#### `VC`: video call control message
+Video call `data` contains current state of the call and its duration:
+```js
+{
+  "tp": "VC",
+  "data": {
+    "duration": 10000,
+    "state": "disconnected",
+    "incoming": false
+  }
+}
+```
+
+* `duration`: call duration in milliseconds.
+* `state`: surrent call state; supported states:
+	* `accepted`: a call is established (ongoing).
+	* `finished`: a previously establied call has successfully finished.
+	* `disconnected`: the call is dropped for example because of an error.
+	* `missed`: the call is missed, i.e. the callee didn't pick up the phone.
+	* `declined`: the call is declined, i.e. the callee hung up before picking up.
+* `incoming`: if the call is incoming or outgoing.
+
+The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` with no entity. In such a case all call information is contained in the `head` fields of the enclosing message.

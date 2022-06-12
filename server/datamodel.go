@@ -1620,6 +1620,11 @@ func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *Ser
 	}
 }
 
+// ErrNotImplementedReply feature not implemented error in response to a client request (501).
+func ErrNotImplementedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrNotImplemented(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrClusterUnreachable in-cluster communication has failed (502).
 func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{
