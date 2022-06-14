@@ -759,7 +759,7 @@ type MsgServerInfo struct {
 	// Topic where the even has occurred (set only when Topic='me').
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
-	From string `json:"from"`
+	From string `json:"from,omitempty"`
 	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
