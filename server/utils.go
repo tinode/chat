@@ -851,7 +851,7 @@ var privateIPBlocks []*net.IPNet
 
 func isRoutableIP(ipStr string) bool {
 	ip := net.ParseIP(ipStr)
-	if ip == null {
+	if ip == nil {
 		return false
 	}
 
