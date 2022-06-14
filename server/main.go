@@ -60,7 +60,7 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.19"
+	currentVersion = "0.20"
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.17"
 
@@ -124,14 +124,6 @@ type credValidator struct {
 	// AuthLevel(s) which require this validator.
 	requiredAuthLvl []auth.Level
 	addToTags       bool
-}
-
-// ICE server config (video calling).
-type iceServer struct {
-	Username       string   `json:"username,omitempty"`
-	Credential     string   `json:"credential,omitempty"`
-	CredentialType string   `json:"credential_type,omitempty"`
-	Urls           []string `json:"urls,omitempty"`
 }
 
 var globals struct {
@@ -264,19 +256,17 @@ type configType struct {
 	// when the country isn't specified by the client explicitly and
 	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
-	// Timeout in seconds before a call is dropped if not answered.
-	CallEstablishmentTimeout int `json:"call_establishment_timeout"`
 
 	// Configs for subsystems
-	Cluster    json.RawMessage             `json:"cluster_config"`
-	Plugin     json.RawMessage             `json:"plugins"`
-	Store      json.RawMessage             `json:"store_config"`
-	Push       json.RawMessage             `json:"push"`
-	TLS        json.RawMessage             `json:"tls"`
-	Auth       map[string]json.RawMessage  `json:"auth_config"`
-	Validator  map[string]*validatorConfig `json:"acc_validation"`
-	Media      *mediaConfig                `json:"media"`
-	ICEServers []iceServer                 `json:"ice_servers"`
+	Cluster   json.RawMessage             `json:"cluster_config"`
+	Plugin    json.RawMessage             `json:"plugins"`
+	Store     json.RawMessage             `json:"store_config"`
+	Push      json.RawMessage             `json:"push"`
+	TLS       json.RawMessage             `json:"tls"`
+	Auth      map[string]json.RawMessage  `json:"auth_config"`
+	Validator map[string]*validatorConfig `json:"acc_validation"`
+	Media     *mediaConfig                `json:"media"`
+	WebRTC    json.RawMessage             `json:"webrtc"`
 }
 
 func main() {
@@ -530,11 +520,6 @@ func main() {
 		globals.defaultCountryCode = defaultCountryCode
 	}
 
-	globals.callEstablishmentTimeout = config.CallEstablishmentTimeout
-	if globals.callEstablishmentTimeout <= 0 {
-		globals.callEstablishmentTimeout = defaultCallEstablishmentTimeout
-	}
-
 	if config.Media != nil {
 		if config.Media.UseHandler == "" {
 			config.Media = nil
@@ -569,7 +554,9 @@ func main() {
 		logs.Info.Println("Stopped push notifications")
 	}()
 
-	globals.iceServers = config.ICEServers
+	if err = initVideoCalls(config.WebRTC); err != nil {
+		logs.Err.Fatal("Failed to init video calls: %w", err)
+	}
 
 	// Keep inactive LP sessions for 15 seconds
 	globals.sessionStore = NewSessionStore(idleSessionTimeout + 15*time.Second)

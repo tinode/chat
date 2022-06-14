@@ -179,6 +179,16 @@ A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
 Follow [instructions](./docs/faq.md#q-how-to-setup-push-notifications-with-google-fcm).
 
+
+### Enabling Video Calls
+
+Video calls use [WebRTC](https://en.wikipedia.org/wiki/WebRTC). WebRTC is a peer to peer protocol: once the call is established, the client applications exchange data directly. Direct data exchange is efficient but creates a problem when the parties are not accessible from the internet. WebRTC solves it by means of [ICE](https://en.wikipedia.org/wiki/Interactive_Connectivity_Establishment) servers  which implement protocols [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and [STUN](https://en.wikipedia.org/wiki/STUN) as fallback.
+
+Tinode does not provide ICE servers out of the box. You must install and configure (or purchase) your own servers otherwise video and voice calling will not be available.
+
+Once you obtain the ICE TURN/STUN configuration from your service provider, add it to `tinode.conf` section `"webrtc"` - `"ice_servers"` (or `"ice_servers_file"`). Also change `"webrtc"` - `"enabled"` to `true`. An example configuration is provided in the `tinode.conf` for illustration only. IT WILL NOT FUNCTION because it uses dummy values instead of actual server addresses.
+
+
 ### Note on Running the Server in Background
 
 There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go process internally. One must use external tools such as shell `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background.

@@ -759,7 +759,7 @@ type MsgServerInfo struct {
 	// Topic where the even has occurred (set only when Topic='me').
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
-	From string `json:"from"`
+	From string `json:"from,omitempty"`
 	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
@@ -1618,6 +1618,11 @@ func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *Ser
 		Id:        id,
 		Timestamp: incomingReqTs,
 	}
+}
+
+// ErrNotImplementedReply feature not implemented error in response to a client request (501).
+func ErrNotImplementedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrNotImplemented(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrClusterUnreachable in-cluster communication has failed (502).

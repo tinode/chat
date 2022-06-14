@@ -7,11 +7,16 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
+	jcr "github.com/tinode/jsonco"
 )
 
 // Video call constants.
@@ -44,6 +49,25 @@ const (
 	constCallMsgDeclined = "declined"
 )
 
+type callConfig struct {
+	// Enable video/voice calls.
+	Enabled bool `json:"enabled"`
+	// Timeout in seconds before a call is dropped if not answered.
+	CallEstablishmentTimeout int `json:"call_establishment_timeout"`
+	// ICE servers.
+	ICEServers []iceServer `json:"ice_servers"`
+	// Alternative config as an external file.
+	ICEServersFile string `json:"ice_servers_file"`
+}
+
+// ICE server config.
+type iceServer struct {
+	Username       string   `json:"username,omitempty"`
+	Credential     string   `json:"credential,omitempty"`
+	CredentialType string   `json:"credential_type,omitempty"`
+	Urls           []string `json:"urls,omitempty"`
+}
+
 // videoCall describes video call that's being established or in progress.
 type videoCall struct {
 	// Call participants.
@@ -56,6 +80,62 @@ type videoCall struct {
 	contentMime interface{}
 	// Time when the call was accepted.
 	acceptedAt time.Time
+}
+
+func initVideoCalls(jsconfig json.RawMessage) error {
+	var config callConfig
+
+	if len(jsconfig) == 0 {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(jsconfig), &config); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	if !config.Enabled {
+		logs.Info.Println("Video calls disabled")
+		return nil
+	}
+
+	if len(config.ICEServers) > 0 {
+		globals.iceServers = config.ICEServers
+	} else if config.ICEServersFile != "" {
+		var iceConfig []iceServer
+		if file, err := os.Open(config.ICEServersFile); err != nil {
+			return fmt.Errorf("failed to read ICE config: %w", err)
+		} else {
+			jr := jcr.New(file)
+			if err = json.NewDecoder(jr).Decode(&iceConfig); err != nil {
+				switch jerr := err.(type) {
+				case *json.UnmarshalTypeError:
+					lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+					return fmt.Errorf("unmarshall error in ICE config in %s at %d:%d (offset %d bytes): %w",
+						jerr.Field, lnum, cnum, jerr.Offset, jerr)
+				case *json.SyntaxError:
+					lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+					return fmt.Errorf("syntax error in config file at %d:%d (offset %d bytes): %w",
+						lnum, cnum, jerr.Offset, jerr)
+				default:
+					return fmt.Errorf("failed to parse config file: %w", err)
+				}
+			}
+			file.Close()
+		}
+		globals.iceServers = iceConfig
+	}
+
+	if len(globals.iceServers) == 0 {
+		return errors.New("no valid ICE cervers found")
+	}
+
+	globals.callEstablishmentTimeout = config.CallEstablishmentTimeout
+	if globals.callEstablishmentTimeout <= 0 {
+		globals.callEstablishmentTimeout = defaultCallEstablishmentTimeout
+	}
+
+	logs.Info.Println("Video calls enabled with", len(globals.iceServers), "ICE servers")
+	return nil
 }
 
 func (call *videoCall) messageHead(newState string, duration int) map[string]interface{} {
@@ -197,6 +277,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			t.callEstablishmentTimer.Stop()
 		}
 		originator.queueOut(forwardMsg)
+
 	case constCallEventOffer, constCallEventAnswer, constCallEventIceCandidate:
 		// Call metadata exchange. Either side of the call may send these events.
 		// Simply forward them to the other session.
@@ -218,8 +299,10 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		forwardMsg.Info.Topic = t.original(otherUid)
 		forwardMsg.Info.Payload = call.Payload
 		otherEnd.queueOut(forwardMsg)
+
 	case constCallEventHangUp:
 		t.maybeEndCallInProgress(msg.AsUser, msg, false)
+
 	default:
 		logs.Warn.Printf("topic[%s]: video call (seq %d) received unexpected call event: %s", t.name, t.currentCall.seq, call.Event)
 	}
@@ -268,8 +351,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	}
 
 	// Send {info} hangup event to the subscribed sessions.
-	resp := t.currentCall.infoMessage(constCallEventHangUp)
-	t.broadcastToSessions(resp)
+	t.broadcastToSessions(t.currentCall.infoMessage(constCallEventHangUp))
 
 	// Let all other sessions know the call is over.
 	for tgt := range t.perUser {

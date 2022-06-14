@@ -143,13 +143,14 @@ You can specify the following environment variables when issuing `docker run` co
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
 | `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
 | `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files) |
-| `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
+| `FCM_CRED_FILE` | string |  | Path to JSON file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_API_KEY` | string |  | Firebase API key; required for receiving push notifications in the web client |
 | `FCM_APP_ID` | string |  | Firebase web app ID; required for receiving push notifications in the web client |
 | `FCM_PROJECT_ID` | string |  | Firebase project ID; required for receiving push notifications in the web client |
 | `FCM_SENDER_ID` | string |  | Firebase FCM sender ID; required for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
+| `ICE_SERVERS_FILE` | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot |

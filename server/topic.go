@@ -1030,6 +1030,10 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 
 	isCall := msg.Pub.Head != nil && msg.Pub.Head["webrtc"] != nil
 	if isCall {
+		if len(globals.iceServers) == 0 {
+			msg.sess.queueOut(ErrNotImplementedReply(msg, types.TimeNow()))
+			return
+		}
 		if t.currentCall != nil {
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
@@ -1046,6 +1050,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
 	}
+
 	if isCall {
 		t.handleCallInvite(msg, asUid)
 	}
