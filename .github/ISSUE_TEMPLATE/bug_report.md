@@ -26,6 +26,7 @@ Describe your issue here.
 #### Client-side
 - [ ] TinodeWeb/tinodejs: javascript client
   * Browser make and version.
+  * IMPORTANT! Use `index-dev.html` to reproduce the problem, not `index.html`.
 - [ ] Tindroid: Android app
   * Android API level (e.g. 25).
   * Emulator or hardware, if hardware describe it.
@@ -56,4 +57,4 @@ Tell us what happens instead.
 Copy server-side log here. You may also attach it to the issue as a file.
 
 ### Client-side log
-Copy client-side log here (Android logcat, Javascript console, etc). You may also attach it to the issue as a file.
+Copy client-side log here (Android logcat, Javascript console, etc). You may also attach it to the issue as a file. When posting console log from Webapp, please use `index-dev.html`, not `index.html`; `index.html` uses minified javascript which produces unusable logs).
