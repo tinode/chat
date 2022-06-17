@@ -59,7 +59,7 @@ See [instructions](./docker/README.md)
 	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db@latest
 	```
 
-    The steps above will install Tinode binaries at `$GOPATH/bin/`, sorces and supporting files will be located at `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/` where `X.XX.X` is the version you installed, such as `0.19.1`.
+    The steps above install Tinode binaries at `$GOPATH/bin/`, sorces and supporting files are located at `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/` where `X.XX.X` is the version you installed, such as `0.19.1`.
 
     Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
@@ -97,7 +97,7 @@ See [instructions](./docker/README.md)
 
 ## Running a Standalone Server
 
-If you followed instructions in the previous section then the Tinode binaries were installed in `$GOPATH/bin/`, the sources and supporting files are located in `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/`, where `X.XX.X` is the version you installed, for example `0.19.1`.
+If you followed instructions in the previous section then the Tinode binaries are installed in `$GOPATH/bin/`, the sources and supporting files are located in `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/`, where `X.XX.X` is the version you installed, for example `0.19.1`.
 
 Switch to sources directory (replace `X.XX.X` with your actual version, such as `0.19.1`):
 ```
