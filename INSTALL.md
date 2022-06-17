@@ -59,21 +59,19 @@ See [instructions](./docker/README.md)
 	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db@latest
 	```
 
-<p>
-  Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
+    Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
-  You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
-  ```
-  go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" github.com/tinode/chat/server@latest
-  ```
-  The value of `buildstamp` will be sent by the server to the clients.
+    You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
+    ```
+    go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" github.com/tinode/chat/server@latest
+    ```
+    The value of `buildstamp` will be sent by the server to the clients.
 
-  Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
-  ```
-  go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
-  ```
-  Building with Go 1.13 or below **will fail**!
-</p>
+    Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
+    ```
+    go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
+    ```
+    Building with Go 1.13 or below **will fail**!
 
 5. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
 ```js
