@@ -101,9 +101,9 @@ When you register a new account you are asked for an email address to send valid
   * Ability to block unwanted communication server-side.
   * Anonymous users (important for use cases related to tech support over chat).
   * Plugins to extend functionality, for example, to support moderation or chatbots.
+  * Scriptable [command-line tool](tn-cli/) for server administration.
 * Performance, reliability and development:
   * Sharded clustering with failover.
-  * Scriptable command-line tool for server administration.
   * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with plugins).
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:
