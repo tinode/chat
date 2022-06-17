@@ -28,9 +28,9 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.14. Building with Go 1.13 or below **will fail**!
+1. Install [Go environment](https://golang.org/doc/install). The installation instructions below are for Go 1.16 and newer.
 
-2. OPTIONAL only if you intend to modify code: Install [protobuf](https://developers.google.com/protocol-buffers/) and [gRPC](https://grpc.io/docs/languages/go/quickstart/) including [code generator](https://developers.google.com/protocol-buffers/docs/reference/go-generated) for Go.
+2. OPTIONAL only if you intend to modify the code: Install [protobuf](https://developers.google.com/protocol-buffers/) and [gRPC](https://grpc.io/docs/languages/go/quickstart/) including [code generator](https://developers.google.com/protocol-buffers/docs/reference/go-generated) for Go.
 
 3. Make sure one of the following databases is installed and running:
  * MySQL 5.7 or above. MySQL 5.6 or below **will not work**.
@@ -40,32 +40,38 @@ See [instructions](./docker/README.md)
 4. Fetch, build Tinode server and tinode-db database initializer:
   - **MySQL**:
 	```
-	go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mysql github.com/tinode/chat/tinode-db && go build -tags mysql -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go install -tags mysql github.com/tinode/chat/server@latest
+	go install -tags mysql github.com/tinode/chat/tinode-db@latest
 	```
  - **MongoDB**:
 	```
-	go get -tags mongodb github.com/tinode/chat/server && go build -tags mongodb -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mongodb github.com/tinode/chat/tinode-db && go build -tags mongodb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go install -tags mongodb github.com/tinode/chat/server@latest
+	go install -tags mongodb github.com/tinode/chat/tinode-db@latest
 	```
  - **RethinkDb**:
 	```
-	go get -tags rethinkdb github.com/tinode/chat/server && go build -tags rethinkdb -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go build -tags rethinkdb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go install -tags rethinkdb github.com/tinode/chat/server@latest
+	go install -tags rethinkdb github.com/tinode/chat/tinode-db@latest
 	```
- - **All** (bundle all the above DB adapters):
+ - **All** (bundle all of the above DB adapters):
 	```
-	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/server && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/server@latest
+	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db@latest
 	```
 
-	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
+Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
-	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
-	```
-	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
-	```
-	The value of `buildstamp` will be sent by the server to the clients.
+You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
+```
+go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" github.com/tinode/chat/server@latest
+```
+The value of `buildstamp` will be sent by the server to the clients.
+
+Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
+```
+go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
+```
+Building with Go 1.13 or below **will fail**!
 
 
 5. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
