@@ -153,7 +153,7 @@ The config file uses the following format:
 ]
 ```
 
-[XIRYS](https://xirsys.com/) offers a free tier for developers. We are in no way affiliated with XIRYS. We do not endorse or otherwise take any responsibility for your use of their services.
+[XIRSYS](https://xirsys.com/) offers a free tier for developers. We are in no way affiliated with XIRSYS. We do not endorse or otherwise take any responsibility for your use of their services.
 
 ### Run the chatbot
 
