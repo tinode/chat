@@ -72,7 +72,7 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 	case "tags":
 		what = pbx.ServerPres_TAGS
 	default:
-		logs.Err.Fatal("Unknown pres.what value", pres.What)
+		logs.Info.Println("Unknown pres.what value", pres.What)
 	}
 	return &pbx.ServerMsg_Pres{
 		Pres: &pbx.ServerPres{
@@ -98,6 +98,8 @@ func pbServInfoSerialize(info *MsgServerInfo) *pbx.ServerMsg_Info {
 			Src:        info.Src,
 			What:       pbInfoNoteWhatSerialize(info.What),
 			SeqId:      int32(info.SeqId),
+			Event:      pbCallEventSerialize(info.Event),
+			Payload:    info.Payload,
 		},
 	}
 }
@@ -204,11 +206,13 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 		}
 	} else if info := pkt.GetInfo(); info != nil {
 		msg.Info = &MsgServerInfo{
-			Topic: info.GetTopic(),
-			Src:   info.GetSrc(),
-			From:  info.GetFromUserId(),
-			What:  pbInfoNoteWhatDeserialize(info.GetWhat()),
-			SeqId: int(info.GetSeqId()),
+			Topic:   info.GetTopic(),
+			Src:     info.GetSrc(),
+			From:    info.GetFromUserId(),
+			What:    pbInfoNoteWhatDeserialize(info.GetWhat()),
+			SeqId:   int(info.GetSeqId()),
+			Event:   pbCallEventDeserialize(info.GetEvent()),
+			Payload: info.GetPayload(),
 		}
 	} else if meta := pkt.GetMeta(); meta != nil {
 		msg.Meta = &MsgServerMeta{
@@ -336,9 +340,12 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 	case msg.Note != nil:
 		pkt.Message = &pbx.ClientMsg_Note{
 			Note: &pbx.ClientNote{
-				Topic: msg.Note.Topic,
-				What:  pbInfoNoteWhatSerialize(msg.Note.What),
-				SeqId: int32(msg.Note.SeqId),
+				Topic:   msg.Note.Topic,
+				What:    pbInfoNoteWhatSerialize(msg.Note.What),
+				SeqId:   int32(msg.Note.SeqId),
+				Unread:  int32(msg.Note.Unread),
+				Event:   pbCallEventSerialize(msg.Note.Event),
+				Payload: msg.Note.Payload,
 			},
 		}
 	}
@@ -450,16 +457,12 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if note := pkt.GetNote(); note != nil {
 		msg.Note = &MsgClientNote{
-			Topic: note.GetTopic(),
-			SeqId: int(note.GetSeqId()),
-		}
-		switch note.GetWhat() {
-		case pbx.InfoNote_READ:
-			msg.Note.What = "read"
-		case pbx.InfoNote_RECV:
-			msg.Note.What = "recv"
-		case pbx.InfoNote_KP:
-			msg.Note.What = "kp"
+			Topic:   note.GetTopic(),
+			SeqId:   int(note.GetSeqId()),
+			What:    pbInfoNoteWhatDeserialize(note.GetWhat()),
+			Unread:  int(note.GetUnread()),
+			Event:   pbCallEventDeserialize(note.GetEvent()),
+			Payload: note.GetPayload(),
 		}
 	}
 
@@ -711,8 +714,10 @@ func pbInfoNoteWhatSerialize(what string) pbx.InfoNote {
 		out = pbx.InfoNote_READ
 	case "recv":
 		out = pbx.InfoNote_RECV
+	case "call":
+		out = pbx.InfoNote_CALL
 	default:
-		logs.Err.Fatal("unknown info-note.what", what)
+		logs.Info.Println("unknown info-note.what", what)
 	}
 	return out
 }
@@ -726,8 +731,54 @@ func pbInfoNoteWhatDeserialize(what pbx.InfoNote) string {
 		out = "read"
 	case pbx.InfoNote_RECV:
 		out = "recv"
+	case pbx.InfoNote_CALL:
+		out = "call"
 	default:
-		logs.Err.Fatal("unknown info-note.what", what)
+	}
+	return out
+}
+
+func pbCallEventSerialize(event string) pbx.CallEvent {
+	var out pbx.CallEvent
+	switch event {
+	case "accept":
+		out = pbx.CallEvent_ACCEPT
+	case "answer":
+		out = pbx.CallEvent_ANSWER
+	case "hang-up":
+		out = pbx.CallEvent_HANG_UP
+	case "ice-candidate":
+		out = pbx.CallEvent_ICE_CANDIDATE
+	case "invite":
+		out = pbx.CallEvent_INVITE
+	case "offer":
+		out = pbx.CallEvent_OFFER
+	case "ringing":
+		out = pbx.CallEvent_RINGING
+	default:
+		logs.Info.Println("unknown info-note.event", event)
+	}
+	return out
+}
+
+func pbCallEventDeserialize(event pbx.CallEvent) string {
+	var out string
+	switch event {
+	case pbx.CallEvent_ACCEPT:
+		out = "accept"
+	case pbx.CallEvent_ANSWER:
+		out = "answer"
+	case pbx.CallEvent_HANG_UP:
+		out = "hang-up"
+	case pbx.CallEvent_ICE_CANDIDATE:
+		out = "ice-candidate"
+	case pbx.CallEvent_INVITE:
+		out = "invite"
+	case pbx.CallEvent_OFFER:
+		out = "offer"
+	case pbx.CallEvent_RINGING:
+		out = "ringing"
+	default:
 	}
 	return out
 }
