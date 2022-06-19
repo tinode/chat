@@ -135,21 +135,20 @@ $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 The config file uses the following format:
 ```json
 [
-	{
-		"urls": [
-			"stun:stun.example.com"
-		]
-	},
-	{
-		"username": "user-name-to-use-for-authentication-with-the-server",
-		"credential": "your-password",
-		"urls": [
-			"turn:turn.example.com:80?transport=udp",
-			"turn:turn.example.com:3478?transport=tcp",
-			"turns:turn.example.com:443?transport=tcp",
-			...
-		]
-	}
+  {
+    "urls": [
+      "stun:stun.example.com"
+    ]
+  },
+  {
+    "username": "user-name-to-use-for-authentication-with-the-server",
+    "credential": "your-password",
+    "urls": [
+      "turn:turn.example.com:80?transport=udp",
+      "turn:turn.example.com:3478?transport=tcp",
+      "turns:turn.example.com:443?transport=tcp",
+    ]
+  }
 ]
 ```
 
