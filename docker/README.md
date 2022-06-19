@@ -122,7 +122,7 @@ $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 
 ### Configure video calling
 
-Tinode uses [WebRTC](https://webrtc.org/) for video and audio calls. WebRTC needs [Interactive Communication Establishment (ICE)](https://tools.ietf.org/id/draft-ietf-ice-rfc5245bis-13.html) [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and [STUN](https://en.wikipedia.org/wiki/STUN) servers to traverse [NAT](https://en.wikipedia.org/wiki/Network_address_translation), otherwise calls may not work. Tinode does not include TURN(S) or STUN servers out of the box. You need to obtain and configure your own servers. Once you obtained the servers, save configuration to a file, for example `/Users/jdoe/turn-config.json` and provide path to this file when starting the container:
+Tinode uses [WebRTC](https://webrtc.org/) for video and audio calls. WebRTC needs [Interactive Communication Establishment (ICE)](https://tools.ietf.org/id/draft-ietf-ice-rfc5245bis-13.html) [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and/or [STUN](https://en.wikipedia.org/wiki/STUN) servers to traverse [NAT](https://en.wikipedia.org/wiki/Network_address_translation), otherwise calls may not work. Tinode does not include TURN(S) or STUN out of the box. You need to obtain and configure your own service. Once you setup your TURN(S) and/or STUN service, save its configuration to a file, for example `/Users/jdoe/turn-config.json` and provide path to this file when starting the container:
 
 ```
 $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
