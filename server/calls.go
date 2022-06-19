@@ -134,7 +134,7 @@ func initVideoCalls(jsconfig json.RawMessage) error {
 		globals.callEstablishmentTimeout = defaultCallEstablishmentTimeout
 	}
 
-	logs.Info.Println("Video calls enabled with ", len(globals.iceServers), "ICE servers")
+	logs.Info.Println("Video calls enabled with", len(globals.iceServers), "ICE servers")
 	return nil
 }
 
@@ -277,6 +277,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			t.callEstablishmentTimer.Stop()
 		}
 		originator.queueOut(forwardMsg)
+
 	case constCallEventOffer, constCallEventAnswer, constCallEventIceCandidate:
 		// Call metadata exchange. Either side of the call may send these events.
 		// Simply forward them to the other session.
@@ -298,8 +299,10 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		forwardMsg.Info.Topic = t.original(otherUid)
 		forwardMsg.Info.Payload = call.Payload
 		otherEnd.queueOut(forwardMsg)
+
 	case constCallEventHangUp:
 		t.maybeEndCallInProgress(msg.AsUser, msg, false)
+
 	default:
 		logs.Warn.Printf("topic[%s]: video call (seq %d) received unexpected call event: %s", t.name, t.currentCall.seq, call.Event)
 	}
@@ -348,8 +351,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	}
 
 	// Send {info} hangup event to the subscribed sessions.
-	resp := t.currentCall.infoMessage(constCallEventHangUp)
-	t.broadcastToSessions(resp)
+	t.broadcastToSessions(t.currentCall.infoMessage(constCallEventHangUp))
 
 	// Let all other sessions know the call is over.
 	for tgt := range t.perUser {

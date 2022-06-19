@@ -43,15 +43,15 @@ A [public Tinode service](https://web.tinode.co/) is now available. You can use 
 
 ### Web
 
-TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below.
 
 ### Android
 
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience.
 
 ### iOS
 
-[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Spanish. More translations are welcome.
+[Tinode for iOS](https://apps.apple.com/us/app/tinode/id1483763538) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below.
 
 
 ## Demo/Sandbox
@@ -85,6 +85,7 @@ When you register a new account you are asked for an email address to send valid
   * One-on-one and group messaging. Voice messages.
   * Video and audio calling.
   * Channels with unlimited number of read-only subscribers.
+  * All chats are synchronized across all devices.
   * Granular access control with permissions for various actions.
   * User search/discovery.
   * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
@@ -100,6 +101,7 @@ When you register a new account you are asked for an email address to send valid
   * Ability to block unwanted communication server-side.
   * Anonymous users (important for use cases related to tech support over chat).
   * Plugins to extend functionality, for example, to support moderation or chatbots.
+  * Scriptable [command-line tool](tn-cli/) for server administration.
 * Performance, reliability and development:
   * Sharded clustering with failover.
   * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with plugins).
@@ -131,7 +133,7 @@ All client software has support for [internationalization](docs/translations.md)
 | English | &check; | &check; | &check; | &check; |
 | Chinese (simplified) | &check; | &check; | &check; | &check; |
 | Chinese (traditional) |   | &check; | &check; | &check; |
-| French | &check; |   | &check; |   |
+| French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
 | Romanian |   | &check; |   |   |
