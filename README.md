@@ -181,7 +181,7 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 ### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info.png" alt="Mobile web: topic info" width=250 />
+  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-video-call.png" alt="Mobile web: topic info" width=250 />
 </p>
 
 
