@@ -62,6 +62,7 @@ then
 
   cp ./server/static/img/*.png ./releases/tmp/static/img
   cp ./server/static/img/*.svg ./releases/tmp/static/img
+  cp ./server/static/img/*.jpeg ./releases/tmp/static/img
   cp ./server/static/audio/*.m4a ./releases/tmp/static/audio
   cp ./server/static/css/*.css ./releases/tmp/static/css
   cp ./server/static/index.html ./releases/tmp/static
