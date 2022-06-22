@@ -110,8 +110,8 @@ is `83_Or_So_Random_Looking_Characters`, start the container with the following 
 
 ```
 $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
-		-v /Users/jdoe:/fcm \
-		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
+		-v /Users/jdoe:/config \
+		--env FCM_CRED_FILE=/config/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
 		--env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ \
 		--env FCM_APP_ID=1:141421356237:web:abc7de1234fab56cd78abc \
 		--env FCM_PROJECT_ID=myproject-1234 \
@@ -119,6 +119,40 @@ $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 		--env FCM_VAPID_KEY=83_Or_So_Random_Looking_Characters \
 		tinode/tinode-mysql:latest
 ```
+
+### Configure video calling
+
+Tinode uses [WebRTC](https://webrtc.org/) for video and audio calls. WebRTC needs [Interactive Communication Establishment (ICE)](https://tools.ietf.org/id/draft-ietf-ice-rfc5245bis-13.html) [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and/or [STUN](https://en.wikipedia.org/wiki/STUN) servers to traverse [NAT](https://en.wikipedia.org/wiki/Network_address_translation), otherwise calls may not work. Tinode does not include TURN(S) or STUN out of the box. You need to obtain and configure your own service. Once you setup your TURN(S) and/or STUN service, save its configuration to a file, for example `/Users/jdoe/turn-config.json` and provide path to this file when starting the container:
+
+```
+$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
+		-v /Users/jdoe:/config \
+		--env ICE_SERVERS_FILE=/config/turn-config.json \
+		< ... other config parameters ... >
+		tinode/tinode-mysql:latest
+```
+
+The config file uses the following format:
+```json
+[
+  {
+    "urls": [
+      "stun:stun.example.com"
+    ]
+  },
+  {
+    "username": "user-name-to-use-for-authentication-with-the-server",
+    "credential": "your-password",
+    "urls": [
+      "turn:turn.example.com:80?transport=udp",
+      "turn:turn.example.com:3478?transport=tcp",
+      "turns:turn.example.com:443?transport=tcp",
+    ]
+  }
+]
+```
+
+[XIRSYS](https://xirsys.com/) offers a free tier for developers. We are in no way affiliated with XIRSYS. We do not endorse or otherwise take any responsibility for your use of their services.
 
 ### Run the chatbot
 

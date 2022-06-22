@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.8.0"
+APP_VERSION = "2.0.0b2" # format: 1.9.0b1
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -599,16 +599,36 @@ def noteMsg(id, cmd, ignored):
         cmd.topic = tn_globals.DefaultTopic
 
     enum_what = None
+    cmd.seq = int(cmd.seq)
     if cmd.what == 'kp':
         enum_what = pb.KP
         cmd.seq = None
     elif cmd.what == 'read':
         enum_what = pb.READ
-        cmd.seq = int(cmd.seq)
     elif cmd.what == 'recv':
         enum_what = pb.RECV
-        cmd.seq = int(cmd.seq)
-    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq),
+    elif cmd.what == 'call':
+        enum_what = pb.CALL
+
+    enum_event = None
+    if enum_what == pb.CALL:
+        if cmd.what == 'accept':
+            enum_event = pb.ACCEPT
+        elif cmd.what == 'answer':
+            enum_event = pb.ANSWER
+        elif cmd.what == 'ice-candidate':
+            enum_event = pb.ICE_CANDIDATE
+        elif cmd.what == 'hang-up':
+            enum_event = pb.HANG_UP
+        elif cmd.what == 'offer':
+            enum_event = pb.OFFER
+        elif cmd.what == 'ringing':
+            enum_event = pb.RINGING
+    else:
+        cmd.payload = None
+
+    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what,
+        seq_id=cmd.seq, event=enum_event, payload=cmd.payload),
         extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # Upload file out of band over HTTP(S) (not gRPC).
@@ -725,9 +745,11 @@ def parse_cmd(parts):
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
-        parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['kp', 'read', 'recv'],
+        parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['call', 'kp', 'read', 'recv'],
             help='notification type: kp (key press), recv, read - message received or read receipt')
         parser.add_argument('--seq', help='message ID being reported')
+        parser.add_argument('--event', help='video call event', choices=['accept', 'answer', 'ice-candidate', 'hang-up', 'offer', 'ringing'])
+        parser.add_argument('--payload', help='video call payload')
     elif parts[0] == "upload":
         parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band')
         parser.add_argument('filename', help='name of the file to upload')

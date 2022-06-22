@@ -163,7 +163,7 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 <p align="center">
 <img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=250 />
 <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=250 />
-<img src="docs/android-account.png" alt="Android screenshot: account settings" width=250 />
+<img src="docs/android-video-call.png" alt="Android screenshot: video call" width=250 />
 </p>
 
 ### [iOS](https://github.com/tinode/ios)
@@ -181,7 +181,7 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 ### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info.png" alt="Mobile web: topic info" width=250 />
+  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-video-call.png" alt="Mobile web: topic info" width=250 />
 </p>
 
 
