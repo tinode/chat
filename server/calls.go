@@ -198,7 +198,6 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		seq:         t.lastID,
 		content:     msg.Pub.Content,
 		contentMime: msg.Pub.Head["mime"],
-		acceptedAt:  time.Now(),
 	}
 	t.currentCall.parties[msg.sess] = callPartyData{
 		uid:          asUid,
@@ -271,6 +270,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 				uid:          asUid,
 				isOriginator: false,
 			}
+			t.currentCall.acceptedAt = time.Now()
 
 			// Notify other clients that the call has been accepted.
 			t.infoCallSubsOffline(msg.AsUser, asUid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
