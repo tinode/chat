@@ -242,7 +242,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		}
 		originatorUid, originator := t.getCallOriginator()
 		if originator == nil {
-			logs.Warn.Printf("topic[%s]: video call (seq %d) has no originator. Terminating.", t.name, t.currentCall.seq)
+			// No originator session: terminating.
 			t.terminateCallInProgress(false)
 			return
 		}
@@ -368,7 +368,7 @@ func (t *Topic) terminateCallInProgress(callDidTimeout bool) {
 	uid, sess := t.getCallOriginator()
 	if sess == nil || uid.IsZero() {
 		// Just drop the call.
-		logs.Warn.Printf("topic[%s]: video call (seq %d) has no originator. Terminating.", t.name, t.currentCall.seq)
+		logs.Warn.Printf("topic[%s]: video call seq %d has no originator, terminating.", t.name, t.currentCall.seq)
 		t.currentCall = nil
 		return
 	}
@@ -381,5 +381,6 @@ func (t *Topic) terminateCallInProgress(callDidTimeout bool) {
 		sess:      sess,
 	}
 
+	logs.Info.Printf("topic[%s]: terminating call seq %d, timeout: %t", t.name, t.currentCall.seq, callDidTimeout)
 	t.maybeEndCallInProgress("", dummy, callDidTimeout)
 }
