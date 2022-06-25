@@ -279,6 +279,15 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		originator.queueOut(forwardMsg)
 
 	case constCallEventOffer, constCallEventAnswer, constCallEventIceCandidate:
+		// Invariants:
+		// 1. Call has been estabslied (2 participants).
+		if len(t.currentCall.parties) != 2 {
+			return
+		}
+		// 2. Event is coming from a call participant session.
+		if _, ok := t.currentCall.parties[msg.sess]; !ok {
+			return
+		}
 		// Call metadata exchange. Either side of the call may send these events.
 		// Simply forward them to the other session.
 		var otherUid types.Uid
@@ -301,6 +310,23 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		otherEnd.queueOut(forwardMsg)
 
 	case constCallEventHangUp:
+		switch len(t.currentCall.parties) {
+		case 2:
+			// If it's a call in progress, hangup may arrive only from a call participant session.
+			if _, ok := t.currentCall.parties[msg.sess]; !ok {
+				return
+			}
+		case 1:
+			// Call hasn't been established yet.
+			originatorUid, originator := t.getCallOriginator()
+			// Hangup may come from either the originating session or
+			// any callee user session.
+			if asUid == originatorUid && originator != msg.sess {
+				return
+			}
+		default:
+			break
+		}
 		t.maybeEndCallInProgress(msg.AsUser, msg, false)
 
 	default:
