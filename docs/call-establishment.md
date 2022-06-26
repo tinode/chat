@@ -6,6 +6,7 @@ Notes:
 - All communication is proxied by the Tinode server.
 - Client-to-server events are dispatched in `{note}` messages with the call's `topic` and `seq` fields set.
 - Server-to-client data are routed in `{info}` messages on `me` topic with the call's `src` (call topic) and `seq` fields set (and/or in data push notifications).
+- It's assumed that both Alice and Bob may have multiple devices.
 
 ## Details
 ### Call phases
