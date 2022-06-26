@@ -1,8 +1,9 @@
 # Video Call Establishment Flow
 
-Tinode currently supports P2P video calls.
-Below is a diagram describing call establishment flow between two users `Alice` and `Bob`. Notes:
-- All communication is proxies by the Tinode server.
+Tinode supports peer to peer video calls over [WebRTC](https://webrtc.org/). The diagram below illustrates a call establishment flow between two users `Alice` and `Bob`. The flow is conceptually similar to [SIP](https://en.wikipedia.org/wiki/Session_Initiation_Protocol), but uses native Tinode messages for transport.
+
+Notes:
+- All communication is proxied by the Tinode server.
 - Client-to-server events are dispatched in `{note}` messages with the call's `topic` and `seq` fields set.
 - Server-to-client data are routed in `{info}` messages on `me` topic with the call's `src` (call topic) and `seq` fields set (and/or in data push notifications).
 
