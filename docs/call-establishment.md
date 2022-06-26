@@ -21,56 +21,57 @@ sequenceDiagram
     participant B as Bob
     Note over A: Alice initiates a call
     A->>S: 1. {pub head:webrtc=started}
-    S->>A: 2. {ctrl params:seq=X}
-    S->>+B: 3. {info seq=X event=invite}
-    S-->>B: or {data seq=X head:webrtc=started} <br/> push notification
-    B->>-S: 4. {note seq=X event=ringing}
-    S->>A: 5. {info seq=X event=ringing}
+    S->>A: 2. {ctrl params:seq=123}
+    S->>+B: 3. {info seq=123 event=invite}
+    S-->>B: or {data seq=123 head:webrtc=started} <br/> push notification
+    B->>-S: 4. {note seq=123 event=ringing}
+    S->>A: 5. {info seq=123 event=ringing}
     Note over B: Bob's client ringing<br/>waiting for Bob to accept
-    B->>S: 6. {note seq=X event=accept}
-    S->>A: 7a. {info seq=X event=accept}
-    S->>B: 7b. {info seq=X event=accept}
-    S-->>B: {data seq=X head:webrtc=accepted}
-    S-->>A: {data seq=X head:webrtc=accepted}
+    B->>S: 6. {note seq=123 event=accept}
+    S->>A: 7a. {info seq=123 event=accept}
+    S->>B: 7b. {info seq=123 event=accept}
+    S-->>B: {data seq=123 head:webrtc=accepted}
+    S-->>A: {data seq=123 head:webrtc=accepted}
     Note over S: Call accepted, peer metadata exchange
-    A->>S: 8. {note seq=X event=offer}
-    S->>+B: 9. {info seq=X event=offer}
-    B->>-S: 10. {note seq=X event=answer}
-    S->>A: 11. {info seq=X event=answer}
+    A->>S: 8. {note seq=123 event=offer}
+    S->>+B: 9. {info seq=123 event=offer}
+    B->>-S: 10. {note seq=123 event=answer}
+    S->>A: 11. {info seq=123 event=answer}
     loop Ice Candidate Exchange
-        A->>S: 12. {note seq=X event=ice-candidate}
-        S->>B: 13. {info seq=X event=ice-candidate}
-        B->>S: 14. {note seq=X event=ice-candidate}
-        S->>A: 15. {info seq=X event=ice-candidate}
+        A->>S: 12. {note seq=123 event=ice-candidate}
+        S->>B: 13. {info seq=123 event=ice-candidate}
+        B->>S: 14. {note seq=123 event=ice-candidate}
+        S->>A: 15. {info seq=123 event=ice-candidate}
     end
     Note over S: Call established
-    A->>S: 16. {note seq=X event=hang-up}
-    S->>B: 17. {info seq=X event=hang-up}
-    S-->>B: {data seq=X head:webrtc=finished}
-    S-->>A: {data seq=X head:webrtc=finished}
+    A->>S: 16. {note seq=123 event=hang-up}
+    S->>B: 17. {info seq=123 event=hang-up}
+    S-->>B: {data seq=123 head:webrtc=finished}
+    S-->>A: {data seq=123 head:webrtc=finished}
 ```
 
 ### Call Establishment & Termination steps
+
 #### Call initiation
 1. `Alice` initiates a call by posting a video call message (with `webrtc=started` header)
 2. Server replies with a `{ctrl}` message containing the `seq` id of the call.
 3. Server routes an `invite` event message to `Bob` (all clients).
-  -- Additionally, server sends data push notifications containing a `webrtc=started` field to `Bob`.
-  -- Upon receiving either of the above, `Bob` displays the incoming call UI.
+  - Additionally, server sends data push notifications containing a `webrtc=started` field to `Bob`.
+  - Upon receiving either of the above, `Bob` displays the incoming call UI.
 4. `Bob` replies with a `ringing` event.
 5. Server relays the `ringing` event to `Alice`. The latter now plays the ringing sound.
-  -- Note that `Alice` may receive multiple `ringing` events as each separate instance of `Bob` acknowldges receipt of the call invitation separately.
-  -- `Alice` and server will wait for up to a server configured timeout for `Bob` to accept the call and then hang up.
-  -- At this point, the call is officially **initiated**.
----
+  - Note that `Alice` may receive multiple `ringing` events as each separate instance of `Bob` acknowldges receipt of the call invitation separately.
+  - `Alice` and server will wait for up to a server configured timeout for `Bob` to accept the call and then hang up.
+  - At this point, the call is officially **initiated**.
+
 #### Call acceptance
 6. `Bob` accepts the call by sending an `accept` event.
 7. (a) and (b): Server routes `accept` event to `Alice` and `Bob`.
-  -- Additionally, the server broadcasts a replacement for the call data message with `webrtc=accepted` header.
-  -- Push notifications for the replacement message are sent as well.
-  -- `Bob`'s sessions except the one that accepted the call may silently dismiss the incoming call UI.
-  -- At this point, the call is officially **accepted**.
----
+  - Additionally, the server broadcasts a replacement for the call data message with `webrtc=accepted` header.
+  - Push notifications for the replacement message are sent as well.
+  - `Bob`'s sessions except the one that accepted the call may silently dismiss the incoming call UI.
+  - At this point, the call is officially **accepted**.
+
 #### Metadata exchange
 8. `Alice` sends an `offer` event containing an SDP payload.
 9. Server routes the `offer` to `Bob`.
@@ -79,7 +80,7 @@ sequenceDiagram
 
 Steps 12-15 are Ice candidate exchange between `Alice` and `Bob`.
 At this point the call is officially **established**. `Alice` and `Bob` can see and hear each other.
----
+
 #### Call termination
 16. `Alice` sends a `hang-up` event to server.
 17. Server routes a `hang-up` event to `Bob`.
