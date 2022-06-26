@@ -30,8 +30,8 @@ sequenceDiagram
     B->>S: 6. {note seq=123 event=accept}
     S->>A: 7a. {info seq=123 event=accept}
     S->>B: 7b. {info seq=123 event=accept}
-    S-->>B: {data seq=123 head:webrtc=accepted}
-    S-->>A: {data seq=123 head:webrtc=accepted}
+    S-->>B: {data seq=124 head:webrtc=accepted,replace=123}
+    S-->>A: {data seq=124 head:webrtc=accepted,replace=123}
     Note over S: Call accepted, peer metadata exchange
     A->>S: 8. {note seq=123 event=offer}
     S->>+B: 9. {info seq=123 event=offer}
@@ -46,8 +46,8 @@ sequenceDiagram
     Note over S: Call established
     A->>S: 16. {note seq=123 event=hang-up}
     S->>B: 17. {info seq=123 event=hang-up}
-    S-->>B: {data seq=123 head:webrtc=finished}
-    S-->>A: {data seq=123 head:webrtc=finished}
+    S-->>B: {data seq=125 head:webrtc=finished,replace=123}
+    S-->>A: {data seq=125 head:webrtc=finished,replace=123}
 ```
 
 ### Call Establishment & Termination steps
