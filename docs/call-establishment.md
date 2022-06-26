@@ -38,7 +38,8 @@ sequenceDiagram
     S->>+B: 9. {info seq=123 event=offer}
     B->>-S: 10. {note seq=123 event=answer}
     S->>A: 11. {info seq=123 event=answer}
-    loop Ice Candidate Exchange
+    Note over S: Ice Candidate Exchange
+    loop
         A->>S: 12. {note seq=123 event=ice-candidate}
         S->>B: 13. {info seq=123 event=ice-candidate}
         B->>S: 14. {note seq=123 event=ice-candidate}
