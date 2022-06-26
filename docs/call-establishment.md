@@ -21,36 +21,52 @@ sequenceDiagram
     participant A as Alice
     participant S as Tinode Server
     participant B as Bob
-    Note over A: Alice initiates a call
-    A->>S: 1. {pub head:webrtc=started}
-    S->>A: 2. {ctrl params:seq=123}
-    S->>+B: 3. {info seq=123 event=invite}
-    S-->>B: or {data seq=123 head:webrtc=started} <br/> push notification
-    B->>-S: 4. {note seq=123 event=ringing}
-    S->>A: 5. {info seq=123 event=ringing}
-    Note over B: Bob's client ringing<br/>waiting for Bob to accept
-    B->>S: 6. {note seq=123 event=accept}
-    S->>A: 7a. {info seq=123 event=accept}
-    S->>B: 7b. {info seq=123 event=accept}
-    S-->>B: {data seq=124 head:webrtc=accepted,replace=123}
-    S-->>A: {data seq=124 head:webrtc=accepted,replace=123}
+    rect rgb(212, 242, 255)
+        Note over A: Alice initiates a call
+        A->>S: 1. {pub head:webrtc=started}
+        S->>A: 2. {ctrl params:seq=123}
+        S->>+B: 3. {info seq=123 event=invite}
+        S-->>B: or {data seq=123 head:webrtc=started} <br/> push notification
+        B->>-S: 4. {note seq=123 event=ringing}
+        S->>A: 5. {info seq=123 event=ringing}
+    end
+    Note over S: Bob's client ringing<br/>waiting for Bob to accept
+    rect rgb(212, 242, 255)
+        Note over B: Bob accepts the call
+        B->>S: 6. {note seq=123 event=accept}
+        S->>A: 7a. {info seq=123 event=accept}
+        S->>B: 7b. {info seq=123 event=accept}
+        S-->>B: {data seq=124 head:webrtc=accepted,replace=123}
+        S-->>A: {data seq=124 head:webrtc=accepted,replace=123}
+    end
     Note over S: Call accepted, peer metadata exchange
     A->>S: 8. {note seq=123 event=offer}
     S->>+B: 9. {info seq=123 event=offer}
     B->>-S: 10. {note seq=123 event=answer}
     S->>A: 11. {info seq=123 event=answer}
-    Note over S: Ice Candidate Exchange
-    loop
-        A->>S: 12. {note seq=123 event=ice-candidate}
-        S->>B: 13. {info seq=123 event=ice-candidate}
-        B->>S: 14. {note seq=123 event=ice-candidate}
-        S->>A: 15. {info seq=123 event=ice-candidate}
+    rect rgb(212, 242, 255)
+        Note over S: ICE candidate exchange
+        loop
+            A->>S: 12. {note seq=123 event=ice-candidate}
+            S->>B: 13. {info seq=123 event=ice-candidate}
+            B->>S: 14. {note seq=123 event=ice-candidate}
+            S->>A: 15. {info seq=123 event=ice-candidate}
+        end
     end
-    Note over S: Call established
-    A->>S: 16. {note seq=123 event=hang-up}
-    S->>B: 17. {info seq=123 event=hang-up}
-    S-->>B: {data seq=125 head:webrtc=finished,replace=123}
-    S-->>A: {data seq=125 head:webrtc=finished,replace=123}
+    Note over S: Call established<br/>conversation in progress
+    rect rgb(212, 242, 255)
+        Note over S: Call termination
+        alt
+            A->>S: 16a. {note seq=123 event=hang-up}
+            B->>S: 16b. {note seq=123 event=hang-up}
+        end
+        alt
+            S->>B: 17a. {info seq=123 event=hang-up}
+            S->>A: 17b. {info seq=123 event=hang-up}
+        end
+        S-->>B: {data seq=125 head:webrtc=finished,replace=123}
+        S-->>A: {data seq=125 head:webrtc=finished,replace=123}
+    end
 ```
 
 ### Call Establishment & Termination steps
