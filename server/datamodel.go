@@ -935,12 +935,12 @@ func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 	}
 }
 
-// NoErrAccepted indicates request was accepted but not perocessed yet (202).
+// NoErrAccepted indicates request was accepted but not processed yet (202).
 func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	return NoErrAcceptedExplicitTs(id, topic, ts, ts)
 }
 
-// NoErrAcceptedExplicitTs indicates request was accepted but not perocessed yet
+// NoErrAcceptedExplicitTs indicates request was accepted but not processed yet
 // with explicit server and incoming request timestamps (202).
 func NoErrAcceptedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
