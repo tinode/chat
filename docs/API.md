@@ -42,6 +42,7 @@
 		- [Tinode Push Gateway](#tinode-push-gateway)
 		- [Google FCM](#google-fcm)
 		- [Stdout](#stdout)
+  - [Video Calls](#video-calls)
 	- [Messages](#messages)
 		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -596,6 +597,9 @@ Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push noti
 
 The `stdout` adapter is mostly useful for debugging and logging. It writes push payload to `STDOUT` where it can be redirected to file or read by some other process.
 
+## Video Calls
+
+[See separate document](call-establishment.md).
 
 ## Messages
 
