@@ -42,7 +42,7 @@
 		- [Tinode Push Gateway](#tinode-push-gateway)
 		- [Google FCM](#google-fcm)
 		- [Stdout](#stdout)
-  - [Video Calls](#video-calls)
+	- [Video Calls](#video-calls)
 	- [Messages](#messages)
 		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
