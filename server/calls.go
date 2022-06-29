@@ -23,8 +23,6 @@ import (
 const (
 	// Events for call between users A and B.
 	//
-	// Call started (A is dialing B).
-	constCallEventInvite = "invite"
 	// B has received the call but hasn't picked it up yet.
 	constCallEventRinging = "ringing"
 	// B has accepted the call.
@@ -180,18 +178,6 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 // Handles video call invite (initiation)
 // (in response to msg = {pub head=[mime: application/x-tiniode-webrtc]}).
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
-	if t.currentCall != nil {
-		// There's already another call in progress.
-		msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
-		return
-	}
-	if t.cat != types.TopicCatP2P {
-		msg.sess.queueOut(ErrPermissionDeniedReply(msg, types.TimeNow()))
-		return
-	}
-
-	tgt := t.p2pOtherUser(asUid)
-	t.infoCallSubsOffline(msg.AsUser, tgt, constCallEventInvite, t.lastID, nil, msg.sess.sid, false)
 	// Call being establshed.
 	t.currentCall = &videoCall{
 		parties:     make(map[*Session]callPartyData),

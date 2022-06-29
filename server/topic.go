@@ -1034,6 +1034,10 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrNotImplementedReply(msg, types.TimeNow()))
 			return
 		}
+		if t.cat != types.TopicCatP2P {
+			msg.sess.queueOut(ErrPermissionDeniedReply(msg, types.TimeNow()))
+			return
+		}
 		if t.currentCall != nil {
 			msg.sess.queueOut(ErrCallBusyReply(msg, types.TimeNow()))
 			return
