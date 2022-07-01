@@ -171,6 +171,8 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 		if pl.Webrtc != "" {
 			data["webrtc"] = pl.Webrtc
+			// Video call push notifications are silent.
+			data["silent"] = "true"
 		}
 		if pl.Replace != "" {
 			data["replace"] = pl.Replace
@@ -290,6 +292,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 
 	// TODO(aforge): introduce iOS push configuration (similar to Android).
 	// FIXME(gene): need to configure silent "read" push.
+	_, isVideoCall := data["webrtc"]
 	titleIOS := "New message"
 	bodyIOS := data["content"]
 	apnsNotification := func(msg *fcm.Message, unread int) {
@@ -298,15 +301,19 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 				Aps: &fcm.Aps{
 					ContentAvailable: true,
 					MutableContent:   true,
-					Sound:            "default",
-					// Need to duplicate these in APNS.Payload.Aps.Alert so
-					// iOS may call NotificationServiceExtension (if present).
-					Alert: &fcm.ApsAlert{
-						Title: titleIOS,
-						Body:  bodyIOS,
-					},
 				},
 			},
+		}
+		if isVideoCall {
+			// Sound, alert and badge are not available for video call messages.
+			return
+		}
+		msg.APNS.Payload.Aps.Sound = "default"
+		// Need to duplicate these in APNS.Payload.Aps.Alert so
+		// iOS may call NotificationServiceExtension (if present).
+		msg.APNS.Payload.Aps.Alert = &fcm.ApsAlert{
+			Title: titleIOS,
+			Body:  bodyIOS,
 		}
 		if unread >= 0 {
 			// iOS uses Badge to show the total unread message count.
