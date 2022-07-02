@@ -116,11 +116,16 @@ func (t *Topic) pushForP2PSub(fromUid, toUid types.Uid, want, given types.Access
 // Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a group topic.
 func (t *Topic) pushForGroupSub(fromUid types.Uid, now time.Time) *push.Receipt {
 	receipt := t.preparePushForSubReceipt(fromUid, now)
+	if pud, ok := t.perUser[fromUid]; ok {
+		receipt.Payload.ModeWant = pud.modeWant
+		receipt.Payload.ModeGiven = pud.modeGiven
+	} else {
+		// Sender is not a subscriber (BUG?)
+		return nil
+	}
+
 	for uid, pud := range t.perUser {
-		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid == fromUid {
-			continue
-		}
+		// Send only to those who have notifications enabled.
 		mode := pud.modeWant & pud.modeGiven
 		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
 			receipt.To[uid] = push.Recipient{}
