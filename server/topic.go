@@ -809,6 +809,8 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 	modeGiven, _ := types.ParseAcs([]byte(acs.Given))
 	mode := modeWant & modeGiven
 
+	asChan := t.isChan && types.IsChannel(sreg.Original)
+
 	if t.cat == types.TopicCatP2P {
 		uid2 := t.p2pOtherUser(asUid)
 		pud2 := t.perUser[uid2]
@@ -844,11 +846,9 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			// Also send a push notification to the other user.
 			sendPush(t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, now))
 		}
-	} else if t.cat == types.TopicCatGrp {
-		if sreg.Sub.Newsub {
-			// For new subscriptions, notify other group members.
-			sendPush(t.pushForGroupSub(asUid, now))
-		}
+	} else if t.cat == types.TopicCatGrp && !asChan && sreg.Sub.Newsub {
+		// For new group subscriptions, notify other group members.
+		sendPush(t.pushForGroupSub(asUid, now))
 	}
 
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
@@ -862,7 +862,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			},
 			sreg.sess.sid, false)
 
-		if t.isChan && types.IsChannel(sreg.Original) {
+		if asChan {
 			t.channelSubUnsub(asUid, true)
 		}
 	}
