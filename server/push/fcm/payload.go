@@ -14,118 +14,6 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
-// AndroidConfig is the configuration of AndroidNotification payload.
-type AndroidConfig struct {
-	Enabled bool `json:"enabled,omitempty"`
-	// Common defaults for all push types.
-	androidPayload
-	// Configs for specific push types.
-	Msg androidPayload `json:"msg,omitempty"`
-	Sub androidPayload `json:"sub,omitempty"`
-}
-
-func (ac *AndroidConfig) getTitleLocKey(what string) string {
-	var title string
-	if what == push.ActMsg {
-		title = ac.Msg.TitleLocKey
-	} else if what == push.ActSub {
-		title = ac.Sub.TitleLocKey
-	}
-	if title == "" {
-		title = ac.androidPayload.TitleLocKey
-	}
-	return title
-}
-
-func (ac *AndroidConfig) getTitle(what string) string {
-	var title string
-	if what == push.ActMsg {
-		title = ac.Msg.Title
-	} else if what == push.ActSub {
-		title = ac.Sub.Title
-	}
-	if title == "" {
-		title = ac.androidPayload.Title
-	}
-	return title
-}
-
-func (ac *AndroidConfig) getBodyLocKey(what string) string {
-	var body string
-	if what == push.ActMsg {
-		body = ac.Msg.BodyLocKey
-	} else if what == push.ActSub {
-		body = ac.Sub.BodyLocKey
-	}
-	if body == "" {
-		body = ac.androidPayload.BodyLocKey
-	}
-	return body
-}
-
-func (ac *AndroidConfig) getBody(what string) string {
-	var body string
-	if what == push.ActMsg {
-		body = ac.Msg.Body
-	} else if what == push.ActSub {
-		body = ac.Sub.Body
-	}
-	if body == "" {
-		body = ac.androidPayload.Body
-	}
-	return body
-}
-
-func (ac *AndroidConfig) getIcon(what string) string {
-	var icon string
-	if what == push.ActMsg {
-		icon = ac.Msg.Icon
-	} else if what == push.ActSub {
-		icon = ac.Sub.Icon
-	}
-	if icon == "" {
-		icon = ac.androidPayload.Icon
-	}
-	return icon
-}
-
-func (ac *AndroidConfig) getColor(what string) string {
-	var color string
-	if what == push.ActMsg {
-		color = ac.Msg.Color
-	} else if what == push.ActSub {
-		color = ac.Sub.Color
-	}
-	if color == "" {
-		color = ac.androidPayload.Color
-	}
-	return color
-}
-
-func (ac *AndroidConfig) getClickAction(what string) string {
-	var clickAction string
-	if what == push.ActMsg {
-		clickAction = ac.Msg.ClickAction
-	} else if what == push.ActSub {
-		clickAction = ac.Sub.ClickAction
-	}
-	if clickAction == "" {
-		clickAction = ac.androidPayload.ClickAction
-	}
-	return clickAction
-}
-
-// Payload to be sent for a specific notification type.
-type androidPayload struct {
-	TitleLocKey string `json:"title_loc_key,omitempty"`
-	Title       string `json:"title,omitempty"`
-	BodyLocKey  string `json:"body_loc_key,omitempty"`
-	Body        string `json:"body,omitempty"`
-	Icon        string `json:"icon,omitempty"`
-	Color       string `json:"color,omitempty"`
-	ClickAction string `json:"click_action,omitempty"`
-}
-
 // MessageData adds user ID and device token to push message. This is needed for error handling.
 type MessageData struct {
 	Uid t.Uid
@@ -238,56 +126,12 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		return nil
 	}
 
-	var title, body, priority string
-	var androidNotification func(msg *fcm.Message, priority string)
+	andrPayload := androidPrepareValues(config, rcpt.Payload.What, data)
+	var priority string
 	if rcpt.Payload.What == push.ActRead {
 		priority = "normal"
-		androidNotification = func(msg *fcm.Message, priority string) {
-			msg.Android = &fcm.AndroidConfig{
-				Priority:     priority,
-				Notification: nil,
-			}
-		}
 	} else {
 		priority = "high"
-		var titlelc, bodylc, icon, color, clickAction string
-		if config != nil && config.Enabled {
-			titlelc = config.getTitleLocKey(rcpt.Payload.What)
-			title = config.getTitle(rcpt.Payload.What)
-			bodylc = config.getBodyLocKey(rcpt.Payload.What)
-			body = config.getBody(rcpt.Payload.What)
-			if body == "$content" {
-				body = data["content"]
-			}
-			icon = config.getIcon(rcpt.Payload.What)
-			color = config.getColor(rcpt.Payload.What)
-			clickAction = config.getClickAction(rcpt.Payload.What)
-		}
-
-		androidNotification = func(msg *fcm.Message, priority string) {
-			msg.Android = &fcm.AndroidConfig{
-				Priority: priority,
-			}
-			// When this notification type is included and the app is not in the foreground
-			// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
-			// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-			if config != nil && config.Enabled {
-				msg.Android.Notification = &fcm.AndroidNotification{
-					// Android uses Tag value to group notifications together:
-					// show just one notification per topic.
-					Tag:         rcpt.Payload.Topic,
-					Priority:    fcm.PriorityHigh,
-					Visibility:  fcm.VisibilityPrivate,
-					TitleLocKey: titlelc,
-					Title:       title,
-					BodyLocKey:  bodylc,
-					Body:        body,
-					Icon:        icon,
-					Color:       color,
-					ClickAction: clickAction,
-				}
-			}
-		}
 	}
 
 	// TODO(aforge): introduce iOS push configuration (similar to Android).
@@ -345,15 +189,15 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 					Data:  userData,
 				}
 
-				if title != "" || body != "" {
+				if andrPayload != nil {
 					msg.Notification = &fcm.Notification{
-						Title: title,
-						Body:  body,
+						Title: andrPayload.title,
+						Body:  andrPayload.body,
 					}
 				}
 
 				if d.Platform == "android" {
-					androidNotification(&msg, priority)
+					androidUpdateMessage(&msg, andrPayload, rcpt.Payload.Topic, priority)
 				} else if d.Platform == "ios" {
 					apnsNotification(&msg, rcpt.To[uid].Unread)
 				}
@@ -362,7 +206,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		}
 	}
 
-	if rcpt.Channel != "" {
+	if rcpt.Channel != "" && andrPayload != nil {
 		topic := rcpt.Channel
 		userData := clonePayload(data)
 		userData["topic"] = topic
@@ -372,13 +216,13 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 			Topic: topic,
 			Data:  userData,
 			Notification: &fcm.Notification{
-				Title: title,
-				Body:  body,
+				Title: andrPayload.title,
+				Body:  andrPayload.body,
 			},
 		}
 
 		// We don't know the platform of the receiver, must provide payload for all platforms.
-		androidNotification(&msg, "normal")
+		androidUpdateMessage(&msg, andrPayload, rcpt.Payload.Topic, "normal")
 		apnsNotification(&msg, -1)
 		messages = append(messages, MessageData{Message: &msg})
 	}
