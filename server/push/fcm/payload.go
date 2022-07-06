@@ -90,7 +90,7 @@ func clonePayload(src map[string]string) map[string]string {
 
 // PrepareNotifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
-func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageData {
+func PrepareNotifications(rcpt *push.Receipt, config *CommonNotifConfig) []MessageData {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
 		logs.Warn.Println("fcm push: could not parse payload;", err)
@@ -126,7 +126,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		return nil
 	}
 
-	andrPayload := androidPrepareValues(config, rcpt.Payload.What, data)
+	values := prepareValues(config, rcpt.Payload.What, data)
 	var priority string
 	if rcpt.Payload.What == push.ActRead {
 		priority = "normal"
@@ -134,41 +134,11 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		priority = "high"
 	}
 
-	// TODO(aforge): introduce iOS push configuration (similar to Android).
-	// FIXME(gene): need to configure silent "read" push.
-	_, isVideoCall := data["webrtc"]
-	titleIOS := "New message"
-	bodyIOS := data["content"]
-	apnsNotification := func(msg *fcm.Message, unread int) {
-		msg.APNS = &fcm.APNSConfig{
-			Payload: &fcm.APNSPayload{
-				Aps: &fcm.Aps{
-					ContentAvailable: true,
-					MutableContent:   true,
-				},
-			},
-		}
-		if isVideoCall {
-			// Sound, alert and badge are not available for video call messages.
-			return
-		}
-		msg.APNS.Payload.Aps.Sound = "default"
-		// Need to duplicate these in APNS.Payload.Aps.Alert so
-		// iOS may call NotificationServiceExtension (if present).
-		msg.APNS.Payload.Aps.Alert = &fcm.ApsAlert{
-			Title: titleIOS,
-			Body:  bodyIOS,
-		}
-		if unread >= 0 {
-			// iOS uses Badge to show the total unread message count.
-			msg.APNS.Payload.Aps.Badge = &unread
-		}
-	}
-
 	var messages []MessageData
+
+	tcat := t.GetTopicCat(data["topic"])
 	for uid, devList := range devices {
 		userData := data
-		tcat := t.GetTopicCat(data["topic"])
 		if rcpt.To[uid].Delivered > 0 || tcat == t.TopicCatP2P {
 			userData = clonePayload(data)
 			// Fix topic name for P2P pushes.
@@ -189,41 +159,40 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 					Data:  userData,
 				}
 
-				if andrPayload != nil {
+				if values != nil {
 					msg.Notification = &fcm.Notification{
-						Title: andrPayload.title,
-						Body:  andrPayload.body,
+						Title: values.title,
+						Body:  values.body,
 					}
 				}
 
 				if d.Platform == "android" {
-					androidUpdateMessage(&msg, andrPayload, rcpt.Payload.Topic, priority)
+					assignAndroidNotification(&msg, values, rcpt.Payload.Topic, priority)
 				} else if d.Platform == "ios" {
-					apnsNotification(&msg, rcpt.To[uid].Unread)
+					assignAppleNotification(&msg, values, rcpt.Payload.Topic, priority, rcpt.To[uid].Unread)
 				}
 				messages = append(messages, MessageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
 			}
 		}
 	}
 
-	if rcpt.Channel != "" && andrPayload != nil {
-		topic := rcpt.Channel
+	if rcpt.Channel != "" && values != nil {
 		userData := clonePayload(data)
-		userData["topic"] = topic
+		userData["topic"] = rcpt.Channel
 		// Channel receiver should not know the ID of the message sender.
 		delete(userData, "xfrom")
 		msg := fcm.Message{
-			Topic: topic,
+			Topic: rcpt.Channel,
 			Data:  userData,
 			Notification: &fcm.Notification{
-				Title: andrPayload.title,
-				Body:  andrPayload.body,
+				Title: values.title,
+				Body:  values.body,
 			},
 		}
 
 		// We don't know the platform of the receiver, must provide payload for all platforms.
-		androidUpdateMessage(&msg, andrPayload, rcpt.Payload.Topic, "normal")
-		apnsNotification(&msg, -1)
+		assignAndroidNotification(&msg, values, rcpt.Payload.Topic, "normal")
+		assignAppleNotification(&msg, values, rcpt.Payload.Topic, "normal", -1)
 		messages = append(messages, MessageData{Message: &msg})
 	}
 

@@ -1,11 +1,11 @@
-# FCM push adapter
+# FCM/APNS push adapter
 
-This adapter sends push notifications to mobile clients and web browsers using [Google FCM](https://firebase.google.com/docs/cloud-messaging/). As of the time of this writing it supports Android with [Play Services](https://developers.google.com/android/guides/overview), iOS devices, and all major web browsers [excluding Safari](https://caniuse.com/#feat=push-api).
+This adapter sends push notifications to Android and web browsers using [Google FCM](https://firebase.google.com/docs/cloud-messaging/), to iOS devices using APNS. As of the time of this writing it supports Android with [Play Services](https://developers.google.com/android/guides/overview), iOS devices, and all major web browsers [excluding Safari](https://caniuse.com/#feat=push-api).
 
-This adapter requires you to obtain your own credentials from Goole Firebase. If you want to use iOS and Android mobile apps with your service, they must be recompiled with your credentials obtained from Google. If you do not want to recompile mobile clients, consider using TNPG adapter instead.
+This adapter requires you to obtain your own credentials from Google Firebase and Apple APNS. If you want to use iOS and Android mobile apps with your service, they must be recompiled with your credentials obtained from Google. If you do not want to recompile mobile clients, consider using TNPG adapter instead.
 
 
-## Configuring FCM adapter
+## Configuring FCM/APNS adapter
 
 ### Server and TinodeWeb
 
