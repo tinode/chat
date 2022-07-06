@@ -15,16 +15,6 @@ type preparedValues struct {
 	actionlc    string
 }
 
-// CommonNotifConfig is the configuration of notification payload.
-type CommonNotifConfig struct {
-	Enabled bool `json:"enabled,omitempty"`
-	// Common defaults for all push types.
-	notificationConfig
-	// Configs for specific push types.
-	Msg notificationConfig `json:"msg,omitempty"`
-	Sub notificationConfig `json:"sub,omitempty"`
-}
-
 // Default platform-specific configuration for one message type.
 type notificationConfig struct {
 	TitleLocKey string `json:"title_loc_key,omitempty"`

@@ -28,25 +28,28 @@ func assignAppleNotification(msg *fcm.Message, values *preparedValues, tag, prio
 			"apns-collapse-id": tag,
 		},
 	}
+
+	msg.APNS.Payload = &fcm.APNSPayload{
+		Aps: &fcm.Aps{
+			ContentAvailable: true,
+			MutableContent:   true,
+			Sound:            "default",
+			Category:         "FIX_ME",
+		},
+	}
+
+	if unread >= 0 {
+		// iOS uses Badge to show the total unread message count.
+		msg.APNS.Payload.Aps.Badge = &unread
+	}
+
 	if values != nil && !values.isVideoCall {
-		msg.APNS.Payload = &fcm.APNSPayload{
-			Aps: &fcm.Aps{
-				ContentAvailable: true,
-				MutableContent:   true,
-				Sound:            "default",
-				Category:         "FIX_ME",
-				Alert: &fcm.ApsAlert{
-					Title:        values.title,
-					TitleLocKey:  values.titlelc,
-					Body:         values.body,
-					LocKey:       values.bodylc,
-					ActionLocKey: values.actionlc,
-				},
-			},
-		}
-		if unread >= 0 {
-			// iOS uses Badge to show the total unread message count.
-			msg.APNS.Payload.Aps.Badge = &unread
+		msg.APNS.Payload.Aps.Alert = &fcm.ApsAlert{
+			Title:        values.title,
+			TitleLocKey:  values.titlelc,
+			Body:         values.body,
+			LocKey:       values.bodylc,
+			ActionLocKey: values.actionlc,
 		}
 	}
 }

@@ -17,9 +17,13 @@ This adapter requires you to obtain your own credentials from Google Firebase an
     Remove the other entry. I.e. if you have updated `"credentials_file"`, remove `"credentials"` and vice versa.
 4. Update [TinodeWeb](/tinode/webapp/) config [`firebase-init.js`](https://github.com/tinode/webapp/blob/master/firebase-init.js): update `apiKey`, `messagingSenderId`, `projectId`, `appId`, `messagingVapidKey`. See more info at https://github.com/tinode/webapp/#push_notifications
 
-### iOS and Android
+### iOS
 
-1. If you are using an Android client, add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin and recompile the client. You may also optionally submit it to Google Play Store.
-See more info at https://github.com/tinode/tindroid/#push_notifications
 2. If you are using an iOS client, add `GoogleService-Info.plist` to [Tinodios](/tinode/ios/) by following instructions at https://firebase.google.com/docs/cloud-messaging/ios/client) and recompile the client. You may optionally submit the app to Apple AppStore.
 See more info at https://github.com/tinode/ios/#push_notifications
+
+https://developer.apple.com/documentation/usernotifications/setting_up_a_remote_notification_server/establishing_a_token-based_connection_to_apns
+
+### Android
+
+1. Add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin and recompile the client. You may also optionally submit it to Google Play Store. See more info at https://github.com/tinode/tindroid/#push_notifications

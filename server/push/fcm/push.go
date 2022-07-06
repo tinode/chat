@@ -8,10 +8,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
 
+	"github.com/sideshow/apns2"
+	"github.com/sideshow/apns2/token"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
@@ -36,10 +39,11 @@ const (
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
-	input   chan *push.Receipt
-	channel chan *push.ChannelReq
-	stop    chan bool
-	client  *fcm.Client
+	input      chan *push.Receipt
+	channel    chan *push.ChannelReq
+	stop       chan bool
+	fcmClient  *fcm.Client
+	apnsClient *apns2.Client
 }
 
 type configType struct {
@@ -49,6 +53,16 @@ type configType struct {
 	TimeToLive      uint              `json:"time_to_live,omitempty"`
 	Android         CommonNotifConfig `json:"android,omitempty"`
 	Apple           CommonNotifConfig `json:"apple,omitempty"`
+}
+
+// CommonNotifConfig is the configuration of notification payload.
+type CommonNotifConfig struct {
+	Enabled bool `json:"enabled,omitempty"`
+	// Common defaults for all push types.
+	notificationConfig
+	// Configs for specific push types.
+	Msg notificationConfig `json:"msg,omitempty"`
+	Sub notificationConfig `json:"sub,omitempty"`
 }
 
 // Init initializes the push handler
@@ -84,7 +98,7 @@ func (Handler) Init(jsonconf string) error {
 		return err
 	}
 
-	handler.client, err = app.Messaging(ctx)
+	handler.fcmClient, err = app.Messaging(ctx)
 	if err != nil {
 		return err
 	}
@@ -109,6 +123,23 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
+func (Handler) initAPNS() *apns2.Client {
+	authKey, err := token.AuthKeyFromFile("../AuthKey_XXX.p8")
+	if err != nil {
+		log.Fatal("token error:", err)
+	}
+
+	token := &token.Token{
+		AuthKey: authKey,
+		// KeyID from developer account (Certificates, Identifiers & Profiles -> Keys)
+		KeyID: "ABC123DEFG",
+		// TeamID from developer account (View Account -> Membership)
+		TeamID: "DEF123GHIJ",
+	}
+
+	return apns2.NewTokenClient(token)
+}
+
 func sendNotifications(rcpt *push.Receipt, config *configType) {
 	messages := PrepareNotifications(rcpt, &config.Android)
 	n := len(messages)
@@ -126,7 +157,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 		for j := i; j < upper; j++ {
 			batch = append(batch, messages[j].Message)
 		}
-		resp, err := handler.client.SendAll(ctx, batch)
+		resp, err := handler.fcmClient.SendAll(ctx, batch)
 		if err != nil {
 			// Complete failure.
 			logs.Warn.Println("fcm SendAll failed", err)
@@ -169,9 +200,9 @@ func processSubscription(req *push.ChannelReq) {
 	var resp *fcm.TopicManagementResponse
 	if channel != "" && len(devices) > 0 {
 		if req.Unsub {
-			resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
+			resp, err = handler.fcmClient.UnsubscribeFromTopic(context.Background(), devices, channel)
 		} else {
-			resp, err = handler.client.SubscribeToTopic(context.Background(), devices, channel)
+			resp, err = handler.fcmClient.SubscribeToTopic(context.Background(), devices, channel)
 		}
 		if err != nil {
 			// Complete failure.
@@ -187,9 +218,9 @@ func processSubscription(req *push.ChannelReq) {
 		devices := []string{device}
 		for _, channel := range channels {
 			if req.Unsub {
-				resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
+				resp, err = handler.fcmClient.UnsubscribeFromTopic(context.Background(), devices, channel)
 			} else {
-				resp, err = handler.client.SubscribeToTopic(context.Background(), devices, channel)
+				resp, err = handler.fcmClient.SubscribeToTopic(context.Background(), devices, channel)
 			}
 			if err != nil {
 				// Complete failure.
