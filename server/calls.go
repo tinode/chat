@@ -259,7 +259,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			t.currentCall.acceptedAt = time.Now()
 
 			// Notify other clients that the call has been accepted.
-			t.infoCallSubsOffline(msg.AsUser, asUid, call.Event, t.lastID, call.Payload, msg.sess.sid, false)
+			t.infoCallSubsOffline(msg.AsUser, asUid, call.Event, t.currentCall.seq, call.Payload, msg.sess.sid, false)
 			t.callEstablishmentTimer.Stop()
 		}
 		originator.queueOut(forwardMsg)
