@@ -336,7 +336,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchLeave(t *testing.T) {
@@ -585,7 +585,7 @@ func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchPublishMissingSubcription(t *testing.T) {
@@ -745,7 +745,7 @@ func TestDispatchGetMetaChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchSet(t *testing.T) {
@@ -880,7 +880,7 @@ func TestDispatchSetMetaChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchDelMsg(t *testing.T) {
@@ -1003,7 +1003,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchDelUnsubscribedSession(t *testing.T) {
@@ -1134,7 +1134,7 @@ func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {

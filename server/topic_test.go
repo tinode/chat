@@ -53,6 +53,7 @@ type TopicTestHelper struct {
 
 func (b *TopicTestHelper) finish() {
 	b.topic.killTimer.Stop()
+	b.topic.callEstablishmentTimer.Stop()
 	// Stop session write loops.
 	for _, s := range b.sessions {
 		close(s.send)
@@ -135,13 +136,14 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		pu[uid] = puData
 	}
 	b.topic = &Topic{
-		name:      topicName,
-		cat:       cat,
-		status:    topicStatusLoaded,
-		perUser:   pu,
-		isProxy:   false,
-		sessions:  ps,
-		killTimer: time.NewTimer(time.Hour),
+		name:                   topicName,
+		cat:                    cat,
+		status:                 topicStatusLoaded,
+		perUser:                pu,
+		isProxy:                false,
+		sessions:               ps,
+		killTimer:              time.NewTimer(time.Hour),
+		callEstablishmentTimer: time.NewTimer(time.Second),
 	}
 	if cat != types.TopicCatSys {
 		b.topic.accessAuth = getDefaultAccess(cat, true, false)
@@ -259,6 +261,110 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 		} else {
 			t.Errorf("Uid %s: no hub results found.", uid.UserId())
 		}
+	}
+}
+
+func TestHandleBroadcastCall(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
+	globals.iceServers = []iceServer{iceServer{Username: "dummy"}}
+	helper.topic.lastID = 5
+	defer helper.tearDown()
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+	from := helper.uids[0].UserId()
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: from,
+		Pub: &MsgClientPub{
+			Topic:   "p2p",
+			Head:    map[string]interface{}{"webrtc": "started"},
+			Content: "test",
+			NoEcho:  true,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+	globals.iceServers = nil
+
+	// Message uid1 -> uid2.
+	for i, m := range helper.results {
+		if i == 0 {
+			if len(m.messages) != 0 {
+				t.Fatalf("Uid1: expected 0 messages, got %d", len(m.messages))
+			}
+		} else {
+			if len(m.messages) != 1 {
+				t.Fatalf("Uid2: expected 1 messages, got %d", len(m.messages))
+			}
+			r := m.messages[0].(*ServerComMessage)
+			if r.Data == nil {
+				t.Fatalf("Response[0] must have a ctrl message")
+			}
+			if r.Data.Topic != from {
+				t.Errorf("Response[0] topic: expected '%s', got '%s'", from, r.Data.Topic)
+			}
+			if r.Data.Content.(string) != "test" {
+				t.Errorf("Response[0] content: expected 'test', got '%s'", r.Data.Content.(string))
+			}
+			if r.Data.Head == nil || r.Data.Head["webrtc"].(string) != "started" {
+				t.Errorf("Response[0] head: expected {'webrtc': 'started'}', got '%s'", r.Data.Content.(string))
+			}
+			if r.Data.From != from {
+				t.Errorf("Response[0] from: expected '%s', got '%s'", from, r.Data.From)
+			}
+		}
+	}
+	// Checking presence messages routed through the helper.
+	if len(helper.hubMessages) != 2 {
+		t.Fatal("Huhelper.route expected exactly two recipients routed via huhelper.")
+	}
+	for i, uid := range helper.uids {
+		if mm, ok := helper.hubMessages[uid.UserId()]; ok {
+			if len(mm) == 1 {
+				s := mm[0]
+				if s.Pres != nil {
+					p := s.Pres
+					if p.Topic != "me" {
+						t.Errorf("Uid %s: pres notify on topic is expected to be 'me', got %s", uid.UserId(), p.Topic)
+					}
+					if p.SkipTopic != "p2p-test" {
+						t.Errorf("Uid %s: pres skip topic is expected to be 'p2p-test', got %s", uid.UserId(), p.SkipTopic)
+					}
+					expectedSrc := helper.uids[i^1].UserId()
+					if p.Src != expectedSrc {
+						t.Errorf("Uid %s: pres.src expected: %s, found: %s", uid.UserId(), expectedSrc, p.Src)
+					}
+				} else {
+					t.Errorf("Uid %s: hub message expected to be {pres}.", uid.UserId())
+				}
+			} else {
+				t.Errorf("Uid %s: expected 1 hub message, got %d.", uid.UserId(), len(mm))
+			}
+		} else {
+			t.Errorf("Uid %s: no hub results found.", uid.UserId())
+		}
+	}
+	if helper.topic.currentCall == nil {
+		t.Fatal("No call in progress")
+	}
+	if helper.topic.currentCall.seq != 6 {
+		t.Errorf("Call seq: expected 6, found %d.", helper.topic.currentCall.seq)
+	}
+	if len(helper.topic.currentCall.parties) != 1 {
+		t.Fatalf("Call parties: expected 1, found %d.", len(helper.topic.currentCall.parties))
+	}
+	if p, ok := helper.topic.currentCall.parties[helper.sessions[0]]; ok {
+		if !p.isOriginator {
+			t.Error("Call party is not a call originator.")
+		}
+		if p.uid != helper.uids[0] {
+			t.Errorf("Call party wrong uid: expected %s, found %s.", helper.uids[0].UserId(), p.uid.UserId())
+		}
+	} else {
+		t.Errorf("Call party for session %s not found.", helper.sessions[0].sid)
 	}
 }
 
