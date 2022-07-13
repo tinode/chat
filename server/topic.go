@@ -288,7 +288,20 @@ func (t *Topic) computePerUserAcsUnion() {
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
 	if t.currentCall != nil {
-		if _, found := t.currentCall.parties[msg.sess.sid]; found {
+		shouldTerminateCall := false
+		if msg.sess.isMultiplex() {
+			// Check if any of the call party sessions is multiplexed over msg.sess.
+			for _, p := range t.currentCall.parties {
+				if p.sess.isProxy() && p.sess.multi == msg.sess {
+					shouldTerminateCall = true
+					break
+				}
+			}
+		} else if _, found := t.currentCall.parties[msg.sess.sid]; found {
+			// Normal session disconnecting from topic. Just terminate the call.
+			shouldTerminateCall = true
+		}
+		if shouldTerminateCall {
 			t.terminateCallInProgress(false)
 		}
 	}
