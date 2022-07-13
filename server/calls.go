@@ -66,10 +66,20 @@ type iceServer struct {
 	Urls           []string `json:"urls,omitempty"`
 }
 
+// callPartyData describes a video call participant.
+type callPartyData struct {
+	// ID of the call participant (asUid); not necessarily the session owner.
+	uid types.Uid
+	// True if this session/user initiated the call.
+	isOriginator bool
+	// Call party session.
+	sess *Session
+}
+
 // videoCall describes video call that's being established or in progress.
 type videoCall struct {
-	// Call participants.
-	parties map[*Session]callPartyData
+	// Call participants (session sid -> callPartyData).
+	parties map[string]callPartyData
 	// Call message seq ID.
 	seq int
 	// Call message content.
@@ -78,6 +88,16 @@ type videoCall struct {
 	contentMime interface{}
 	// Time when the call was accepted.
 	acceptedAt time.Time
+}
+
+// callPartySession returns a session to be stored in the call party data.
+func callPartySession(sess *Session) *Session {
+	if sess.isProxy() {
+		callSess := *sess
+		callSess.proxyReq = ProxyReqCall
+		return &callSess
+	}
+	return sess
 }
 
 func initVideoCalls(jsconfig json.RawMessage) error {
@@ -167,9 +187,9 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 	if t.currentCall == nil {
 		return types.ZeroUid, nil
 	}
-	for sess, p := range t.currentCall.parties {
+	for _, p := range t.currentCall.parties {
 		if p.isOriginator {
-			return p.uid, sess
+			return p.uid, p.sess
 		}
 	}
 	return types.ZeroUid, nil
@@ -180,14 +200,15 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	// Call being establshed.
 	t.currentCall = &videoCall{
-		parties:     make(map[*Session]callPartyData),
+		parties:     make(map[string]callPartyData),
 		seq:         t.lastID,
 		content:     msg.Pub.Content,
 		contentMime: msg.Pub.Head["mime"],
 	}
-	t.currentCall.parties[msg.sess] = callPartyData{
+	t.currentCall.parties[msg.sess.sid] = callPartyData{
 		uid:          asUid,
 		isOriginator: true,
+		sess:         callPartySession(msg.sess),
 	}
 	// Wait for constCallEstablishmentTimeout for the other side to accept the call.
 	t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
@@ -198,6 +219,7 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	if t.currentCall == nil {
 		// Must initiate call first.
+		logs.Warn.Printf("topic[%s]: No call in progress", t.name)
 		return
 	}
 	if t.isInactive() {
@@ -208,6 +230,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	call := msg.Note
 	if t.currentCall.seq != call.SeqId {
 		// Call not found.
+		logs.Info.Printf("topic[%s]: invalid seq id - current call (%d) vs received (%d)", t.name, t.currentCall.seq, call.SeqId)
 		return
 	}
 
@@ -216,6 +239,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	_, userFound := t.perUser[asUid]
 	if !userFound {
 		// User not found in topic.
+		logs.Warn.Printf("topic[%s]: could not find user %s", t.name, asUid.UserId())
 		return
 	}
 
@@ -233,7 +257,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			return
 		}
 		// 2. These events may only arrive from the callee.
-		if originator == msg.sess || originatorUid == asUid {
+		if originator.sid == msg.sess.sid || originatorUid == asUid {
 			return
 		}
 		// Prepare a {info} message to forward to the call originator.
@@ -252,9 +276,10 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 				return
 			}
 			// Add callee data to t.currentCall.
-			t.currentCall.parties[msg.sess] = callPartyData{
+			t.currentCall.parties[msg.sess.sid] = callPartyData{
 				uid:          asUid,
 				isOriginator: false,
+				sess:         callPartySession(msg.sess),
 			}
 			t.currentCall.acceptedAt = time.Now()
 
@@ -268,24 +293,27 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		// Invariants:
 		// 1. Call has been estabslied (2 participants).
 		if len(t.currentCall.parties) != 2 {
+			logs.Warn.Printf("topic[%s]: call participants expected 2 vs found %s", t.name, len(t.currentCall.parties))
 			return
 		}
 		// 2. Event is coming from a call participant session.
-		if _, ok := t.currentCall.parties[msg.sess]; !ok {
+		if _, ok := t.currentCall.parties[msg.sess.sid]; !ok {
+			logs.Warn.Printf("topic[%s]: call event from non-party session %s", t.name, msg.sess.sid)
 			return
 		}
 		// Call metadata exchange. Either side of the call may send these events.
 		// Simply forward them to the other session.
 		var otherUid types.Uid
 		var otherEnd *Session
-		for sess, p := range t.currentCall.parties {
-			if sess != msg.sess {
+		for sid, p := range t.currentCall.parties {
+			if sid != msg.sess.sid {
 				otherUid = p.uid
-				otherEnd = sess
+				otherEnd = p.sess
 				break
 			}
 		}
 		if otherEnd == nil {
+			logs.Warn.Printf("topic[%s]: could not find call peer for session %s", t.name, msg.sess.sid)
 			return
 		}
 		// All is good. Send {info} message to the otherEnd.
@@ -299,7 +327,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		switch len(t.currentCall.parties) {
 		case 2:
 			// If it's a call in progress, hangup may arrive only from a call participant session.
-			if _, ok := t.currentCall.parties[msg.sess]; !ok {
+			if _, ok := t.currentCall.parties[msg.sess.sid]; !ok {
 				return
 			}
 		case 1:
@@ -326,7 +354,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 		return
 	}
 	t.callEstablishmentTimer.Stop()
-	originator, _ := t.getCallOriginator()
+	originatorUid, _ := t.getCallOriginator()
 	var replaceWith string
 	var callDuration int64
 	if from != "" && len(t.currentCall.parties) == 2 {
@@ -336,7 +364,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	} else {
 		if from != "" {
 			// User originated hang-up.
-			if from == originator.UserId() {
+			if from == originatorUid.UserId() {
 				// Originator/caller requested event.
 				replaceWith = constCallMsgMissed
 			} else {
@@ -357,8 +385,8 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	// Send a message indicating the call has ended.
 	head := t.currentCall.messageHead(replaceWith, int(callDuration))
 	msgCopy := *msg
-	msgCopy.AsUser = originator.UserId()
-	if err := t.saveAndBroadcastMessage(&msgCopy, originator, false, nil, head, t.currentCall.content); err != nil {
+	msgCopy.AsUser = originatorUid.UserId()
+	if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, head, t.currentCall.content); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 

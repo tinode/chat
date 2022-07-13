@@ -31,13 +31,14 @@ type ProxyReqType int
 
 // Individual request types.
 const (
-	ProxyReqNone ProxyReqType = iota
-	ProxyReqJoin
-	ProxyReqLeave
-	ProxyReqMeta
-	ProxyReqBroadcast
+	ProxyReqNone      ProxyReqType = iota
+	ProxyReqJoin                   // {sub}.
+	ProxyReqLeave                  // {leave}
+	ProxyReqMeta                   // {meta set|get}
+	ProxyReqBroadcast              // {pub}, {note}
 	ProxyReqBgSession
 	ProxyReqMeUserAgent
+	ProxyReqCall // Used in video call proxy sessions for routing call events.
 )
 
 type clusterNodeConfig struct {
@@ -1132,7 +1133,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent:
+				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent, ProxyReqCall:
 				// Do nothing
 				case ProxyReqBroadcast, ProxyReqNone:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {

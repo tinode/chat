@@ -202,14 +202,6 @@ type sessionUpdate struct {
 	userAgent string
 }
 
-// callPartyData describes a video call participant.
-type callPartyData struct {
-	// ID of the call participant (asUid); not necessarily the session owner.
-	uid types.Uid
-	// True if this session/user initiated the call.
-	isOriginator bool
-}
-
 var (
 	nilPresParams  = &presParams{}
 	nilPresFilters = &presFilters{}
@@ -296,7 +288,7 @@ func (t *Topic) computePerUserAcsUnion() {
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
 	if t.currentCall != nil {
-		if _, found := t.currentCall.parties[msg.sess]; found {
+		if _, found := t.currentCall.parties[msg.sess.sid]; found {
 			t.terminateCallInProgress(false)
 		}
 	}
