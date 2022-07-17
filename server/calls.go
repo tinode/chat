@@ -93,9 +93,22 @@ type videoCall struct {
 // callPartySession returns a session to be stored in the call party data.
 func callPartySession(sess *Session) *Session {
 	if sess.isProxy() {
-		callSess := *sess
-		callSess.proxyReq = ProxyReqCall
-		return &callSess
+		// We are on the topic host node. Make a copy of the ephemeral proxy session.
+		callSess := &Session{
+			proto: PROXY,
+			// Multiplexing session which actually handles the communication.
+			multi: sess.multi,
+			// Local parameters specific to this session.
+			sid:         sess.sid,
+			userAgent:   sess.userAgent,
+			remoteAddr:  sess.remoteAddr,
+			lang:        sess.lang,
+			countryCode: sess.countryCode,
+			proxyReq:    ProxyReqCall,
+			background:  sess.background,
+			uid:         sess.uid,
+		}
+		return callSess
 	}
 	return sess
 }
