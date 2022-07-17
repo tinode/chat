@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 
 	fbase "firebase.google.com/go"
-	fcm "firebase.google.com/go/messaging"
+	legacy "firebase.google.com/go/messaging"
+	fcmv1 "google.golang.org/api/fcm/v1"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -36,10 +38,13 @@ const (
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
-	input   chan *push.Receipt
-	channel chan *push.ChannelReq
-	stop    chan bool
-	client  *fcm.Client
+	input     chan *push.Receipt
+	channel   chan *push.ChannelReq
+	stop      chan bool
+	projectID string
+
+	client *legacy.Client
+	v1     *fcmv1.Service
 }
 
 type configType struct {
@@ -51,46 +56,58 @@ type configType struct {
 }
 
 // Init initializes the push handler
-func (Handler) Init(jsonconf string) error {
+func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 
 	var config configType
 	err := json.Unmarshal([]byte(jsonconf), &config)
 	if err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+		return false, errors.New("failed to parse config: " + err.Error())
 	}
 
 	if !config.Enabled {
-		return nil
+		return false, nil
 	}
+
 	ctx := context.Background()
 
-	var opt option.ClientOption
-	if config.Credentials != nil {
-		credentials, err := google.CredentialsFromJSON(ctx, config.Credentials,
-			"https://www.googleapis.com/auth/firebase.messaging")
+	if config.Credentials == nil && config.CredentialsFile != "" {
+		config.Credentials, err = os.ReadFile(config.CredentialsFile)
 		if err != nil {
-			return err
+			return false, err
 		}
-		opt = option.WithCredentials(credentials)
-	} else if config.CredentialsFile != "" {
-		opt = option.WithCredentialsFile(config.CredentialsFile)
-	} else {
-		return errors.New("missing credentials")
 	}
 
-	app, err := fbase.NewApp(ctx, &fbase.Config{}, opt)
+	if config.Credentials == nil {
+		return false, errors.New("missing credentials")
+	}
+
+	credentials, err := google.CredentialsFromJSON(ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
-		return err
+		return false, err
+	}
+	if credentials.ProjectID == "" {
+		return false, errors.New("missing project ID")
+	}
+
+	app, err := fbase.NewApp(ctx, &fbase.Config{}, option.WithCredentials(credentials))
+	if err != nil {
+		return false, err
 	}
 
 	handler.client, err = app.Messaging(ctx)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	handler.v1, err = fcmv1.NewService(ctx, option.WithCredentials(credentials), option.WithScopes(fcmv1.FirebaseMessagingScope))
+	if err != nil {
+		return false, err
 	}
 
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
+	handler.projectID = credentials.ProjectID
 
 	go func() {
 		for {
@@ -105,7 +122,7 @@ func (Handler) Init(jsonconf string) error {
 		}
 	}()
 
-	return nil
+	return true, nil
 }
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
@@ -121,7 +138,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 		if upper > n {
 			upper = n
 		}
-		var batch []*fcm.Message
+		var batch []*legacy.Message
 		for j := i; j < upper; j++ {
 			batch = append(batch, messages[j].Message)
 		}
@@ -165,7 +182,7 @@ func processSubscription(req *push.ChannelReq) {
 	}
 
 	var err error
-	var resp *fcm.TopicManagementResponse
+	var resp *legacy.TopicManagementResponse
 	if channel != "" && len(devices) > 0 {
 		if req.Unsub {
 			resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
@@ -208,7 +225,7 @@ func processSubscription(req *push.ChannelReq) {
 
 // handlePushError processes errors returned by a call to fcm.SendAll.
 // returns false to stop further processing of other messages.
-func handlePushErrors(response *fcm.BatchResponse, batch []MessageData) bool {
+func handlePushErrors(response *legacy.BatchResponse, batch []MessageData) bool {
 	if response.FailureCount <= 0 {
 		return true
 	}
@@ -221,7 +238,7 @@ func handlePushErrors(response *fcm.BatchResponse, batch []MessageData) bool {
 	return true
 }
 
-func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devices []string) {
+func handleSubErrors(response *legacy.TopicManagementResponse, uid types.Uid, devices []string) {
 	if response.FailureCount <= 0 {
 		return
 	}
@@ -233,21 +250,21 @@ func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devic
 }
 
 func handleFcmError(err error, uid types.Uid, deviceId string) bool {
-	if fcm.IsMessageRateExceeded(err) ||
-		fcm.IsServerUnavailable(err) ||
-		fcm.IsInternal(err) ||
-		fcm.IsUnknown(err) {
+	if legacy.IsMessageRateExceeded(err) ||
+		legacy.IsServerUnavailable(err) ||
+		legacy.IsInternal(err) ||
+		legacy.IsUnknown(err) {
 		// Transient errors. Stop sending this batch.
 		logs.Warn.Println("fcm transient failure", err)
 		return false
 	}
-	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
+	if legacy.IsMismatchedCredential(err) || legacy.IsInvalidArgument(err) {
 		// Config errors
 		logs.Warn.Println("fcm: request failed", err)
 		return false
 	}
 
-	if fcm.IsRegistrationTokenNotRegistered(err) {
+	if legacy.IsRegistrationTokenNotRegistered(err) {
 		// Token is no longer valid.
 		logs.Warn.Println("fcm: invalid token", uid, err)
 		if err := store.Devices.Delete(uid, deviceId); err != nil {
