@@ -306,7 +306,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 		// Invariants:
 		// 1. Call has been estabslied (2 participants).
 		if len(t.currentCall.parties) != 2 {
-			logs.Warn.Printf("topic[%s]: call participants expected 2 vs found %s", t.name, len(t.currentCall.parties))
+			logs.Warn.Printf("topic[%s]: call participants expected 2 vs found %d", t.name, len(t.currentCall.parties))
 			return
 		}
 		// 2. Event is coming from a call participant session.
