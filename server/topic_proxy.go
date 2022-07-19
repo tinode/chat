@@ -201,7 +201,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					killTimer.Reset(keepAlive)
 				}
 			}
-		case ProxyReqBroadcast, ProxyReqMeta:
+		case ProxyReqBroadcast, ProxyReqMeta, ProxyReqCall:
 			// no processing
 		case ProxyReqLeave:
 			if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
