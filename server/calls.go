@@ -348,7 +348,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			originatorUid, originator := t.getCallOriginator()
 			// Hangup may come from either the originating session or
 			// any callee user session.
-			if asUid == originatorUid && originator != msg.sess {
+			if asUid == originatorUid && originator.sid != msg.sess.sid {
 				return
 			}
 		default:
