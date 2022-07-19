@@ -181,7 +181,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareNotifications(rcpt, nil)
+	messages := fcm.PrepareLegacyNotifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {

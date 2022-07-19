@@ -49,10 +49,13 @@ type Handler struct {
 
 type configType struct {
 	Enabled         bool            `json:"enabled"`
+	DryRun          bool            `json:"dry_run"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	Android         AndroidConfig   `json:"android,omitempty"`
+	Android         *AndroidConfig  `json:"android,omitempty"`
+	Apns            *ApnsConfig     `json:"apns,omitempty"`
+	Webpush         *WebpushConfig  `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
@@ -113,7 +116,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				go sendNotifications(rcpt, &config)
+				go sendLegacy(rcpt, &config)
 			case sub := <-handler.channel:
 				go processSubscription(sub)
 			case <-handler.stop:
@@ -125,8 +128,8 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	return true, nil
 }
 
-func sendNotifications(rcpt *push.Receipt, config *configType) {
-	messages := PrepareNotifications(rcpt, &config.Android)
+func sendLegacy(rcpt *push.Receipt, config *configType) {
+	messages := PrepareLegacyNotifications(rcpt, &config.Android)
 	n := len(messages)
 	if n == 0 {
 		return
@@ -151,6 +154,21 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 
 		// Check for partial failure.
 		if !handlePushErrors(resp, messages[i:upper]) {
+			break
+		}
+	}
+}
+
+func sendFcmV1(rcpt *push.Receipt, config *configType) {
+	messages := PrepareV1Notifications(rcpt, config)
+	for i := range messages {
+		req := &fcmv1.SendMessageRequest{
+			Message:      messages[i],
+			ValidateOnly: config.DryRun,
+		}
+		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
+		if err != nil {
+			logs.Err.Println("fcm push failed:", err)
 			break
 		}
 	}
