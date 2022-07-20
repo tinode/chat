@@ -53,7 +53,7 @@ type configType struct {
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	Android         *AndroidConfig  `json:"android,omitempty"`
+	Android         *CommonConfig   `json:"android,omitempty"`
 	Apns            *ApnsConfig     `json:"apns,omitempty"`
 	Webpush         *WebpushConfig  `json:"webpush,omitempty"`
 }
