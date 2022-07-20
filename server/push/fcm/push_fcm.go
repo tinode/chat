@@ -52,10 +52,11 @@ type configType struct {
 	DryRun          bool            `json:"dry_run"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
-	TimeToLive      uint            `json:"time_to_live,omitempty"`
+	TimeToLive      int             `json:"time_to_live,omitempty"`
+	ApnsBundleID    string          `json:"apns_bundle_id,omitempty"`
 	Android         *CommonConfig   `json:"android,omitempty"`
-	Apns            *ApnsConfig     `json:"apns,omitempty"`
-	Webpush         *WebpushConfig  `json:"webpush,omitempty"`
+	Apns            *CommonConfig   `json:"apns,omitempty"`
+	Webpush         *CommonConfig   `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
@@ -116,7 +117,8 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				go sendLegacy(rcpt, &config)
+				// go sendLegacy(rcpt, &config)
+				go sendFcmV1(rcpt, &config)
 			case sub := <-handler.channel:
 				go processSubscription(sub)
 			case <-handler.stop:
@@ -129,7 +131,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 }
 
 func sendLegacy(rcpt *push.Receipt, config *configType) {
-	messages := PrepareLegacyNotifications(rcpt, &config.Android)
+	messages := PrepareLegacyNotifications(rcpt, config.Android)
 	n := len(messages)
 	if n == 0 {
 		return

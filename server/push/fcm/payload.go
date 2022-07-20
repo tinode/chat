@@ -21,9 +21,9 @@ import (
 type commonPayload struct {
 	// Common for APNS and Android
 	Body         string   `json:"body,omitempty"`
+	Title        string   `json:"title,omitempty"`
 	TitleLocKey  string   `json:"title_loc_key,omitempty"`
 	TitleLocArgs []string `json:"title_loc_args,omitempty"`
-	Title        string   `json:"title,omitempty"`
 
 	// Android
 	BodyLocKey  string   `json:"body_loc_key,omitempty"`
@@ -66,6 +66,17 @@ func (cp commonPayload) getStringAttr(field string) string {
 	return ""
 }
 
+func (cp commonPayload) getIntAttr(field string) int {
+	val := reflect.ValueOf(cp).FieldByName(field)
+	if !val.IsValid() {
+		return 0
+	}
+	if val.Kind() == reflect.Int {
+		return int(val.Int())
+	}
+	return 0
+}
+
 func (cc *CommonConfig) getStringField(what, field string) string {
 	var val string
 	if what == push.ActMsg {
@@ -75,6 +86,19 @@ func (cc *CommonConfig) getStringField(what, field string) string {
 	}
 	if val == "" {
 		val = cc.commonPayload.getStringAttr(field)
+	}
+	return val
+}
+
+func (cc *CommonConfig) getIntField(what, field string) int {
+	var val int
+	if what == push.ActMsg {
+		val = cc.Msg.getIntAttr(field)
+	} else if what == push.ActSub {
+		val = cc.Sub.getIntAttr(field)
+	}
+	if val == 0 {
+		val = cc.commonPayload.getIntAttr(field)
 	}
 	return val
 }
@@ -137,6 +161,44 @@ const (
 	// The value of this key must not exceed 64 bytes. For more information, see Quality of Service,
 	// Store-and-Forward, and Coalesced Notifications.
 	HeaderApnsCollapseID = "apns-collapse-id"
+
+	// The value of this header must accurately reflect the contents of your notification’s payload.
+	// If there’s a mismatch, or if the header is missing on required systems, APNs may return an error,
+	// delay the delivery of the notification, or drop it altogether.
+	HeaderApnsPushType = "apns-push-type"
+)
+
+type ApnsPushTypeType string
+
+const (
+	// Use the alert push type for notifications that trigger a user interaction—for example, an alert, badge, or sound.
+	// If you set this push type, the apns-topic header field must use your app’s bundle ID as the topic.
+	// For more information, see Generating a remote notification.
+	// If the notification requires immediate action from the user, set notification priority to 10; otherwise use 5.
+	ApnsPushTypeAlert ApnsPushTypeType = "alert"
+
+	// Use the background push type for notifications that deliver content in the background, and don’t trigger any user interactions.
+	// If you set this push type, the apns-topic header field must use your app’s bundle ID as the topic. Always use priority 5.
+	// Using priority 10 is an error. For more information, see Pushing Background Updates to Your App.
+	ApnsPushTypeBackground ApnsPushTypeType = "background"
+
+	// Use the location push type for notifications that request a user’s location. If you set this push type,
+	// the apns-topic header field must use your app’s bundle ID with .location-query appended to the end.
+	// If the location query requires an immediate response from the Location Push Service Extension, set notification
+	// apns-priority to 10; otherwise, use 5. The location push type supports only token-based authentication.
+	ApnsPushTypeLocation ApnsPushTypeType = "location"
+
+	// Use the voip push type for notifications that provide information about an incoming Voice-over-IP (VoIP) call.
+	// For more information, see Responding to VoIP Notifications from PushKit.
+	// If you set this push type, the apns-topic header field must use your app’s bundle ID with .voip appended to the end.
+	// If you’re using certificate-based authentication, you must also register the certificate for VoIP services.
+	// The topic is then part of the 1.2.840.113635.100.6.3.4 or 1.2.840.113635.100.6.3.6 extension.
+	ApnsPushTypeVoip ApnsPushTypeType = "voip"
+
+	// Use the fileprovider push type to signal changes to a File Provider extension. If you set this push type,
+	// the apns-topic header field must use your app’s bundle ID with .pushkit.fileprovider appended to the end.
+	// For more information, see Using Push Notifications to Signal Changes.
+	ApnsPushTypeFileprovider ApnsPushTypeType = "fileprovider"
 )
 
 // aps is the APNS payload.
@@ -495,22 +557,23 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 
 				switch d.Platform {
 				case "android":
-					if config.Android.Enabled {
-						msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config.Android)
-					}
+					logs.Info.Println("android", rcpt.Payload.What, topic, userData)
+					msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
 				case "ios":
-					if config.Apns.Enabled {
-						msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config.Apns)
-					}
+					logs.Info.Println("ios", rcpt.Payload.What, topic, userData)
+					msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
 				case "web":
-					if config.Webpush.Enabled {
+					logs.Info.Println("web", rcpt.Payload.What, topic, userData)
+					if config.Webpush != nil && config.Webpush.Enabled {
 						msg.Webpush = &fcmv1.WebpushConfig{}
 					}
 				case "":
+					logs.Info.Println("none", rcpt.Payload.What, topic, userData)
 					// ignore
 				default:
 					logs.Warn.Println("fcm: unknown device platform", d.Platform)
 				}
+				logs.Info.Println("msg:", msg)
 				messages = append(messages, &msg)
 			}
 		}
@@ -525,15 +588,11 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 		msg := fcmv1.Message{
 			Topic: topic,
 			Data:  userData,
-			Notification: &fcmv1.Notification{
-				Title: title,
-				Body:  body,
-			},
 		}
 
 		// We don't know the platform of the receiver, must provide payload for all platforms.
-		androidNotification(&msg, "normal")
-		apnsNotification(&msg, -1)
+		msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
+		msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, 0, config)
 		messages = append(messages, &msg)
 	}
 
@@ -569,7 +628,7 @@ func ChannelsForUser(uid t.Uid) []string {
 	return channels
 }
 
-func androidNotificationConfig(what, topic string, data map[string]string, config *CommonConfig) *fcmv1.AndroidConfig {
+func androidNotificationConfig(what, topic string, data map[string]string, config *configType) *fcmv1.AndroidConfig {
 	if what == push.ActRead {
 		return &fcmv1.AndroidConfig{
 			Priority:     "NORMAL",
@@ -586,71 +645,96 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	// When this notification type is included and the app is not in the foreground
 	// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
 	// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-	if config != nil && config.Enabled {
-		body := config.getStringField(what, "Body")
-		if body == "$content" {
-			body = data["content"]
-		}
+	if config == nil || !config.Enabled || config.Android == nil || !config.Android.Enabled {
+		return ac
+	}
 
-		priority = "PRIORITY_HIGH"
-		if _, videoCall := data["webrtc"]; videoCall {
-			priority = "PRIORITY_MAX"
-		}
-		ac.Notification = &fcmv1.AndroidNotification{
-			// Android uses Tag value to group notifications together:
-			// show just one notification per topic.
-			Tag:                  topic,
-			NotificationPriority: priority,
-			Visibility:           "PRIVATE",
-			TitleLocKey:          config.getStringField(what, "TitleLocKey"),
-			Title:                config.getStringField(what, "Title"),
-			BodyLocKey:           config.getStringField(what, "BodyLocKey"),
-			Body:                 body,
-			Icon:                 config.getStringField(what, "Icon"),
-			Color:                config.getStringField(what, "Color"),
-			ClickAction:          config.getStringField(what, "ClickAction"),
-		}
+	body := config.Android.getStringField(what, "Body")
+	if body == "$content" {
+		body = data["content"]
+	}
+
+	priority = "PRIORITY_HIGH"
+	if _, videoCall := data["webrtc"]; videoCall {
+		priority = "PRIORITY_MAX"
+	}
+	ac.Notification = &fcmv1.AndroidNotification{
+		// Android uses Tag value to group notifications together:
+		// show just one notification per topic.
+		Tag:                  topic,
+		NotificationPriority: priority,
+		Visibility:           "PRIVATE",
+		TitleLocKey:          config.Android.getStringField(what, "TitleLocKey"),
+		Title:                config.Android.getStringField(what, "Title"),
+		BodyLocKey:           config.Android.getStringField(what, "BodyLocKey"),
+		Body:                 body,
+		Icon:                 config.Android.getStringField(what, "Icon"),
+		Color:                config.Android.getStringField(what, "Color"),
+		ClickAction:          config.Android.getStringField(what, "ClickAction"),
 	}
 
 	return ac
 }
 
-func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *ApnsConfig) *fcmv1.ApnsConfig {
-	titleIOS := "New message"
-	bodyIOS := data["content"]
+func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
+	_, videoCall := data["webrtc"]
 
-	apsPayload := aps{
-		Alert:             alert,
-		Badge:             unread,
-		Category:          x,
-		ContentAvailable:  1,
-		MutableContent:    1,
-		InterruptionLevel: InterruptionLevelTimeSensitive,
+	bundleId := config.ApnsBundleID
+	pushType := ApnsPushTypeAlert
+	priority := 10
+	interruptionLevel := InterruptionLevelTimeSensitive
+	if videoCall {
+		interruptionLevel = InterruptionLevelCritical
+		pushType = ApnsPushTypeVoip
+		bundleId += ".voip"
+	} else if what == push.ActRead {
+		priority = 5
+		interruptionLevel = InterruptionLevelPassive
+		pushType = ApnsPushTypeBackground
 	}
 
-	payload, err := json.Marshal(apsPayload)
+	apsPayload := aps{
+		Badge: unread,
+		// Category:       x,
+		ContentAvailable:  1,
+		MutableContent:    1,
+		InterruptionLevel: interruptionLevel,
+		ThreadID:          topic,
+	}
+
+	if config != nil && config.Enabled && config.Apns != nil && config.Apns.Enabled && what != push.ActRead {
+		body := config.Apns.getStringField(what, "Body")
+		if body == "$content" {
+			body = data["content"]
+		}
+
+		apsPayload.Alert.Action = config.Apns.getStringField(what, "Action")
+		apsPayload.Alert.ActionLocKey = config.Apns.getStringField(what, "ActionLocKey")
+		apsPayload.Alert.Body = body
+		apsPayload.Alert.LaunchImage = config.Apns.getStringField(what, "LaunchImage")
+		apsPayload.Alert.LocKey = config.Apns.getStringField(what, "LocKey")
+		apsPayload.Alert.Title = config.Apns.getStringField(what, "Title")
+		apsPayload.Alert.Subtitle = config.Apns.getStringField(what, "Subtitle")
+		apsPayload.Alert.TitleLocKey = config.Apns.getStringField(what, "TitleLocKey")
+		apsPayload.Alert.SummaryArg = config.Apns.getStringField(what, "SummaryArg")
+		apsPayload.Alert.SummaryArgCount = config.Apns.getIntField(what, "SummaryArgCount")
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})
 	if err != nil {
 		return nil
 	}
-	headers := map[string]string{}
+	headers := map[string]string{
+		HeaderApnsExpiration: strconv.Itoa(config.TimeToLive),
+		HeaderApnsPriority:   strconv.Itoa(priority),
+		HeaderApnsTopic:      bundleId,
+		HeaderApnsCollapseID: topic,
+		HeaderApnsPushType:   string(pushType),
+	}
+
 	ac := &fcmv1.ApnsConfig{
 		Headers: headers,
 		Payload: payload,
-	}
-	if isVideoCall {
-		// Sound, alert and badge are not available for video call messages.
-		return
-	}
-	msg.APNS.Payload.Aps.Sound = "default"
-	// Need to duplicate these in APNS.Payload.Aps.Alert so
-	// iOS may call NotificationServiceExtension (if present).
-	msg.APNS.Payload.Aps.Alert = &legacy.ApsAlert{
-		Title: titleIOS,
-		Body:  bodyIOS,
-	}
-	if unread >= 0 {
-		// iOS uses Badge to show the total unread message count.
-		ac.Payload.Aps.Badge = &unread
 	}
 
 	return ac
