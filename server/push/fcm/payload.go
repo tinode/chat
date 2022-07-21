@@ -203,7 +203,7 @@ const (
 
 // aps is the APNS payload.
 type aps struct {
-	Alert             apsAlert              `json:"alert,omitempty"`
+	Alert             *apsAlert             `json:"alert,omitempty"`
 	Badge             int                   `json:"badge,omitempty"`
 	Category          string                `json:"category,omitempty"`
 	ContentAvailable  int                   `json:"content-available,omitempty"`
@@ -255,7 +255,9 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	data["xfrom"] = pl.From
 	if pl.What == push.ActMsg {
 		data["seq"] = strconv.Itoa(pl.SeqId)
-		data["mime"] = pl.ContentType
+		if pl.ContentType != "" {
+			data["mime"] = pl.ContentType
+		}
 
 		// Convert Drafty content to plain text (clients 0.16 and below).
 		data["content"], err = drafty.PlainText(pl.Content)
@@ -557,13 +559,13 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 
 				switch d.Platform {
 				case "android":
-					logs.Info.Println("android", rcpt.Payload.What, topic, userData)
+					logs.Info.Printf("sending android what='%s' topic='%s'", rcpt.Payload.What, topic)
 					msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
 				case "ios":
-					logs.Info.Println("ios", rcpt.Payload.What, topic, userData)
+					logs.Info.Printf("sending ios what='%s' topic='%s'", rcpt.Payload.What, topic)
 					msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
 				case "web":
-					logs.Info.Println("web", rcpt.Payload.What, topic, userData)
+					logs.Info.Printf("sending web what='%s' topic='%s'", rcpt.Payload.What, topic)
 					if config.Webpush != nil && config.Webpush.Enabled {
 						msg.Webpush = &fcmv1.WebpushConfig{}
 					}
@@ -573,7 +575,9 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 				default:
 					logs.Warn.Println("fcm: unknown device platform", d.Platform)
 				}
-				logs.Info.Println("msg:", msg)
+
+				x, _ := json.Marshal(msg)
+				logs.Err.Println("msg pushed:", string(x))
 				messages = append(messages, &msg)
 			}
 		}
@@ -645,7 +649,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	// When this notification type is included and the app is not in the foreground
 	// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
 	// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-	if config == nil || !config.Enabled || config.Android == nil || !config.Android.Enabled {
+	if config.Android == nil || !config.Android.Enabled {
 		return ac
 	}
 
@@ -695,29 +699,33 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 
 	apsPayload := aps{
 		Badge: unread,
-		// Category:       x,
+		// Category:       x, // Category has to be registered in the app.
 		ContentAvailable:  1,
 		MutableContent:    1,
 		InterruptionLevel: interruptionLevel,
 		ThreadID:          topic,
 	}
 
-	if config != nil && config.Enabled && config.Apns != nil && config.Apns.Enabled && what != push.ActRead {
+	if config.Apns != nil && config.Apns.Enabled && what != push.ActRead {
 		body := config.Apns.getStringField(what, "Body")
 		if body == "$content" {
 			body = data["content"]
 		}
 
-		apsPayload.Alert.Action = config.Apns.getStringField(what, "Action")
-		apsPayload.Alert.ActionLocKey = config.Apns.getStringField(what, "ActionLocKey")
-		apsPayload.Alert.Body = body
-		apsPayload.Alert.LaunchImage = config.Apns.getStringField(what, "LaunchImage")
-		apsPayload.Alert.LocKey = config.Apns.getStringField(what, "LocKey")
-		apsPayload.Alert.Title = config.Apns.getStringField(what, "Title")
-		apsPayload.Alert.Subtitle = config.Apns.getStringField(what, "Subtitle")
-		apsPayload.Alert.TitleLocKey = config.Apns.getStringField(what, "TitleLocKey")
-		apsPayload.Alert.SummaryArg = config.Apns.getStringField(what, "SummaryArg")
-		apsPayload.Alert.SummaryArgCount = config.Apns.getIntField(what, "SummaryArgCount")
+		apsPayload.Alert = &apsAlert{
+			Action:          config.Apns.getStringField(what, "Action"),
+			ActionLocKey:    config.Apns.getStringField(what, "ActionLocKey"),
+			Body:            body,
+			LaunchImage:     config.Apns.getStringField(what, "LaunchImage"),
+			LocKey:          config.Apns.getStringField(what, "LocKey"),
+			Title:           config.Apns.getStringField(what, "Title"),
+			Subtitle:        config.Apns.getStringField(what, "Subtitle"),
+			TitleLocKey:     config.Apns.getStringField(what, "TitleLocKey"),
+			SummaryArg:      config.Apns.getStringField(what, "SummaryArg"),
+			SummaryArgCount: config.Apns.getIntField(what, "SummaryArgCount"),
+		}
+	} else {
+		logs.Info.Println("no aps.alert:", config.Apns != nil, config.Apns != nil && config.Apns.Enabled, what != push.ActRead)
 	}
 
 	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})

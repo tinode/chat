@@ -13,6 +13,7 @@ import (
 	fbase "firebase.google.com/go"
 	legacy "firebase.google.com/go/messaging"
 	fcmv1 "google.golang.org/api/fcm/v1"
+	"google.golang.org/api/googleapi"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -117,7 +118,6 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				// go sendLegacy(rcpt, &config)
 				go sendFcmV1(rcpt, &config)
 			case sub := <-handler.channel:
 				go processSubscription(sub)
@@ -170,7 +170,22 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 		}
 		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
-			logs.Err.Println("fcm push failed:", err)
+			if gerr, ok := err.(*googleapi.Error); ok {
+				errmsg := gerr.Message
+				if len(gerr.Errors) > 0 {
+					for _, errInfo := range gerr.Errors {
+						errmsg = errInfo.Reason + " " + errInfo.Message + "; "
+					}
+				}
+				if len(gerr.Details) > 0 {
+					for _, detail := range gerr.Details {
+						logs.Err.Printf("fcm push details: %T %v", detail, detail)
+					}
+				}
+				logs.Err.Printf("fcm push failed: %d %s", gerr.Code, errmsg)
+			} else {
+				logs.Err.Println("fcm push failed:", err)
+			}
 			break
 		}
 	}
