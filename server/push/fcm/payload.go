@@ -559,18 +559,14 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 
 				switch d.Platform {
 				case "android":
-					logs.Info.Printf("sending android what='%s' topic='%s'", rcpt.Payload.What, topic)
 					msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
 				case "ios":
-					logs.Info.Printf("sending ios what='%s' topic='%s'", rcpt.Payload.What, topic)
 					msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
 				case "web":
-					logs.Info.Printf("sending web what='%s' topic='%s'", rcpt.Payload.What, topic)
 					if config.Webpush != nil && config.Webpush.Enabled {
 						msg.Webpush = &fcmv1.WebpushConfig{}
 					}
 				case "":
-					logs.Info.Println("none", rcpt.Payload.What, topic, userData)
 					// ignore
 				default:
 					logs.Warn.Println("fcm: unknown device platform", d.Platform)

@@ -171,16 +171,15 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
 			if gerr, ok := err.(*googleapi.Error); ok {
-				errmsg := gerr.Message
+				errmsg := gerr.Message + " "
 				if len(gerr.Errors) > 0 {
 					for _, errInfo := range gerr.Errors {
-						errmsg = errInfo.Reason + " " + errInfo.Message + "; "
+						errmsg = errInfo.Reason + "; " + errInfo.Message + " "
 					}
 				}
 				if len(gerr.Details) > 0 {
-					for _, detail := range gerr.Details {
-						logs.Err.Printf("fcm push details: %T %v", detail, detail)
-					}
+					details, _ := json.Marshal(gerr.Details)
+					errmsg += string(details)
 				}
 				logs.Err.Printf("fcm push failed: %d %s", gerr.Code, errmsg)
 			} else {
