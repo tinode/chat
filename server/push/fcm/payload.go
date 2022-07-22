@@ -103,6 +103,9 @@ func (cc *CommonConfig) getIntField(what, field string) int {
 	return val
 }
 
+// TTL of a VOIP push notification.
+const voipTimeToLive = 10
+
 // InterruptionLevel defines the values for the APNS payload.aps.InterruptionLevel.
 type InterruptionLevelType string
 
@@ -629,17 +632,26 @@ func ChannelsForUser(uid t.Uid) []string {
 }
 
 func androidNotificationConfig(what, topic string, data map[string]string, config *configType) *fcmv1.AndroidConfig {
+	timeToLive := strconv.Itoa(config.TimeToLive) + "s"
+
 	if what == push.ActRead {
 		return &fcmv1.AndroidConfig{
 			Priority:     "NORMAL",
 			Notification: nil,
+			Ttl:          timeToLive,
 		}
+	}
+
+	_, videoCall := data["webrtc"]
+	if videoCall {
+		timeToLive = "0s"
 	}
 
 	// Priority "NORMAL" or "HIGH"
 	priority := "HIGH"
 	ac := &fcmv1.AndroidConfig{
 		Priority: priority,
+		Ttl:      timeToLive,
 	}
 
 	// When this notification type is included and the app is not in the foreground
@@ -655,9 +667,10 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	}
 
 	priority = "PRIORITY_HIGH"
-	if _, videoCall := data["webrtc"]; videoCall {
+	if videoCall {
 		priority = "PRIORITY_MAX"
 	}
+
 	ac.Notification = &fcmv1.AndroidNotification{
 		// Android uses Tag value to group notifications together:
 		// show just one notification per topic.
@@ -679,6 +692,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
 	_, videoCall := data["webrtc"]
 
+	expires := time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
 	bundleId := config.ApnsBundleID
 	pushType := ApnsPushTypeAlert
 	priority := 10
@@ -687,6 +701,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		interruptionLevel = InterruptionLevelCritical
 		pushType = ApnsPushTypeVoip
 		bundleId += ".voip"
+		expires = time.Now().UTC().Add(time.Duration(voipTimeToLive) * time.Second)
 	} else if what == push.ActRead {
 		priority = 5
 		interruptionLevel = InterruptionLevelPassive
@@ -729,7 +744,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		return nil
 	}
 	headers := map[string]string{
-		HeaderApnsExpiration: strconv.Itoa(config.TimeToLive),
+		HeaderApnsExpiration: strconv.FormatInt(expires.Unix(), 10),
 		HeaderApnsPriority:   strconv.Itoa(priority),
 		HeaderApnsTopic:      bundleId,
 		HeaderApnsCollapseID: topic,
