@@ -690,14 +690,14 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 }
 
 func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
-	_, videoCall := data["webrtc"]
-
+	callStatus := data["webrtc"]
 	expires := time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
 	bundleId := config.ApnsBundleID
 	pushType := ApnsPushTypeAlert
 	priority := 10
 	interruptionLevel := InterruptionLevelTimeSensitive
-	if videoCall {
+	if callStatus == "started" {
+		// Send VOIP push only when a new call is started, otherwise send normal alert.
 		interruptionLevel = InterruptionLevelCritical
 		pushType = ApnsPushTypeVoip
 		bundleId += ".voip"
