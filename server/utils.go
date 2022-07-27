@@ -86,13 +86,13 @@ func normalizeTags(src []string) types.StringSlice {
 		// Unicode handling
 		ucurr := []rune(curr)
 
-		// Make sure the tag starts with a letter or a number.
-		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
+		// Enforce length in characters, not in bytes.
+		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
 			continue
 		}
 
-		// Enforce length in characters, not in bytes.
-		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
+		// Make sure the tag starts with a letter or a number.
+		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
 			continue
 		}
 
