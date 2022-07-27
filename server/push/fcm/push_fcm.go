@@ -130,37 +130,6 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	return true, nil
 }
 
-func sendLegacy(rcpt *push.Receipt, config *configType) {
-	messages := PrepareLegacyNotifications(rcpt, config.Android)
-	n := len(messages)
-	if n == 0 {
-		return
-	}
-
-	ctx := context.Background()
-	for i := 0; i < n; i += pushBatchSize {
-		upper := i + pushBatchSize
-		if upper > n {
-			upper = n
-		}
-		var batch []*legacy.Message
-		for j := i; j < upper; j++ {
-			batch = append(batch, messages[j].Message)
-		}
-		resp, err := handler.client.SendAll(ctx, batch)
-		if err != nil {
-			// Complete failure.
-			logs.Warn.Println("fcm SendAll failed", err)
-			break
-		}
-
-		// Check for partial failure.
-		if !handlePushErrors(resp, messages[i:upper]) {
-			break
-		}
-	}
-}
-
 func sendFcmV1(rcpt *push.Receipt, config *configType) {
 	messages := PrepareV1Notifications(rcpt, config)
 	for i := range messages {
