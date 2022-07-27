@@ -14,6 +14,8 @@ import (
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
 	"github.com/tinode/chat/server/store"
+
+	fcmv1 "google.golang.org/api/fcm/v1"
 )
 
 const (
@@ -35,9 +37,10 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled   bool   `json:"enabled"`
-	OrgID     string `json:"org"`
-	AuthToken string `json:"token"`
+	Enabled         bool   `json:"enabled"`
+	OrgID           string `json:"org"`
+	AuthToken       string `json:"token"`
+	DebugPushGWHost string `json:"debug_server"`
 }
 
 // subUnsubReq is a request to subscribe/unsubscribe device ID(s) to channel(s) (FCM topic).
@@ -102,14 +105,18 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 
 	config.OrgID = strings.TrimSpace(config.OrgID)
 	if config.OrgID == "" {
-		return false, errors.New("push.tnpg.org not specified.")
+		return false, errors.New("organization name is missing")
 	}
 
 	// Convert to lower case to avoid confusion.
 	config.OrgID = strings.ToLower(config.OrgID)
 
-	handler.pushUrl = baseTargetAddress + "push/" + config.OrgID
-	handler.subUrl = baseTargetAddress + "sub/" + config.OrgID
+	serverAddr := baseTargetAddress
+	if config.DebugPushGWHost != "" {
+		serverAddr = config.DebugPushGWHost
+	}
+	handler.pushUrl = serverAddr + "push/" + config.OrgID
+	handler.subUrl = serverAddr + "sub/" + config.OrgID
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
@@ -181,7 +188,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareLegacyNotifications(rcpt, nil)
+	messages := fcm.PrepareV1Notifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
@@ -191,7 +198,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		}
 		var payloads []interface{}
 		for j := i; j < upper; j++ {
-			payloads = append(payloads, messages[j].Message)
+			payloads = append(payloads, messages[j])
 		}
 		resp, err := postMessage(handler.pushUrl, payloads, config)
 		if err != nil {
@@ -251,7 +258,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
-func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
+func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message) {
 	if batch.FailureCount <= 0 {
 		return
 	}
@@ -270,7 +277,7 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 		case registrationTokenNotRegistered:
 			// Token is no longer valid.
 			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage)
-			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {
+			if err := store.Devices.Delete(messages[i].Uid, messages[i].Token); err != nil {
 				logs.Warn.Println("tnpg: failed to delete invalid token", err)
 			}
 		default:
