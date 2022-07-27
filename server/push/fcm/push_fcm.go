@@ -17,7 +17,6 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/oauth2/google"
@@ -226,21 +225,6 @@ func processSubscription(req *push.ChannelReq) {
 		len(devices), len(channels))
 }
 
-// handlePushError processes errors returned by a call to fcm.SendAll.
-// returns false to stop further processing of other messages.
-func handlePushErrors(response *legacy.BatchResponse, batch []MessageData) bool {
-	if response.FailureCount <= 0 {
-		return true
-	}
-
-	for i, resp := range response.Responses {
-		if !handleFcmError(resp.Error, batch[i].Uid, batch[i].DeviceId) {
-			return false
-		}
-	}
-	return true
-}
-
 func handleSubErrors(response *legacy.TopicManagementResponse, uid types.Uid, devices []string) {
 	if response.FailureCount <= 0 {
 		return
@@ -250,34 +234,6 @@ func handleSubErrors(response *legacy.TopicManagementResponse, uid types.Uid, de
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
 		logs.Warn.Println("fcm sub/unsub error", errinfo.Reason, uid, devices[errinfo.Index])
 	}
-}
-
-func handleFcmError(err error, uid types.Uid, deviceId string) bool {
-	if legacy.IsMessageRateExceeded(err) ||
-		legacy.IsServerUnavailable(err) ||
-		legacy.IsInternal(err) ||
-		legacy.IsUnknown(err) {
-		// Transient errors. Stop sending this batch.
-		logs.Warn.Println("fcm transient failure", err)
-		return false
-	}
-	if legacy.IsMismatchedCredential(err) || legacy.IsInvalidArgument(err) {
-		// Config errors
-		logs.Warn.Println("fcm: request failed", err)
-		return false
-	}
-
-	if legacy.IsRegistrationTokenNotRegistered(err) {
-		// Token is no longer valid.
-		logs.Warn.Println("fcm: invalid token", uid, err)
-		if err := store.Devices.Delete(uid, deviceId); err != nil {
-			logs.Warn.Println("fcm: failed to delete invalid token", err)
-		}
-	} else {
-		// All other errors are treated as non-fatal.
-		logs.Warn.Println("fcm error:", err)
-	}
-	return true
 }
 
 // IsReady checks if the push handler has been initialized.
