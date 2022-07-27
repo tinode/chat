@@ -572,9 +572,10 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 			userData.modeWant |= types.ModeJoin | types.ModeOwner
 		}
 
-		tags = normalizeTags(pktsub.Set.Tags)
-		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
-			return types.ErrPermissionDenied
+		if tags = normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
+			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
+				return types.ErrPermissionDenied
+			}
 		}
 	}
 
