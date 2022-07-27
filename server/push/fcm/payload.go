@@ -204,7 +204,8 @@ const (
 	ApnsPushTypeFileprovider ApnsPushTypeType = "fileprovider"
 )
 
-// aps is the APNS payload.
+// aps is the APNS payload. See explanation here:
+// https://developer.apple.com/documentation/usernotifications/setting_up_a_remote_notification_server/generating_a_remote_notification#2943363
 type aps struct {
 	Alert             *apsAlert             `json:"alert,omitempty"`
 	Badge             int                   `json:"badge,omitempty"`
@@ -709,8 +710,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 	}
 
 	apsPayload := aps{
-		Badge: unread,
-		// Category:       x, // Category has to be registered in the app.
+		Badge:             unread,
 		ContentAvailable:  1,
 		MutableContent:    1,
 		InterruptionLevel: interruptionLevel,
