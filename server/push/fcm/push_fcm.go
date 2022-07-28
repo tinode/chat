@@ -17,6 +17,7 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
+	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/oauth2/google"
@@ -54,9 +55,9 @@ type configType struct {
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      int             `json:"time_to_live,omitempty"`
 	ApnsBundleID    string          `json:"apns_bundle_id,omitempty"`
-	Android         *CommonConfig   `json:"android,omitempty"`
-	Apns            *CommonConfig   `json:"apns,omitempty"`
-	Webpush         *CommonConfig   `json:"webpush,omitempty"`
+	Android         *common.Config  `json:"android,omitempty"`
+	Apns            *common.Config  `json:"apns,omitempty"`
+	Webpush         *common.Config  `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
