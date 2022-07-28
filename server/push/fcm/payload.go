@@ -17,6 +17,13 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
+const (
+	// TTL of a VOIP push notification in seconds.
+	voipTimeToLive = 10
+	// TTL of a regular push notification in seconds.
+	defaultTimeToLive = 3600
+)
+
 // Payload to be sent for a specific notification type.
 type commonPayload struct {
 	// Common for APNS and Android
@@ -102,9 +109,6 @@ func (cc *CommonConfig) getIntField(what, field string) int {
 	}
 	return val
 }
-
-// TTL of a VOIP push notification.
-const voipTimeToLive = 10
 
 // InterruptionLevel defines the values for the APNS payload.aps.InterruptionLevel.
 type InterruptionLevelType string
@@ -311,198 +315,12 @@ func clonePayload(src map[string]string) map[string]string {
 	return dst
 }
 
-// PrepareLegacyNotifications creates notification payloads ready to be posted
-// to legacy push notification server for the provided receipt.
-func PrepareLegacyNotifications(rcpt *push.Receipt, config *CommonConfig) []MessageData {
-	data, err := payloadToData(&rcpt.Payload)
-	if err != nil {
-		logs.Warn.Println("fcm push: could not parse payload;", err)
-		return nil
-	}
-
-	// Device IDs to send pushes to.
-	var devices map[t.Uid][]t.DeviceDef
-	// Count of device IDs to push to.
-	var count int
-	// Devices which were online in the topic when the message was sent.
-	skipDevices := make(map[string]struct{})
-	if len(rcpt.To) > 0 {
-		// List of UIDs for querying the database
-
-		uids := make([]t.Uid, len(rcpt.To))
-		i := 0
-		for uid, to := range rcpt.To {
-			uids[i] = uid
-			i++
-			// Some devices were online and received the message. Skip them.
-			for _, deviceID := range to.Devices {
-				skipDevices[deviceID] = struct{}{}
-			}
-		}
-		devices, count, err = store.Devices.GetAll(uids...)
-		if err != nil {
-			logs.Warn.Println("fcm push: db error", err)
-			return nil
-		}
-	}
-	if count == 0 && rcpt.Channel == "" {
-		return nil
-	}
-
-	var title, body, priority string
-	var androidNotification func(msg *legacy.Message, priority string)
-	if rcpt.Payload.What == push.ActRead {
-		priority = "normal"
-		androidNotification = func(msg *legacy.Message, priority string) {
-			msg.Android = &legacy.AndroidConfig{
-				Priority:     priority,
-				Notification: nil,
-			}
-		}
-	} else {
-		priority = "high"
-		var titlelc, bodylc, icon, color, clickAction string
-		if config != nil && config.Enabled {
-			titlelc = config.getStringField(rcpt.Payload.What, "TitleLocKey")
-			title = config.getStringField(rcpt.Payload.What, "Title")
-			bodylc = config.getStringField(rcpt.Payload.What, "BodyLocKey")
-			body = config.getStringField(rcpt.Payload.What, "Body")
-			if body == "$content" {
-				body = data["content"]
-			}
-			icon = config.getStringField(rcpt.Payload.What, "Icon")
-			color = config.getStringField(rcpt.Payload.What, "Color")
-			clickAction = config.getStringField(rcpt.Payload.What, "ClickAction")
-		}
-
-		androidNotification = func(msg *legacy.Message, priority string) {
-			msg.Android = &legacy.AndroidConfig{
-				Priority: priority,
-			}
-			// When this notification type is included and the app is not in the foreground
-			// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
-			// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-			if config != nil && config.Enabled {
-				msg.Android.Notification = &legacy.AndroidNotification{
-					// Android uses Tag value to group notifications together:
-					// show just one notification per topic.
-					Tag:         rcpt.Payload.Topic,
-					Priority:    legacy.PriorityHigh,
-					Visibility:  legacy.VisibilityPrivate,
-					TitleLocKey: titlelc,
-					Title:       title,
-					BodyLocKey:  bodylc,
-					Body:        body,
-					Icon:        icon,
-					Color:       color,
-					ClickAction: clickAction,
-				}
-			}
-		}
-	}
-
-	// TODO(aforge): introduce iOS push configuration (similar to Android).
-	// FIXME(gene): need to configure silent "read" push.
-	_, isVideoCall := data["webrtc"]
-	titleIOS := "New message"
-	bodyIOS := data["content"]
-	apnsNotification := func(msg *legacy.Message, unread int) {
-		msg.APNS = &legacy.APNSConfig{
-			Payload: &legacy.APNSPayload{
-				Aps: &legacy.Aps{
-					ContentAvailable: true,
-					MutableContent:   true,
-				},
-			},
-		}
-		if isVideoCall {
-			// Sound, alert and badge are not available for video call messages.
-			return
-		}
-		msg.APNS.Payload.Aps.Sound = "default"
-		// Need to duplicate these in APNS.Payload.Aps.Alert so
-		// iOS may call NotificationServiceExtension (if present).
-		msg.APNS.Payload.Aps.Alert = &legacy.ApsAlert{
-			Title: titleIOS,
-			Body:  bodyIOS,
-		}
-		if unread >= 0 {
-			// iOS uses Badge to show the total unread message count.
-			msg.APNS.Payload.Aps.Badge = &unread
-		}
-	}
-
-	var messages []MessageData
-	for uid, devList := range devices {
-		userData := data
-		tcat := t.GetTopicCat(data["topic"])
-		if rcpt.To[uid].Delivered > 0 || tcat == t.TopicCatP2P {
-			userData = clonePayload(data)
-			// Fix topic name for P2P pushes.
-			if tcat == t.TopicCatP2P {
-				topic, _ := t.P2PNameForUser(uid, data["topic"])
-				userData["topic"] = topic
-			}
-			// Silence the push for user who have received the data interactively.
-			if rcpt.To[uid].Delivered > 0 {
-				userData["silent"] = "true"
-			}
-		}
-		for i := range devList {
-			d := &devList[i]
-			if _, ok := skipDevices[d.DeviceId]; !ok && d.DeviceId != "" {
-				msg := legacy.Message{
-					Token: d.DeviceId,
-					Data:  userData,
-				}
-
-				if title != "" || body != "" {
-					msg.Notification = &legacy.Notification{
-						Title: title,
-						Body:  body,
-					}
-				}
-
-				if d.Platform == "android" {
-					androidNotification(&msg, priority)
-				} else if d.Platform == "ios" {
-					apnsNotification(&msg, rcpt.To[uid].Unread)
-				}
-				messages = append(messages, MessageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
-			}
-		}
-	}
-
-	if rcpt.Channel != "" {
-		topic := rcpt.Channel
-		userData := clonePayload(data)
-		userData["topic"] = topic
-		// Channel receiver should not know the ID of the message sender.
-		delete(userData, "xfrom")
-		msg := legacy.Message{
-			Topic: topic,
-			Data:  userData,
-			Notification: &legacy.Notification{
-				Title: title,
-				Body:  body,
-			},
-		}
-
-		// We don't know the platform of the receiver, must provide payload for all platforms.
-		androidNotification(&msg, "normal")
-		apnsNotification(&msg, -1)
-		messages = append(messages, MessageData{Message: &msg})
-	}
-
-	return messages
-}
-
 // PrepareV1Notifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
 func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Message {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
-		logs.Warn.Println("fcm push: could not parse payload;", err)
+		logs.Warn.Println("fcm push: could not parse payload:", err)
 		return nil
 	}
 
@@ -533,6 +351,11 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 	}
 	if count == 0 && rcpt.Channel == "" {
 		return nil
+	}
+
+	if config == nil {
+		// config is nil when called from tnpg adapter; provide a blank one for simplicity.
+		config = &configType{}
 	}
 
 	var messages []*fcmv1.Message
@@ -567,7 +390,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 				case "ios":
 					msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
 				case "web":
-					if config.Webpush != nil && config.Webpush.Enabled {
+					if config != nil && config.Webpush != nil && config.Webpush.Enabled {
 						msg.Webpush = &fcmv1.WebpushConfig{}
 					}
 				case "":
@@ -575,9 +398,6 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 				default:
 					logs.Warn.Println("fcm: unknown device platform", d.Platform)
 				}
-
-				x, _ := json.Marshal(msg)
-				logs.Err.Println("msg pushed:", string(x))
 				messages = append(messages, &msg)
 			}
 		}
@@ -597,6 +417,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 		// We don't know the platform of the receiver, must provide payload for all platforms.
 		msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
 		msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, 0, config)
+		// TODO: add webpush payload.
 		messages = append(messages, &msg)
 	}
 
@@ -633,7 +454,11 @@ func ChannelsForUser(uid t.Uid) []string {
 }
 
 func androidNotificationConfig(what, topic string, data map[string]string, config *configType) *fcmv1.AndroidConfig {
-	timeToLive := strconv.Itoa(config.TimeToLive) + "s"
+
+	timeToLive := strconv.Itoa(defaultTimeToLive) + "s"
+	if config != nil && config.TimeToLive > 0 {
+		timeToLive = strconv.Itoa(config.TimeToLive) + "s"
+	}
 
 	if what == push.ActRead {
 		return &fcmv1.AndroidConfig{
@@ -692,7 +517,10 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 
 func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
 	callStatus := data["webrtc"]
-	expires := time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
+	expires := time.Now().UTC().Add(time.Duration(defaultTimeToLive) * time.Second)
+	if config.TimeToLive > 0 {
+		expires = time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
+	}
 	bundleId := config.ApnsBundleID
 	pushType := ApnsPushTypeAlert
 	priority := 10
@@ -735,8 +563,6 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 			SummaryArg:      config.Apns.getStringField(what, "SummaryArg"),
 			SummaryArgCount: config.Apns.getIntField(what, "SummaryArgCount"),
 		}
-	} else {
-		logs.Info.Println("no aps.alert:", config.Apns != nil, config.Apns != nil && config.Apns.Enabled, what != push.ActRead)
 	}
 
 	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})

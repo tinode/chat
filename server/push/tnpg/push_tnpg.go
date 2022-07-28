@@ -8,12 +8,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
-	"github.com/tinode/chat/server/store"
 
 	fcmv1 "google.golang.org/api/fcm/v1"
 )
@@ -111,12 +111,21 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	// Convert to lower case to avoid confusion.
 	config.OrgID = strings.ToLower(config.OrgID)
 
-	serverAddr := baseTargetAddress
+	// Construct server URLs.
+	serverAddr, err := url.Parse(baseTargetAddress)
 	if config.DebugPushGWHost != "" {
-		serverAddr = config.DebugPushGWHost
+		serverAddr, err = url.Parse(config.DebugPushGWHost)
 	}
-	handler.pushUrl = serverAddr + "push/" + config.OrgID
-	handler.subUrl = serverAddr + "sub/" + config.OrgID
+	if err != nil {
+		return false, err
+	}
+	pushUrl := serverAddr
+	pushUrl.Path += "push/" + config.OrgID
+	handler.pushUrl = pushUrl.String()
+	subUrl := serverAddr
+	subUrl.Path += "push/" + config.OrgID
+	handler.subUrl = subUrl.String()
+
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
@@ -263,7 +272,7 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message) {
 		return
 	}
 
-	for i, resp := range batch.Responses {
+	for _, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
 		case messageRateExceeded, serverUnavailable, internalError, unknownError:
@@ -276,10 +285,10 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message) {
 			return
 		case registrationTokenNotRegistered:
 			// Token is no longer valid.
-			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage)
-			if err := store.Devices.Delete(messages[i].Uid, messages[i].Token); err != nil {
-				logs.Warn.Println("tnpg: failed to delete invalid token", err)
-			}
+			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage, resp.MessageID)
+			//if err := store.Devices.Delete(messages[i].Uid, messages[i].Token); err != nil {
+			//	logs.Warn.Println("tnpg: failed to delete invalid token", err)
+			//}
 		default:
 			logs.Warn.Println("tnpg: unrecognized error", resp.ErrorMessage)
 		}
