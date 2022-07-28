@@ -29,7 +29,7 @@ class TinodeBase extends Simulation {
   val hello = exitBlockOnFail {
     exec {
       ws("hi").sendText(
-        """{"hi":{"id":"afabb3","ver":"0.16","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
+        """{"hi":{"id":"afabb3","ver":"0.18.1","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
       )
       .await(15 seconds)(
         ws.checkTextMessage("hi")
@@ -114,7 +114,7 @@ class TinodeBase extends Simulation {
       repeat(publishCount, "i") {
         exec {
           ws("pub-topic").sendText(
-            """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
+            """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Gatling test ${i}"}}"""
           )
           .await(15 seconds)(
             ws.checkTextMessage("pub-topic-ctrl")
