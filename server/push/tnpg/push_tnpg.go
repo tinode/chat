@@ -83,31 +83,26 @@ const (
 	invalidArgument                = "invalid-argument"
 	messageRateExceeded            = "message-rate-exceeded"
 	mismatchedCredential           = "mismatched-credential"
-	quotaExceeded                  = "quota-exceeded"
 	registrationTokenNotRegistered = "registration-token-not-registered"
-	senderIDMismatch               = "sender-id-mismatch"
 	serverUnavailable              = "server-unavailable"
-	thirdPartyAuthError            = "third-party-auth-error"
 	tooManyTopics                  = "too-many-topics"
-	unavailableError               = "unavailable-error"
 	unknownError                   = "unknown-error"
-	unregisteredError              = "unregistered-error"
 )
 
 // Init initializes the handler
-func (Handler) Init(jsonconf string) error {
+func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return false, errors.New("failed to parse config: " + err.Error())
 	}
 
 	if !config.Enabled {
-		return nil
+		return false, nil
 	}
 
 	config.OrgID = strings.TrimSpace(config.OrgID)
 	if config.OrgID == "" {
-		return errors.New("push.tnpg.org not specified.")
+		return false, errors.New("push.tnpg.org not specified.")
 	}
 
 	// Convert to lower case to avoid confusion.
@@ -132,7 +127,7 @@ func (Handler) Init(jsonconf string) error {
 		}
 	}()
 
-	return nil
+	return true, nil
 }
 
 func postMessage(endpoint string, body interface{}, config *configType) (*batchResponse, error) {
@@ -186,7 +181,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareNotifications(rcpt, nil)
+	messages := fcm.PrepareLegacyNotifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
@@ -264,15 +259,15 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	for i, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
-		case messageRateExceeded, quotaExceeded, serverUnavailable, unavailableError, internalError, unknownError:
+		case messageRateExceeded, serverUnavailable, internalError, unknownError:
 			// Transient errors. Stop sending this batch.
 			logs.Warn.Println("tnpg: transient failure", resp.ErrorMessage)
 			return
-		case mismatchedCredential, invalidArgument, senderIDMismatch, thirdPartyAuthError, invalidAPNSCredentials:
+		case mismatchedCredential, invalidArgument, invalidAPNSCredentials:
 			// Config errors
 			logs.Warn.Println("tnpg: invalid config", resp.ErrorMessage)
 			return
-		case registrationTokenNotRegistered, unregisteredError:
+		case registrationTokenNotRegistered:
 			// Token is no longer valid.
 			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage)
 			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {

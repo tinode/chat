@@ -93,7 +93,7 @@ type Payload struct {
 // Handler is an interface which must be implemented by handlers.
 type Handler interface {
 	// Init initializes the handler.
-	Init(jsonconf string) error
+	Init(jsonconf json.RawMessage) (bool, error)
 
 	// IsReady сhecks if the handler is initialized.
 	IsReady() bool
@@ -132,22 +132,25 @@ func Register(name string, hnd Handler) {
 }
 
 // Init initializes registered handlers.
-func Init(jsconfig string) error {
+func Init(jsconfig json.RawMessage) ([]string, error) {
 	var config []configType
 
-	if err := json.Unmarshal([]byte(jsconfig), &config); err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+	if err := json.Unmarshal(jsconfig, &config); err != nil {
+		return nil, errors.New("failed to parse config: " + err.Error())
 	}
 
+	var enabled []string
 	for _, cc := range config {
 		if hnd := handlers[cc.Name]; hnd != nil {
-			if err := hnd.Init(string(cc.Config)); err != nil {
-				return err
+			if ok, err := hnd.Init(cc.Config); err != nil {
+				return nil, err
+			} else if ok {
+				enabled = append(enabled, cc.Name)
 			}
 		}
 	}
 
-	return nil
+	return enabled, nil
 }
 
 // Push a single message to devices.

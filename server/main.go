@@ -545,7 +545,7 @@ func main() {
 		}
 	}
 
-	err = push.Init(string(config.Push))
+	pushHandlers, err := push.Init(config.Push)
 	if err != nil {
 		logs.Err.Fatal("Failed to initialize push notifications:", err)
 	}
@@ -553,6 +553,7 @@ func main() {
 		push.Stop()
 		logs.Info.Println("Stopped push notifications")
 	}()
+	logs.Info.Println("Push handlers configured:", pushHandlers)
 
 	if err = initVideoCalls(config.WebRTC); err != nil {
 		logs.Err.Fatal("Failed to init video calls: %w", err)
