@@ -107,7 +107,7 @@ const (
 	// AndroidVisibilityPublic show this notification in its entirety on all lockscreens.
 	AndroidVisibilityPublic AndroidVisibilityType = "PUBLIC"
 
-	// AndroidVisibilitySecret do not reveal any part of this notification on a secure
+	// AndroidVisibilitySecret do not reveal any part of this notification on a secure lockscreen.
 	AndroidVisibilitySecret AndroidVisibilityType = "SECRET"
 )
 
