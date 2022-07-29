@@ -237,7 +237,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 
 	if what == push.ActRead {
 		return &fcmv1.AndroidConfig{
-			Priority:     "NORMAL",
+			Priority:     string(common.AndroidPriorityNormal),
 			Notification: nil,
 			Ttl:          timeToLive,
 		}
@@ -248,8 +248,8 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		timeToLive = "0s"
 	}
 
-	// Priority "NORMAL" or "HIGH"
-	priority := "HIGH"
+	// Sending priority.
+	priority := string(common.AndroidPriorityHigh)
 	ac := &fcmv1.AndroidConfig{
 		Priority: priority,
 		Ttl:      timeToLive,
@@ -267,9 +267,10 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		body = data["content"]
 	}
 
-	priority = "PRIORITY_HIGH"
+	// Client-side display priority.
+	priority = string(common.AndroidNotificationPriorityHigh)
 	if videoCall {
-		priority = "PRIORITY_MAX"
+		priority = string(common.AndroidNotificationPriorityMax)
 	}
 
 	ac.Notification = &fcmv1.AndroidNotification{
@@ -277,7 +278,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		// show just one notification per topic.
 		Tag:                  topic,
 		NotificationPriority: priority,
-		Visibility:           "PRIVATE",
+		Visibility:           string(common.AndroidVisibilityPrivate),
 		TitleLocKey:          config.Android.GetStringField(what, "TitleLocKey"),
 		Title:                config.Android.GetStringField(what, "Title"),
 		BodyLocKey:           config.Android.GetStringField(what, "BodyLocKey"),

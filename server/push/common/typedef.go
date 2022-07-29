@@ -34,7 +34,7 @@ type Payload struct {
 	SummaryArgCount int      `json:"summary_arg_count,omitempty"`
 }
 
-// Config is the configuration of AndroidNotification payload.
+// Config is the configuration of a Notification payload.
 type Config struct {
 	Enabled bool `json:"enabled,omitempty"`
 	// Common defaults for all push types.
@@ -92,7 +92,76 @@ func (cc *Config) GetIntField(what, field string) int {
 	return val
 }
 
-// InterruptionLevel defines the values for the APNS payload.aps.InterruptionLevel.
+// AndroidVisibilityType defines notification visibility constants https://developer.android.com/reference/android/app/Notification.html#visibility
+type AndroidVisibilityType string
+
+const (
+	// If unspecified, default to `Visibility.PRIVATE`.
+	AndroidVisibilityUnspecified AndroidVisibilityType = "VISIBILITY_UNSPECIFIED"
+
+	// Show this notification on all lockscreens, but conceals
+	// sensitive or private information on secure lockscreens.
+	AndroidVisibilityPrivate AndroidVisibilityType = "PRIVATE"
+
+	// Show this notification in its entirety on all lockscreens.
+	AndroidVisibilityPublic AndroidVisibilityType = "PUBLIC"
+
+	// Do not reveal any part of this notification on a secure
+	AndroidVisibilitySecret AndroidVisibilityType = "SECRET"
+)
+
+// AndroidNotificationPriorityType defines notification priority consumeed by the client
+// after it receives the notification. Does not affect FCM sending.
+type AndroidNotificationPriorityType string
+
+const (
+	// If priority is unspecified, notification priority is set to `PRIORITY_DEFAULT`.
+	AndroidNotificationPriorityUnspecified AndroidNotificationPriorityType = "PRIORITY_UNSPECIFIED"
+
+	// Lowest notification priority. Notifications with this `PRIORITY_MIN` might not be
+	// shown to the user except under special circumstances, such as detailed notification logs.
+	AndroidNotificationPriorityMin AndroidNotificationPriorityType = "PRIORITY_MIN"
+
+	// Lower notification priority. The UI may choose to show the notifications smaller,
+	// or at a different position in the list, compared with notifications with `PRIORITY_DEFAULT`.
+	AndroidNotificationPriorityLow AndroidNotificationPriorityType = "PRIORITY_LOW"
+
+	// Default notification priority. If the application does not prioritize its own notifications,
+	// use this value for all notifications.
+	AndroidNotificationPriorityDefault AndroidNotificationPriorityType = "PRIORITY_DEFAULT"
+
+	// Higher notification priority. Use this for more important notifications or alerts.
+	// The UI may choose to show these notifications larger, or at a different position in the notification
+	// lists, compared with notifications with `PRIORITY_DEFAULT`.
+	AndroidNotificationPriorityHigh AndroidNotificationPriorityType = "PRIORITY_HIGH"
+
+	// Highest notification priority. Use this for the application's most important items that
+	// require the user's prompt attention or input.
+	AndroidNotificationPriorityMax AndroidNotificationPriorityType = "PRIORITY_MAX"
+)
+
+// AndroidPriorityType defines the server-side priorities https://goo.gl/GjONJv. It affects how soon
+// FCM sends the push.
+type AndroidPriorityType string
+
+const (
+	// Default priority for data messages. Normal priority messages won't open network
+	// connections on a sleeping device, and their delivery may be delayed to conserve
+	// the battery. For less time-sensitive messages, such as notifications of new email
+	// or other data to sync, choose normal delivery priority.
+	AndroidPriorityNormal AndroidPriorityType = "NORMAL"
+
+	// Default priority for notification messages. FCM attempts to deliver high priority
+	// messages immediately, allowing the FCM service to wake a sleeping device when possible
+	// and open a network connection to your app server. Apps with instant messaging, chat,
+	// or voice call alerts, for example, generally need to open a network connection and make
+	// sure FCM delivers the message to the device without delay. Set high priority if the message
+	// is time-critical and requires the user's immediate interaction, but beware that setting
+	// your messages to high priority contributes more to battery drain compared with normal priority messages.
+	AndroidPriorityHigh AndroidPriorityType = "HIGH"
+)
+
+// InterruptionLevelType defines the values for the APNS payload.aps.InterruptionLevel.
 type InterruptionLevelType string
 
 const (
