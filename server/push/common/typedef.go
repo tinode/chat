@@ -92,21 +92,22 @@ func (cc *Config) GetIntField(what, field string) int {
 	return val
 }
 
-// AndroidVisibilityType defines notification visibility constants https://developer.android.com/reference/android/app/Notification.html#visibility
+// AndroidVisibilityType defines notification visibility constants
+// https://developer.android.com/reference/android/app/Notification.html#visibility
 type AndroidVisibilityType string
 
 const (
-	// If unspecified, default to `Visibility.PRIVATE`.
+	// AndroidVisibilityUnspecified if unspecified, default to `Visibility.PRIVATE`.
 	AndroidVisibilityUnspecified AndroidVisibilityType = "VISIBILITY_UNSPECIFIED"
 
-	// Show this notification on all lockscreens, but conceals
+	// AndroidVisibilityPrivate show this notification on all lockscreens, but conceals
 	// sensitive or private information on secure lockscreens.
 	AndroidVisibilityPrivate AndroidVisibilityType = "PRIVATE"
 
-	// Show this notification in its entirety on all lockscreens.
+	// AndroidVisibilityPublic show this notification in its entirety on all lockscreens.
 	AndroidVisibilityPublic AndroidVisibilityType = "PUBLIC"
 
-	// Do not reveal any part of this notification on a secure
+	// AndroidVisibilitySecret do not reveal any part of this notification on a secure
 	AndroidVisibilitySecret AndroidVisibilityType = "SECRET"
 )
 
