@@ -93,11 +93,11 @@ func clonePayload(src map[string]string) map[string]string {
 
 // PrepareV1Notifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
-func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Message {
+func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Message, []t.Uid) {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
 		logs.Warn.Println("fcm push: could not parse payload:", err)
-		return nil
+		return nil, nil
 	}
 
 	// Device IDs to send pushes to.
@@ -122,11 +122,11 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 		devices, count, err = store.Devices.GetAll(uids...)
 		if err != nil {
 			logs.Warn.Println("fcm push: db error", err)
-			return nil
+			return nil, nil
 		}
 	}
 	if count == 0 && rcpt.Channel == "" {
-		return nil
+		return nil, nil
 	}
 
 	if config == nil {
@@ -135,6 +135,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 	}
 
 	var messages []*fcmv1.Message
+	var uids []t.Uid
 	for uid, devList := range devices {
 		topic := rcpt.Payload.Topic
 		userData := data
@@ -174,6 +175,8 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 				default:
 					logs.Warn.Println("fcm: unknown device platform", d.Platform)
 				}
+
+				uids = append(uids, uid)
 				messages = append(messages, &msg)
 			}
 		}
@@ -197,7 +200,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) []*fcmv1.Mes
 		messages = append(messages, &msg)
 	}
 
-	return messages
+	return messages, uids
 }
 
 // DevicesForUser loads device IDs of the given user.

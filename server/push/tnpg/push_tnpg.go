@@ -14,6 +14,8 @@ import (
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 
 	fcmv1 "google.golang.org/api/fcm/v1"
 )
@@ -181,13 +183,17 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 	}
 
 	if err == nil {
+		//buf := new(strings.Builder)
+		//_, err = io.Copy(buf, reader)
+		// check errors
+		//log.Println(err, buf.String())
 		err = json.NewDecoder(reader).Decode(&batch)
 	}
 	resp.Body.Close()
 
 	if err != nil {
 		// Just log the error, but don't report it to caller. The push succeeded.
-		logs.Warn.Println("tnpg failed to decode response", err)
+		logs.Warn.Println("tnpg failed to decode respons:", err)
 	}
 
 	batch.httpCode = resp.StatusCode
@@ -197,7 +203,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareV1Notifications(rcpt, nil)
+	messages, uids := fcm.PrepareV1Notifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
@@ -223,7 +229,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 			break
 		}
 		// Check for expired tokens and other errors.
-		handlePushResponse(resp, messages[i:upper])
+		handlePushResponse(resp, messages[i:upper], uids[i:upper])
 	}
 }
 
@@ -267,30 +273,30 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
-func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message) {
+func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []types.Uid) {
 	if batch.FailureCount <= 0 {
 		return
 	}
 
-	for _, resp := range batch.Responses {
+	for i, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
 		case messageRateExceeded, serverUnavailable, internalError, unknownError:
 			// Transient errors. Stop sending this batch.
-			logs.Warn.Println("tnpg: transient failure", resp.ErrorMessage)
+			logs.Warn.Println("tnpg transient failure:", resp.ErrorMessage)
 			return
 		case mismatchedCredential, invalidArgument, invalidAPNSCredentials:
 			// Config errors
-			logs.Warn.Println("tnpg: invalid config", resp.ErrorMessage)
+			logs.Warn.Println("tnpg invalid config:", resp.ErrorMessage)
 			return
 		case registrationTokenNotRegistered:
 			// Token is no longer valid.
-			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage, resp.MessageID)
-			//if err := store.Devices.Delete(messages[i].Uid, messages[i].Token); err != nil {
-			//	logs.Warn.Println("tnpg: failed to delete invalid token", err)
-			//}
+			logs.Warn.Println("tnpg invalid token:", resp.ErrorMessage, resp.MessageID)
+			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+				logs.Warn.Println("tnpg failed to delete invalid token:", err)
+			}
 		default:
-			logs.Warn.Println("tnpg: unrecognized error", resp.ErrorMessage)
+			logs.Warn.Println("tnpg unrecognized error:", resp.ErrorMessage)
 		}
 	}
 }

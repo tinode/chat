@@ -73,8 +73,6 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, nil
 	}
 
-	ctx := context.Background()
-
 	if config.Credentials == nil && config.CredentialsFile != "" {
 		config.Credentials, err = os.ReadFile(config.CredentialsFile)
 		if err != nil {
@@ -86,6 +84,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, errors.New("missing credentials")
 	}
 
+	ctx := context.Background()
 	credentials, err := google.CredentialsFromJSON(ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
 		return false, err
@@ -131,7 +130,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 }
 
 func sendFcmV1(rcpt *push.Receipt, config *configType) {
-	messages := PrepareV1Notifications(rcpt, config)
+	messages, uids := PrepareV1Notifications(rcpt, config)
 	for i := range messages {
 		req := &fcmv1.SendMessageRequest{
 			Message:      messages[i],
@@ -150,9 +149,9 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 					details, _ := json.Marshal(gerr.Details)
 					errmsg += string(details)
 				}
-				logs.Err.Printf("fcm push failed: %d %s", gerr.Code, errmsg)
+				logs.Err.Printf("fcm push failed: %d %s (%s)", gerr.Code, errmsg, uids[i].UserId())
 			} else {
-				logs.Err.Println("fcm push failed:", err)
+				logs.Err.Println("fcm push failed:", err, uids[i])
 			}
 			break
 		}
