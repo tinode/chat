@@ -290,3 +290,79 @@ type ApsAlert struct {
 	SummaryArg      string   `json:"summary-arg,omitempty"`
 	SummaryArgCount int      `json:"summary-arg-count,omitempty"`
 }
+
+// FCM error codes
+
+const (
+	// No more information is available about this error.
+	ErrorUnspecified = "UNSPECIFIED_ERROR"
+
+	// Request parameters were invalid (HTTP error code = 400). An extension of type google.rpc.BadRequest is returned
+	// to specify which field was invalid.
+	// Potential causes:
+	// - Invalid registration: Check the format of the registration token you pass to the server. Make sure it matches
+	//   the registration token the client app receives from registering with Firebase Notifications.
+	//   Do not truncate or add additional characters.
+	// - Invalid package name: Make sure the message was addressed to a registration token whose package name matches
+	//   the value passed in the request.
+	// - Message too big: Check that the total size of the payload data included in a message does not exceed FCM limits:
+	//   4096 bytes for most messages, or 2048 bytes in the case of messages to topics. This includes both the keys and the values.
+	// - Invalid data key: Check that the payload data does not contain a key (such as from, or gcm, or any value prefixed
+	//   by google) that is used internally by FCM. Note that some words (such as collapse_key) are also used by FCM but are
+	//   allowed in the payload, in which case the payload value will be overridden by the FCM value.
+	// - Invalid TTL: Check that the value used in ttl is an integer representing a duration in seconds between 0 and
+	//   2,419,200 (4 weeks).
+	// - Invalid parameters: Check that the provided parameters have the right name and type.
+	ErrorInvalidArgument = "INVALID_ARGUMENT"
+
+	// App instance was unregistered from FCM (HTTP error code = 404). This usually means that the token used is no
+	// longer valid and a new one must be used.
+	// This error can be caused by missing registration tokens, or unregistered tokens.
+	// - Missing Registration: If the message's target is a token value, check that the request contains a registration token.
+	// - Not registered: An existing registration token may cease to be valid in a number of scenarios, including:
+	//   - If the client app unregisters with FCM.
+	//   - If the client app is automatically unregistered, which can happen if the user uninstalls the application.
+	// 		 For example, on iOS, if the APNS Feedback Service reported the APNS token as invalid.
+	//   - If the registration token expires (for example, Google might decide to refresh registration tokens,
+	//	   or the APNS token has expired for iOS devices).
+	//   - If the client app is updated but the new version is not configured to receive messages.
+	// For all these cases, remove this registration token from the app server and stop using it to send messages.
+	ErrorUnregistered = "UNREGISTERED"
+
+	// The authenticated sender ID is different from the sender ID for the registration token (HTTP error code = 403).
+	// A registration token is tied to a certain group of senders. When a client app registers for FCM, it must specify
+	// which senders are allowed to send messages. You should use one of those sender IDs when sending messages to
+	// the client app. If you switch to a different sender, the existing registration tokens won't work.
+	ErrorSenderIDMismatch = "SENDER_ID_MISMATCH"
+
+	// Sending limit exceeded for the message target (HTTP error code = 429). An extension of type google.rpc.QuotaFailure
+	// is returned to specify which quota got exceeded.	This error can be caused by exceeded message rate quota,
+	// exceeded device message rate quota, or exceeded topic message rate quota.
+	// - Message rate exceeded: The sending rate of messages is too high. Reduce the number of messages sent and use
+	//   exponential backoff to retry sending.
+	// - Device message rate exceeded: The rate of messages to a particular device is too high. If an iOS app sends
+	//   messages at a rate exceeding APNs limits, it may receive this error message. Reduce the number of messages
+	//   sent to this device and use exponential backoff to retry sending.
+	// - Topic message rate exceeded: The rate of messages to subscribers to a particular topic is too high.
+	//   Reduce the number of messages sent for this topic and use exponential backoff to retry sending.
+	ErrorQuotaExceeded = "QUOTA_EXCEEDED"
+
+	// The server is overloaded (HTTP error code = 503). The server couldn't process the request in time. Retry the
+	// same request, but you must:
+	// - Honor the Retry-After header if it is included in the response from the FCM Connection Server.
+	// - Implement exponential back-off in your retry mechanism. (e.g. if you waited one second before the first retry,
+	//   wait at least two second before the next one, then 4 seconds and so on). If you're sending multiple messages,
+	//   delay each one independently by an additional random amount to avoid issuing a new request for all messages
+	//   at the same time. Senders that cause problems risk being denylisted.
+	ErrorUnavailable = "UNAVAILABLE"
+
+	// An unknown internal error occurred (HTTP error code = 500). The server encountered an error while trying to process
+	// the request. You could retry the same request following the requirements listed in "Timeout" (see row above).
+	// If the error persists, please contact Firebase support.
+	ErrorInternal = "INTERNAL"
+
+	// APNs certificate or web push auth key was invalid or missing (HTTP error code = 401). A message targeted to an
+	// iOS device or a web push registration could not be sent. Check the validity of your development and production
+	// credentials.
+	ErrorThirdPartyAuth = "THIRD_PARTY_AUTH_ERROR"
+)
