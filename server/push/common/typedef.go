@@ -292,7 +292,6 @@ type ApsAlert struct {
 }
 
 // FCM error codes
-
 const (
 	// No more information is available about this error.
 	ErrorUnspecified = "UNSPECIFIED_ERROR"
@@ -365,4 +364,97 @@ const (
 	// iOS device or a web push registration could not be sent. Check the validity of your development and production
 	// credentials.
 	ErrorThirdPartyAuth = "THIRD_PARTY_AUTH_ERROR"
+)
+
+// APNS error messages
+const (
+	// The collapse identifier exceeds the maximum allowed size (HTTP error code = 400).
+	ErrorBadCollapseId = "BadCollapseId"
+
+	// The specified device token was bad. Verify that the request contains a valid token and that the
+	// token matches the environment (HTTP error code = 400).
+	ErrorBadDeviceToken = "BadDeviceToken"
+
+	// The apns-expiration value is bad (HTTP error code = 400).
+	ErrorBadExpirationDate = "BadExpirationDate"
+
+	// The apns-id value is bad (HTTP error code = 400).
+	ErrorBadMessageId = "BadMessageId"
+
+	// The apns-priority value is bad (HTTP error code = 400).
+	ErrorBadPriority = "BadPriority"
+
+	// The apns-topic was invalid (HTTP error code = 400).
+	ErrorBadTopic = "BadTopic"
+
+	// The device token does not match the specified topic (HTTP error code = 400).
+	ErrorDeviceTokenNotForTopic = "DeviceTokenNotForTopic"
+
+	// One or more headers were repeated (HTTP error code = 400).
+	ErrorDuplicateHeaders = "DuplicateHeaders"
+
+	// Idle time out (HTTP error code = 400).
+	ErrorIdleTimeout = "IdleTimeout"
+
+	// The device token is not specified in the request :path. Verify that the :path header
+	// contains the device token (HTTP error code = 400).
+	ErrorMissingDeviceToken = "MissingDeviceToken"
+
+	// The apns-topic header of the request was not specified and was required.
+	// The apns-topic header is mandatory when the client is connected using a certificate
+	// that supports multiple topics (HTTP error code = 400).
+	ErrorMissingTopic = "MissingTopic"
+
+	// The message payload was empty (HTTP error code = 400).
+	ErrorPayloadEmpty = "PayloadEmpty"
+
+	// Pushing to this topic is not allowed (HTTP error code = 400).
+	ErrorTopicDisallowed = "TopicDisallowed"
+
+	// The certificate was bad (HTTP error code = 403).
+	ErrorBadCertificate = "BadCertificate"
+
+	// The client certificate was for the wrong environment (HTTP error code = 403).
+	ErrorBadCertificateEnvironment = "BadCertificateEnvironment"
+
+	// The provider token is stale and a new token should be generated (HTTP error code = 403).
+	ErrorExpiredProviderToken = "ExpiredProviderToken"
+
+	// The specified action is not allowed (HTTP error code = 403).
+	ErrorForbidden = "Forbidden"
+
+	// The provider token is not valid or the token signature could not be verified (HTTP error code = 403).
+	ErrorInvalidProviderToken = "InvalidProviderToken"
+
+	// No provider certificate was used to connect to APNs and Authorization header was missing
+	// or no provider token was specified (HTTP error code = 403).
+	ErrorMissingProviderToken = "MissingProviderToken"
+
+	// The request contained a bad :path value (HTTP error code = 404).
+	ErrorBadPath = "BadPath"
+
+	// The specified :method was not POST (HTTP error code = 405).
+	ErrorMethodNotAllowed = "MethodNotAllowed"
+
+	// The device token is inactive for the specified topic (HTTP error code = 410).
+	ErrorDeviceUnregistered = "Unregistered"
+
+	// The message payload was too large. See Creating the Remote Notification Payload
+	// for details on maximum payload size (HTTP error code = 413).
+	ErrorPayloadTooLarge = "PayloadTooLarge"
+
+	// The provider token is being updated too often (HTTP error code = 429).
+	ErrorTooManyProviderTokenUpdates = "TooManyProviderTokenUpdates"
+
+	// Too many requests were made consecutively to the same device token (HTTP error code = 429).
+	ErrorTooManyRequests = "TooManyRequests"
+
+	// An internal server error occurred (HTTP error code = 500).
+	ErrorInternalServerError = "InternalServerError"
+
+	// The service is unavailable (HTTP error code = 503).
+	ErrorServiceUnavailable = "ServiceUnavailable"
+
+	// The server is shutting down (HTTP error code = 503).
+	ErrorShutdown = "Shutdown"
 )
