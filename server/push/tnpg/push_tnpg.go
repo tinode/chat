@@ -129,7 +129,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	pushUrl.Path += "push/" + config.OrgID
 	handler.pushUrl = pushUrl.String()
 	subUrl := serverAddr
-	subUrl.Path += "push/" + config.OrgID
+	subUrl.Path += "sub/" + config.OrgID
 	handler.subUrl = subUrl.String()
 
 	handler.input = make(chan *push.Receipt, bufferSize)
@@ -283,6 +283,7 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 	}
 
 	for i, resp := range batch.Responses {
+
 		logs.Warn.Println("tnpg error:", resp.ErrorCode, resp.ErrorMessage, resp.ExtendedError, resp.Code)
 		switch resp.ErrorCode {
 		case "": // no error
@@ -290,13 +291,16 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 			// Transient errors. Stop sending this batch.
 			logs.Warn.Println("tnpg transient failure:", resp.ErrorMessage)
 			return
-		case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
+		case common.ErrorInvalidArgument:
+			// Usually an invalid token.
+			logs.Warn.Println("tnpg invalid argument:", resp.ErrorMessage)
+		case common.ErrorSenderIDMismatch, common.ErrorThirdPartyAuth:
 			// Config errors
 			logs.Warn.Println("tnpg invalid config:", resp.ErrorMessage)
 			return
 		case common.ErrorUnregistered:
 			// Token is no longer valid.
-			logs.Warn.Println("tnpg invalid token:", resp.ErrorMessage, resp.MessageID)
+			logs.Info.Println("tnpg invalid token:", resp.ErrorMessage, resp.MessageID)
 			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
 				logs.Warn.Println("tnpg failed to delete invalid token:", err)
 			}
