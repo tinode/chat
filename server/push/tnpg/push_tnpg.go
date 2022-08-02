@@ -13,6 +13,7 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
+	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/push/fcm"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -57,12 +58,15 @@ type subUnsubReq struct {
 
 type tnpgResponse struct {
 	// Push message response only.
-	MessageID    string `json:"msg_id,omitempty"`
-	ErrorMessage string `json:"errmsg,omitempty"`
+	MessageID     string `json:"msg_id,omitempty"`
+	ErrorMessage  string `json:"errmsg,omitempty"`
+	ExtendedError string `json:"exerr,omitempty"`
 	// Channel sub/unsub response only.
 	Index int `json:"index,omitempty"`
 	// Both push and sub/unsub response.
 	ErrorCode string `json:"errcode,omitempty"`
+	// Server response HTTP code.
+	Code int `json:"code,omitempty"`
 }
 
 type batchResponse struct {
@@ -279,24 +283,25 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 	}
 
 	for i, resp := range batch.Responses {
+		logs.Warn.Println("tnpg error:", resp.ErrorCode, resp.ErrorMessage, resp.ExtendedError, resp.Code)
 		switch resp.ErrorCode {
 		case "": // no error
-		case messageRateExceeded, serverUnavailable, internalError, unknownError:
+		case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
 			// Transient errors. Stop sending this batch.
 			logs.Warn.Println("tnpg transient failure:", resp.ErrorMessage)
 			return
-		case mismatchedCredential, invalidArgument, invalidAPNSCredentials:
+		case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
 			// Config errors
 			logs.Warn.Println("tnpg invalid config:", resp.ErrorMessage)
 			return
-		case registrationTokenNotRegistered:
+		case common.ErrorUnregistered:
 			// Token is no longer valid.
 			logs.Warn.Println("tnpg invalid token:", resp.ErrorMessage, resp.MessageID)
 			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
 				logs.Warn.Println("tnpg failed to delete invalid token:", err)
 			}
 		default:
-			logs.Warn.Println("tnpg unrecognized error:", resp.ErrorMessage)
+			logs.Warn.Println("tnpg unrecognized error:", resp.ErrorCode, resp.ErrorMessage, resp.ExtendedError, resp.Code)
 		}
 	}
 }
