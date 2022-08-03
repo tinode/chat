@@ -491,7 +491,7 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 		for _, iface := range gerr.Details {
 			details, ok := iface.(map[string]interface{})
 			if !ok {
-				errs = append(errs, fmt.Errorf("FCM error details has unrecognized format %T", iface))
+				errs = append(errs, fmt.Errorf("error.Details unrecognized format %T", iface))
 				continue
 			}
 			switch details["@type"] {
@@ -499,12 +499,12 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 				if errCode, ok := details["errorCode"].(string); ok {
 					if decoded.FcmErrCode != "" {
 						// This has not been observed but FCM is uncler if it can happen.
-						errs = append(errs, fmt.Errorf("Multiple FCM error codes '%s', '%s'", errCode, decoded.FcmErrCode))
+						errs = append(errs, fmt.Errorf("multiple FcmError codes '%s', '%s'", errCode, decoded.FcmErrCode))
 					} else {
 						decoded.FcmErrCode = errCode
 					}
 				} else {
-					errs = append(errs, fmt.Errorf("FCM error details value is not a string %T", details["errorCode"]))
+					errs = append(errs, fmt.Errorf("error.Details errorCode is not a string: %T", details["errorCode"]))
 				}
 			case "type.googleapis.com/google.rpc.BadRequest":
 				// dst.fcmErrCode == INVALID_ARGUMENT
@@ -515,19 +515,19 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 						if field != "" {
 							fields = append(fields, violation["field"])
 						} else {
-							errs = append(errs, fmt.Errorf("FCM fieldViolation has no field: %s", violation["description"]))
+							errs = append(errs, fmt.Errorf("error.Details 'fieldViolation' has no 'field': %s", violation["description"]))
 						}
 					}
 					decoded.ExtendedInfo = strings.Join(fields, ",")
 				} else {
-					errs = append(errs, fmt.Errorf("FCM error fieldViolations is not a []map[string]string %T", details["fieldViolations"]))
+					errs = append(errs, fmt.Errorf("wrong type of error.Details 'fieldViolations': %T", details["fieldViolations"]))
 				}
 			case "type.googleapis.com/google.rpc.QuotaFailure":
 				// dst.fcmErrCode == QUOTA_EXCEEDED
 				// TODO: this error has not been observed, don't know how to handle it.
-				errs = append(errs, fmt.Errorf("FCM quota exceeded %v", details))
+				errs = append(errs, fmt.Errorf("quota exceeded %v", details))
 			default:
-				errs = append(errs, fmt.Errorf("Unknown FCM error type %v", details))
+				errs = append(errs, fmt.Errorf("unknown error '@type': %v", details))
 			}
 		}
 
@@ -538,7 +538,7 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 		decoded.HttpCode = http.StatusBadRequest
 		decoded.FcmErrCode = string(ErrorUnspecified)
 		decoded.ErrMessage = err.Error()
-		errs = append(errs, fmt.Errorf("FCM returned invalid error %w", err))
+		errs = append(errs, fmt.Errorf("not googleapi.Error %w", err))
 	}
 
 	return
