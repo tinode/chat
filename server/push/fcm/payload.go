@@ -198,6 +198,8 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Me
 		msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, 0, config)
 		// TODO: add webpush payload.
 		messages = append(messages, &msg)
+		// UID is not used in handling Topic pushes, but should keep the same count as messages.
+		uids = append(uids, t.ZeroUid)
 	}
 
 	return messages, uids

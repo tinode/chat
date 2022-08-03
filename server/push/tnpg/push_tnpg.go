@@ -283,8 +283,6 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 	}
 
 	for i, resp := range batch.Responses {
-
-		logs.Warn.Println("tnpg error:", resp.ErrorCode, resp.ErrorMessage, resp.ExtendedError, resp.Code)
 		switch resp.ErrorCode {
 		case "": // no error
 		case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
@@ -293,14 +291,19 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 			return
 		case common.ErrorInvalidArgument:
 			// Usually an invalid token.
-			logs.Warn.Println("tnpg invalid argument:", resp.ErrorMessage)
+			logs.Warn.Println("tnpg invalid argument:", resp.ExtendedError, resp.ErrorMessage)
+			if strings.Contains(resp.ExtendedError, "message.token") {
+				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+					logs.Warn.Println("tnpg failed to delete invalid token:", err)
+				}
+			}
 		case common.ErrorSenderIDMismatch, common.ErrorThirdPartyAuth:
 			// Config errors
-			logs.Warn.Println("tnpg invalid config:", resp.ErrorMessage)
+			logs.Warn.Println("tnpg invalid config:", resp.ExtendedError, resp.ErrorMessage)
 			return
 		case common.ErrorUnregistered:
 			// Token is no longer valid.
-			logs.Info.Println("tnpg invalid token:", resp.ErrorMessage, resp.MessageID)
+			logs.Info.Println("tnpg invalid token:", resp.ErrorMessage, resp.ExtendedError, resp.MessageID)
 			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
 				logs.Warn.Println("tnpg failed to delete invalid token:", err)
 			}

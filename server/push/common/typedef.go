@@ -508,19 +508,20 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 				}
 			case "type.googleapis.com/google.rpc.BadRequest":
 				// dst.fcmErrCode == INVALID_ARGUMENT
-				if fieldViolations, ok := details["fieldViolations"].([]map[string]string); ok {
+				if fieldViolations, ok := details["fieldViolations"].([]interface{}); !ok {
+					errs = append(errs, fmt.Errorf("wrong type of error.Details 'fieldViolations': %T", details["fieldViolations"]))
+				} else {
 					var fields []string
-					for _, violation := range fieldViolations {
-						field := violation["field"]
-						if field != "" {
-							fields = append(fields, violation["field"])
+					for _, violationIface := range fieldViolations {
+						if violation, ok := violationIface.(map[string]interface{}); !ok {
+							errs = append(errs, fmt.Errorf("wrong type of error.Details.fieldViolations item: %T", iface))
+						} else if field, ok := violation["field"].(string); ok && field != "" {
+							fields = append(fields, field)
 						} else {
-							errs = append(errs, fmt.Errorf("error.Details 'fieldViolation' has no 'field': %s", violation["description"]))
+							errs = append(errs, fmt.Errorf("error.Details 'fieldViolation' has no 'field': %T, %s", violation["field"], violation["description"]))
 						}
 					}
 					decoded.ExtendedInfo = strings.Join(fields, ",")
-				} else {
-					errs = append(errs, fmt.Errorf("wrong type of error.Details 'fieldViolations': %T", details["fieldViolations"]))
 				}
 			case "type.googleapis.com/google.rpc.QuotaFailure":
 				// dst.fcmErrCode == QUOTA_EXCEEDED
