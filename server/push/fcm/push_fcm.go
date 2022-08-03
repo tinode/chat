@@ -13,10 +13,11 @@ import (
 	fbase "firebase.google.com/go"
 	legacy "firebase.google.com/go/messaging"
 	fcmv1 "google.golang.org/api/fcm/v1"
-	"google.golang.org/api/googleapi"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
+	"github.com/tinode/chat/server/push/common"
+	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/oauth2/google"
@@ -54,9 +55,9 @@ type configType struct {
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      int             `json:"time_to_live,omitempty"`
 	ApnsBundleID    string          `json:"apns_bundle_id,omitempty"`
-	Android         *CommonConfig   `json:"android,omitempty"`
-	Apns            *CommonConfig   `json:"apns,omitempty"`
-	Webpush         *CommonConfig   `json:"webpush,omitempty"`
+	Android         *common.Config  `json:"android,omitempty"`
+	Apns            *common.Config  `json:"apns,omitempty"`
+	Webpush         *common.Config  `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
@@ -72,8 +73,6 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, nil
 	}
 
-	ctx := context.Background()
-
 	if config.Credentials == nil && config.CredentialsFile != "" {
 		config.Credentials, err = os.ReadFile(config.CredentialsFile)
 		if err != nil {
@@ -85,6 +84,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, errors.New("missing credentials")
 	}
 
+	ctx := context.Background()
 	credentials, err := google.CredentialsFromJSON(ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
 		return false, err
@@ -130,7 +130,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 }
 
 func sendFcmV1(rcpt *push.Receipt, config *configType) {
-	messages := PrepareV1Notifications(rcpt, config)
+	messages, uids := PrepareV1Notifications(rcpt, config)
 	for i := range messages {
 		req := &fcmv1.SendMessageRequest{
 			Message:      messages[i],
@@ -138,22 +138,31 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 		}
 		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
-			if gerr, ok := err.(*googleapi.Error); ok {
-				errmsg := gerr.Message + " "
-				if len(gerr.Errors) > 0 {
-					for _, errInfo := range gerr.Errors {
-						errmsg = errInfo.Reason + "; " + errInfo.Message + " "
-					}
-				}
-				if len(gerr.Details) > 0 {
-					details, _ := json.Marshal(gerr.Details)
-					errmsg += string(details)
-				}
-				logs.Err.Printf("fcm push failed: %d %s", gerr.Code, errmsg)
-			} else {
-				logs.Err.Println("fcm push failed:", err)
+			gerr, decodingErrs := common.DecodeGoogleApiError(err)
+			for _, err := range decodingErrs {
+				logs.Info.Println("fcm googleapi.Error decoding:", err)
 			}
-			break
+			switch gerr.FcmErrCode {
+			case "": // no error
+			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
+				// Transient errors. Stop sending this batch.
+				logs.Warn.Println("fcm transient failure:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
+				// Config errors. Stop.
+				logs.Warn.Println("fcm invalid config:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			case common.ErrorUnregistered:
+				// Token is no longer valid. Delete token from DB and continue sending.
+				logs.Warn.Println("fcm invalid token:", gerr.FcmErrCode, gerr.ErrMessage)
+				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+					logs.Warn.Println("tnpg failed to delete invalid token:", err)
+				}
+			default:
+				// Unknown error. Stop sending just in case.
+				logs.Warn.Println("tnpg unrecognized error:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			}
 		}
 	}
 }
