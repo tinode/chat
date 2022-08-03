@@ -1,9 +1,13 @@
 package common
 
 import (
+	"fmt"
+	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/tinode/chat/server/push"
+	"google.golang.org/api/googleapi"
 )
 
 // Payload to be sent for a specific notification type.
@@ -458,3 +462,84 @@ const (
 	// The server is shutting down (HTTP error code = 503).
 	ErrorApnsShutdown = "Shutdown"
 )
+
+// GApiError stores a simplified representation of an error returned by a call to Google API.
+type GApiError struct {
+	HttpCode int
+	// This one is not informative, but can be logged for user consideration.
+	ErrMessage string
+	// FCM error code, informative but may be missing.
+	FcmErrCode string
+	// Extended error info dependent on the fcmErrCode.
+	ExtendedInfo string
+}
+
+// DecodeGoogleApiError converts very complex googleapi.Error to a bit more manageable structure.
+func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
+	decoded = &GApiError{}
+	if gerr, ok := err.(*googleapi.Error); ok {
+		// HTTP status code.
+		decoded.HttpCode = gerr.Code
+		decoded.ErrMessage = gerr.Message
+		if len(gerr.Errors) > 0 {
+			for _, errInfo := range gerr.Errors {
+				decoded.ErrMessage += "; " + errInfo.Reason + "/" + errInfo.Message
+			}
+		}
+
+		// Decode the FCM error.
+		for _, iface := range gerr.Details {
+			details, ok := iface.(map[string]interface{})
+			if !ok {
+				errs = append(errs, fmt.Errorf("FCM error details has unrecognized format %T", iface))
+				continue
+			}
+			switch details["@type"] {
+			case "type.googleapis.com/google.firebase.fcm.v1.FcmError":
+				if errCode, ok := details["errorCode"].(string); ok {
+					if decoded.FcmErrCode != "" {
+						// This has not been observed but FCM is uncler if it can happen.
+						errs = append(errs, fmt.Errorf("Multiple FCM error codes '%s', '%s'", errCode, decoded.FcmErrCode))
+					} else {
+						decoded.FcmErrCode = errCode
+					}
+				} else {
+					errs = append(errs, fmt.Errorf("FCM error details value is not a string %T", details["errorCode"]))
+				}
+			case "type.googleapis.com/google.rpc.BadRequest":
+				// dst.fcmErrCode == INVALID_ARGUMENT
+				if fieldViolations, ok := details["fieldViolations"].([]map[string]string); ok {
+					var fields []string
+					for _, violation := range fieldViolations {
+						field := violation["field"]
+						if field != "" {
+							fields = append(fields, violation["field"])
+						} else {
+							errs = append(errs, fmt.Errorf("FCM fieldViolation has no field: %s", violation["description"]))
+						}
+					}
+					decoded.ExtendedInfo = strings.Join(fields, ",")
+				} else {
+					errs = append(errs, fmt.Errorf("FCM error fieldViolations is not a []map[string]string %T", details["fieldViolations"]))
+				}
+			case "type.googleapis.com/google.rpc.QuotaFailure":
+				// dst.fcmErrCode == QUOTA_EXCEEDED
+				// TODO: this error has not been observed, don't know how to handle it.
+				errs = append(errs, fmt.Errorf("FCM quota exceeded %v", details))
+			default:
+				errs = append(errs, fmt.Errorf("Unknown FCM error type %v", details))
+			}
+		}
+
+		if decoded.FcmErrCode == "" {
+			decoded.FcmErrCode = string(ErrorUnspecified)
+		}
+	} else {
+		decoded.HttpCode = http.StatusBadRequest
+		decoded.FcmErrCode = string(ErrorUnspecified)
+		decoded.ErrMessage = err.Error()
+		errs = append(errs, fmt.Errorf("FCM returned invalid error %w", err))
+	}
+
+	return
+}

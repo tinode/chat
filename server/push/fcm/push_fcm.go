@@ -8,13 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
 
 	fbase "firebase.google.com/go"
 	legacy "firebase.google.com/go/messaging"
 	fcmv1 "google.golang.org/api/fcm/v1"
-	"google.golang.org/api/googleapi"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -140,67 +138,33 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 		}
 		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
-			errCode, errMessage := decodeFCMError(err)
-			switch errCode {
+			gerr, decodingErrs := common.DecodeGoogleApiError(err)
+			for _, err := range decodingErrs {
+				logs.Info.Println("fcm googleapi.Error decoding:", err)
+			}
+			switch gerr.FcmErrCode {
 			case "": // no error
 			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
 				// Transient errors. Stop sending this batch.
-				logs.Warn.Println("fcm transient failure:", errCode, errMessage)
+				logs.Warn.Println("fcm transient failure:", gerr.FcmErrCode, gerr.ErrMessage)
 				return
 			case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
 				// Config errors. Stop.
-				logs.Warn.Println("fcm invalid config:", errCode, errMessage)
+				logs.Warn.Println("fcm invalid config:", gerr.FcmErrCode, gerr.ErrMessage)
 				return
 			case common.ErrorUnregistered:
 				// Token is no longer valid. Delete token from DB and continue sending.
-				logs.Warn.Println("fcm invalid token:", errCode, errMessage)
+				logs.Warn.Println("fcm invalid token:", gerr.FcmErrCode, gerr.ErrMessage)
 				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
 					logs.Warn.Println("tnpg failed to delete invalid token:", err)
 				}
 			default:
 				// Unknown error. Stop sending just in case.
-				logs.Warn.Println("tnpg unrecognized error:", errCode, errMessage)
+				logs.Warn.Println("tnpg unrecognized error:", gerr.FcmErrCode, gerr.ErrMessage)
 				return
 			}
 		}
 	}
-}
-
-func decodeFCMError(err error) (errCode, errMessage string) {
-	if gerr, ok := err.(*googleapi.Error); ok {
-		errMessage = gerr.Message + " "
-		if len(gerr.Errors) > 0 {
-			errCode = gerr.Errors[0].Reason
-			for _, errInfo := range gerr.Errors {
-				errMessage = errInfo.Reason + "; " + errInfo.Message + " "
-			}
-		}
-		var exErrs []string
-		for _, iface := range gerr.Details {
-			details, ok := iface.(map[string]interface{})
-			if !ok {
-				log.Printf("FCM error details has unrecognized format %T\n", iface)
-				continue
-			}
-			if details["@type"] == "type.googleapis.com/google.firebase.fcm.v1.FcmError" {
-				if errCode, ok := details["errorCode"].(string); ok {
-					exErrs = append(exErrs, errCode)
-				} else {
-					log.Printf("FCM error details value is not a string %T\n", details["errorCode"])
-				}
-			} else {
-				log.Println("FCM error details has no errorCode", details)
-			}
-		}
-		if len(exErrs) > 0 {
-			// Overwriting default ErrorCode.
-			errCode = exErrs[0]
-		}
-	} else {
-		logs.Warn.Println("FCM returned invalid error", err)
-	}
-
-	return
 }
 
 func processSubscription(req *push.ChannelReq) {
