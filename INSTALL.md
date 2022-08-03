@@ -128,7 +128,7 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
 	```
 
-	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
+	DB initializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
 3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by unzipping `https://github.com/tinode/webapp/archive/master.zip` and `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
