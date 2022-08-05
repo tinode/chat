@@ -309,8 +309,12 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 	if callStatus == "started" {
 		// Send VOIP push only when a new call is started, otherwise send normal alert.
 		interruptionLevel = common.InterruptionLevelCritical
-		pushType = common.ApnsPushTypeVoip
-		bundleId += ".voip"
+		// FIXME: PushKit notifications do not work with the current FCM adapter.
+		// Using normal pushes as a poor-man's replacement for VOIP pushes.
+		// Uncomment the following two lines when FCM fixes its problem or when we switch to
+		// a different adapter.
+		// pushType = common.ApnsPushTypeVoip
+		// bundleId += ".voip"
 		expires = time.Now().UTC().Add(time.Duration(voipTimeToLive) * time.Second)
 	} else if what == push.ActRead {
 		priority = 5

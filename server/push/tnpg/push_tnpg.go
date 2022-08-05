@@ -23,6 +23,8 @@ import (
 
 const (
 	baseTargetAddress = "https://pushgw.tinode.co/"
+	pushPath          = "pushv1"
+	subsPath          = "sub"
 	pushBatchSize     = 100
 	subBatchSize      = 1000
 	bufferSize        = 1024
@@ -58,15 +60,15 @@ type subUnsubReq struct {
 
 type tnpgResponse struct {
 	// Push message response only.
-	MessageID     string `json:"msg_id,omitempty"`
-	ErrorMessage  string `json:"errmsg,omitempty"`
-	ExtendedError string `json:"exerr,omitempty"`
-	// Channel sub/unsub response only.
-	Index int `json:"index,omitempty"`
-	// Both push and sub/unsub response.
-	ErrorCode string `json:"errcode,omitempty"`
+	MessageID string `json:"msg_id,omitempty"`
 	// Server response HTTP code.
 	Code int `json:"code,omitempty"`
+	// FCM response code. Both push and sub/unsub response.
+	ErrorCode     string `json:"errcode,omitempty"`
+	ExtendedError string `json:"exerr,omitempty"`
+	ErrorMessage  string `json:"errmsg,omitempty"`
+	// Channel sub/unsub response only.
+	Index int `json:"index,omitempty"`
 }
 
 type batchResponse struct {
@@ -126,10 +128,10 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, err
 	}
 	pushUrl := serverAddr
-	pushUrl.Path += "push/" + config.OrgID
+	pushUrl.Path += pushPath + "/" + config.OrgID
 	handler.pushUrl = pushUrl.String()
 	subUrl := serverAddr
-	subUrl.Path += "sub/" + config.OrgID
+	subUrl.Path += subsPath + "/" + config.OrgID
 	handler.subUrl = subUrl.String()
 
 	handler.input = make(chan *push.Receipt, bufferSize)
@@ -187,10 +189,6 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 	}
 
 	if err == nil {
-		//buf := new(strings.Builder)
-		//_, err = io.Copy(buf, reader)
-		// check errors
-		//log.Println(err, buf.String())
 		err = json.NewDecoder(reader).Decode(&batch)
 	}
 	resp.Body.Close()
