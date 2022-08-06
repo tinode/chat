@@ -120,19 +120,19 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	config.OrgID = strings.ToLower(config.OrgID)
 
 	// Construct server URLs.
-	serverAddr, err := url.Parse(baseTargetAddress)
+	serverAddr := baseTargetAddress
 	if config.DebugPushGWHost != "" {
-		serverAddr, err = url.Parse(config.DebugPushGWHost)
+		serverAddr = config.DebugPushGWHost
 	}
+	serverUrl, err := url.Parse(serverAddr)
 	if err != nil {
 		return false, err
 	}
-	pushUrl := serverAddr
-	pushUrl.Path += pushPath + "/" + config.OrgID
-	handler.pushUrl = pushUrl.String()
-	subUrl := serverAddr
-	subUrl.Path += subsPath + "/" + config.OrgID
-	handler.subUrl = subUrl.String()
+	serverUrl.Path += pushPath + "/" + config.OrgID
+	handler.pushUrl = serverUrl.String()
+	serverUrl, _ = url.Parse(serverAddr)
+	serverUrl.Path += subsPath + "/" + config.OrgID
+	handler.subUrl = serverUrl.String()
 
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
