@@ -179,7 +179,6 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 	for msg := range h.routeSrv {
 		if msg.RcptTo == "" {
 			t.Fatal("Hub.route received a message without addressee.")
-			break
 		}
 		results[msg.RcptTo] = append(results[msg.RcptTo], msg)
 	}
