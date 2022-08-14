@@ -410,6 +410,16 @@ type Cluster struct {
 	proxyEventQueue *concurrency.GoRoutinePool
 }
 
+func (n *ClusterNode) stopMultiplexingSession(msess *Session) {
+	if msess == nil {
+		return
+	}
+	msess.stopSession(nil)
+	n.lock.Lock()
+	delete(n.msess, msess.sid)
+	n.lock.Unlock()
+}
+
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
@@ -421,17 +431,29 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	}
 
 	// Master maintains one multiplexing session per proxy topic per node.
-	msid := msg.RcptTo + "-" + msg.Node
+	// Except channel topics:
+	// * one multiplexing session for channel subscriptions.
+	// * one multiplexing session for group subscriptions.
+	var msid string
+	if msg.CliMsg != nil && types.IsChannel(msg.CliMsg.Original) {
+		// If it's a channel request, use channel name.
+		msid = msg.CliMsg.Original
+	} else {
+		msid = msg.RcptTo
+	}
+	// Append node name.
+	msid += "-" + msg.Node
 	msess := globals.sessionStore.Get(msid)
 
 	if msg.Gone {
 		// Proxy topic is gone. Tear down the local auxiliary session.
 		// If it was the last session, master topic will shut down as well.
-		if msess != nil {
-			msess.stopSession(nil)
-			node.lock.Lock()
-			delete(node.msess, msid)
-			node.lock.Unlock()
+		node.stopMultiplexingSession(msess)
+
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil && t.isChan {
+			// If it's a channel topic, also stop the "chnX-" local auxiliary session.
+			msidChn := types.GrpToChn(t.name) + "-" + msg.Node
+			node.stopMultiplexingSession(globals.sessionStore.Get(msidChn))
 		}
 
 		return nil
