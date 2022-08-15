@@ -3615,7 +3615,7 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 		if sess.background {
 			t.sessions[s] = perSessionData{}
 		} else {
-			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}}
+			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}, isChanSub: isChanSub}
 		}
 	} else {
 		t.sessions[s] = perSessionData{uid: asUid, isChanSub: isChanSub}
