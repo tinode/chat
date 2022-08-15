@@ -1356,7 +1356,7 @@ func ErrUserNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage
 	return ErrUserNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrNotFound is an error for missing objects other than user or topic.
+// ErrNotFound is an error for missing objects other than user or topic (404).
 func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrNotFoundExplicitTs(id, topic, ts, ts)
 }
