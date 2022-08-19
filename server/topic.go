@@ -241,23 +241,33 @@ func (t *Topic) userIsReader(uid types.Uid) bool {
 	return (modeGiven & modeWant).IsReader()
 }
 
-// maybeFixTopicName sets the topic field in `msg` depending on the uid.
-func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
+// maybeFixTopicName sets the topic field in `msg` depending on the uid and subscription type.
+func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid, isChanSub bool) {
 	// For zero uids we don't know the proper topic name.
 	if uid.IsZero() {
+		return
+	}
+	// We are only interested in broadcastable messages.
+	if msg.Data == nil && msg.Pres == nil && msg.Info == nil {
 		return
 	}
 
 	if t.cat == types.TopicCatP2P || (t.cat == types.TopicCatGrp && t.isChan) {
 		// For p2p topics topic name is dependent on receiver.
 		// Channel topics may be presented as grpXXX or chnXXX.
+		var topicName string
+		if isChanSub {
+			topicName = types.GrpToChn(t.xoriginal)
+		} else {
+			topicName = t.original(uid)
+		}
 		switch {
 		case msg.Data != nil:
-			msg.Data.Topic = t.original(uid)
+			msg.Data.Topic = topicName
 		case msg.Pres != nil:
-			msg.Pres.Topic = t.original(uid)
+			msg.Pres.Topic = topicName
 		case msg.Info != nil:
-			msg.Info.Topic = t.original(uid)
+			msg.Info.Topic = topicName
 		}
 	}
 }
@@ -1272,7 +1282,7 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 		}
 
 		// Topic name may be different depending on the user to which the `sess` belongs.
-		t.maybeFixTopicName(msg, pssd.uid)
+		t.maybeFixTopicName(msg, pssd.uid, pssd.isChanSub)
 
 		// Send channel messages anonymously.
 		if pssd.isChanSub && msg.Data != nil {
