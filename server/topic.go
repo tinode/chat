@@ -1279,18 +1279,32 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 					continue
 				}
 			}
+		} else {
+			// If it's a chnX multiplexing session, check if there's a corresponding
+			// grpX multiplexing session as we don't want to send the message to both.
+			if pssd.isChanSub && types.IsChannel(sess.sid) {
+				grpSid := types.ChnToGrp(sess.sid)
+				if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
+					// If grpX multiplexing session's attached to topic, skip this chnX session
+					// (message will be routed to the topic proxy via the grpX session).
+					if _, attached := t.sessions[grpSess]; attached {
+						continue
+					}
+				}
+			}
 		}
 
 		// Topic name may be different depending on the user to which the `sess` belongs.
 		t.maybeFixTopicName(msg, pssd.uid, pssd.isChanSub)
 
+		msgCopy := msg.copy()
 		// Send channel messages anonymously.
-		if pssd.isChanSub && msg.Data != nil {
-			msg.Data.From = ""
+		if pssd.isChanSub && msgCopy.Data != nil {
+			msgCopy.Data.From = ""
 		}
 		// Send message to session.
 		// Make a copy of msg since messages sent to sessions differ.
-		if !sess.queueOut(msg.copy()) {
+		if !sess.queueOut(msgCopy) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			dropSessions = append(dropSessions, sess)
 		}
