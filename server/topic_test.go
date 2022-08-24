@@ -355,7 +355,7 @@ func TestHandleBroadcastCall(t *testing.T) {
 	if len(helper.topic.currentCall.parties) != 1 {
 		t.Fatalf("Call parties: expected 1, found %d.", len(helper.topic.currentCall.parties))
 	}
-	if p, ok := helper.topic.currentCall.parties[helper.sessions[0]]; ok {
+	if p, ok := helper.topic.currentCall.parties[helper.sessions[0].sid]; ok {
 		if !p.isOriginator {
 			t.Error("Call party is not a call originator.")
 		}
