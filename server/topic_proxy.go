@@ -141,13 +141,11 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 	if msg.Original == "" {
 		if t.cat == types.TopicCatGrp && t.isChan {
 			// It's a channel topic. Original topic name depends the subscription type.
-			var toriginal string
 			if result && pssd.isChanSub {
-				toriginal = types.GrpToChn(t.xoriginal)
+				msg.Original = types.GrpToChn(t.xoriginal)
 			} else {
-				toriginal = t.xoriginal
+				msg.Original = t.xoriginal
 			}
-			msg.Original = toriginal
 		} else {
 			msg.Original = t.original(asUid)
 		}
