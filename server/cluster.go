@@ -824,9 +824,10 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, msg *ClientComMessage
 		// Cluster may be nil due to shutdown.
 		return nil
 	}
-	if sess != nil {
+	if sess != nil && reqType != ProxyReqLeave {
 		if atomic.LoadInt32(&sess.terminating) > 0 {
 			// The session is terminating.
+			// Do not forward any requests except "leave" to the topic master.
 			return nil
 		}
 	}

@@ -129,13 +129,26 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 	// Remove the session from the topic without waiting for a response from the master node
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
-	_, result := t.remSession(msg.sess, asUid)
+	pssd, result := t.remSession(msg.sess, asUid)
 	if !msg.init {
 		// Explicitly specify the uid because the master multiplex session needs to know which
 		// of its multiple hosted sessions to delete.
 		msg.AsUser = asUid.UserId()
 		msg.Leave = &MsgClientLeave{}
 		msg.init = true
+	}
+	// Make sure we set the Original field if it's empty (e.g. when session is terminating altogether).
+	if msg.Original == "" {
+		if t.cat == types.TopicCatGrp && t.isChan {
+			// It's a channel topic. Original topic name depends the subscription type.
+			if result && pssd.isChanSub {
+				msg.Original = types.GrpToChn(t.xoriginal)
+			} else {
+				msg.Original = t.xoriginal
+			}
+		} else {
+			msg.Original = t.original(asUid)
+		}
 	}
 
 	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, msg, t.name, msg.sess); err != nil {

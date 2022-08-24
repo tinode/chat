@@ -241,24 +241,35 @@ func (t *Topic) userIsReader(uid types.Uid) bool {
 	return (modeGiven & modeWant).IsReader()
 }
 
-// maybeFixTopicName sets the topic field in `msg` depending on the uid.
-func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
-	// For zero uids we don't know the proper topic name.
-	if uid.IsZero() {
+// prepareBroadcastableMessage sets the topic field in `msg` depending on the uid and subscription type.
+func (t *Topic) prepareBroadcastableMessage(msg *ServerComMessage, uid types.Uid, isChanSub bool) {
+	// We are only interested in broadcastable messages.
+	if msg.Data == nil && msg.Pres == nil && msg.Info == nil {
 		return
 	}
 
-	if t.cat == types.TopicCatP2P || (t.cat == types.TopicCatGrp && t.isChan) {
+	if (t.cat == types.TopicCatP2P && !uid.IsZero()) || (t.cat == types.TopicCatGrp && t.isChan) {
 		// For p2p topics topic name is dependent on receiver.
 		// Channel topics may be presented as grpXXX or chnXXX.
+		var topicName string
+		if isChanSub {
+			topicName = types.GrpToChn(t.xoriginal)
+		} else {
+			topicName = t.original(uid)
+		}
 		switch {
 		case msg.Data != nil:
-			msg.Data.Topic = t.original(uid)
+			msg.Data.Topic = topicName
 		case msg.Pres != nil:
-			msg.Pres.Topic = t.original(uid)
+			msg.Pres.Topic = topicName
 		case msg.Info != nil:
-			msg.Info.Topic = t.original(uid)
+			msg.Info.Topic = topicName
 		}
+	}
+
+	// Send channel messages anonymously.
+	if isChanSub && msg.Data != nil {
+		msg.Data.From = ""
 	}
 }
 
@@ -1269,18 +1280,27 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 					continue
 				}
 			}
+		} else {
+			// If it's a chnX multiplexing session, check if there's a corresponding
+			// grpX multiplexing session as we don't want to send the message to both.
+			if pssd.isChanSub && types.IsChannel(sess.sid) {
+				grpSid := types.ChnToGrp(sess.sid)
+				if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
+					// If grpX multiplexing session's attached to topic, skip this chnX session
+					// (message will be routed to the topic proxy via the grpX session).
+					if _, attached := t.sessions[grpSess]; attached {
+						continue
+					}
+				}
+			}
 		}
 
-		// Topic name may be different depending on the user to which the `sess` belongs.
-		t.maybeFixTopicName(msg, pssd.uid)
-
-		// Send channel messages anonymously.
-		if pssd.isChanSub && msg.Data != nil {
-			msg.Data.From = ""
-		}
-		// Send message to session.
 		// Make a copy of msg since messages sent to sessions differ.
-		if !sess.queueOut(msg.copy()) {
+		msgCopy := msg.copy()
+		// Topic name may be different depending on the user to which the `sess` belongs.
+		t.prepareBroadcastableMessage(msgCopy, pssd.uid, pssd.isChanSub)
+		// Send message to session.
+		if !sess.queueOut(msgCopy) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			dropSessions = append(dropSessions, sess)
 		}
