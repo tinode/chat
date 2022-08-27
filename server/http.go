@@ -59,7 +59,11 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 						globals.tlsRedirectHTTP, addr)
 
 					// This is a second HTTP server listenning on a different port.
-					go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr))
+					go func() {
+						if err := http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr)); err != nil && err != http.ErrServerClosed {
+							logs.Info.Println("HTTP redirect failed:", err)
+						}
+					}()
 				}
 			}
 
