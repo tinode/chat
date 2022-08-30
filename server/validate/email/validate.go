@@ -348,7 +348,7 @@ func (v *validator) PreCheck(cred string, _ map[string]interface{}) (string, err
 	return validatorName + ":" + addr.Address, nil
 }
 
-// Send a request for confirmation to the user: makes a record in DB  and nothing else.
+// Send a request for confirmation to the user: makes a record in DB and nothing else.
 func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byte) (bool, error) {
 	// Email validator cannot accept an immediate response.
 	if resp != "" {
@@ -358,8 +358,8 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
-	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
-	base64.URLEncoding.Encode(token, tmpToken)
+	token := make([]byte, base64.StdEncoding.EncodedLen(len(tmpToken)))
+	base64.StdEncoding.Encode(token, tmpToken)
 
 	// Generate expected response as a random numeric string between 0 and 999999.
 	// The PRNG is already initialized in main.go. No need to initialize it here again.
@@ -375,7 +375,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	}
 
 	content, err := executeTemplate(template, map[string]interface{}{
-		"Token":   string(token),
+		"Token":   url.QueryEscape(string(token)),
 		"Code":    resp,
 		"HostUrl": v.HostUrl})
 	if err != nil {
@@ -403,8 +403,8 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
-	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
-	base64.URLEncoding.Encode(token, tmpToken)
+	token := make([]byte, base64.StdEncoding.EncodedLen(len(tmpToken)))
+	base64.StdEncoding.Encode(token, tmpToken)
 
 	var template *textt.Template
 	if v.langMatcher != nil {
@@ -422,7 +422,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 
 	content, err := executeTemplate(template, map[string]interface{}{
 		"Login":   login,
-		"Token":   string(token),
+		"Token":   url.QueryEscape(string(token)),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl})
 	if err != nil {
