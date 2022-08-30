@@ -158,9 +158,8 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// Save credentials, update tags if necessary.
 	tmpToken, _, _ := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       user.Uid(),
-		AuthLevel: auth.LevelNone,
+		AuthLevel: auth.LevelAuth,
 		Lifetime:  auth.Duration(time.Hour * 24),
-		Features:  auth.FeatureNoLogin,
 	})
 	validated, _, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
 	if err != nil {

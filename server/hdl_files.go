@@ -155,7 +155,6 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		logs.Info.Println("File upload auth failed", err)
 		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}

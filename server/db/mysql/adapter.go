@@ -532,12 +532,12 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Links between uploaded files and the topics, users or messages they are attached to.
 	if _, err = tx.Exec(
 		`CREATE TABLE filemsglinks(
-			id			INT NOT NULL AUTO_INCREMENT,
-			createdat	DATETIME(3) NOT NULL,
-			fileid		BIGINT NOT NULL,
-			msgid		INT,
-			topic		CHAR(25),
-			userid		BIGINT,
+			id        INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			fileid    BIGINT NOT NULL,
+			msgid     INT,
+			topic     CHAR(25),
+			userid    BIGINT,
 			PRIMARY KEY(id),
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
 			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
