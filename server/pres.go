@@ -400,7 +400,7 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 			// For p2p topics topic name is dependent on receiver.
 			// It's OK to change the pointer here because the message will be serialized in queueOut
 			// before being placed into the channel.
-			t.maybeFixTopicName(msg, pssd.uid)
+			t.prepareBroadcastableMessage(msg, pssd.uid, pssd.isChanSub)
 		}
 		s.queueOut(msg)
 	}
