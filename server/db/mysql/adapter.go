@@ -3095,6 +3095,8 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	var user interface{}
 	if fd.User != "" {
 		user = store.DecodeUid(t.ParseUid(fd.User))
+	} else {
+		user = 0
 	}
 	_, err := a.db.ExecContext(ctx,
 		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+

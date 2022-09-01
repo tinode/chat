@@ -130,7 +130,9 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 
-		logs.Info.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		if err != nil {
+			logs.Info.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		}
 	}
 
 	// Check if this is a POST/PUT/OPTIONS/HEAD request.
@@ -162,8 +164,8 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(InfoChallenge(msgID, now, challenge), nil)
 		return
 	}
-	if uid.IsZero() {
-		// Not authenticated
+	if uid.IsZero() && req.FormValue("topic") != "newacc" {
+		// Not authenticated and not signup.
 		writeHttpResponse(ErrAuthRequired(msgID, "", now, now), nil)
 		return
 	}
@@ -256,7 +258,9 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		// How long this file is guaranteed to exist without being attached to a message or a topic.
 		params["expires"] = now.Add(globals.mediaGcPeriod).Format(types.TimeFormatRFC3339)
 	}
+
 	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
+	logs.Info.Println("media upload: ok", fdef.Location)
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
