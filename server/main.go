@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -285,7 +284,6 @@ func main() {
 	expvarPath := flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
 	serverStatusPath := flag.String("server_status", "",
 		"Override the URL path where the server's internal status is displayed. Use '-' to disable.")
-	pprofFile := flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
 	pprofUrl := flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
@@ -354,28 +352,6 @@ func main() {
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.
 	workerId := clusterInit(config.Cluster, clusterSelf)
-
-	if *pprofFile != "" {
-		*pprofFile = toAbsolutePath(curwd, *pprofFile)
-
-		cpuf, err := os.Create(*pprofFile + ".cpu")
-		if err != nil {
-			logs.Err.Fatal("Failed to create CPU pprof file: ", err)
-		}
-		defer cpuf.Close()
-
-		memf, err := os.Create(*pprofFile + ".mem")
-		if err != nil {
-			logs.Err.Fatal("Failed to create Mem pprof file: ", err)
-		}
-		defer memf.Close()
-
-		pprof.StartCPUProfile(cpuf)
-		defer pprof.StopCPUProfile()
-		defer pprof.WriteHeapProfile(memf)
-
-		logs.Info.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
-	}
 
 	err = store.Store.Open(workerId, config.Store)
 	if err != nil {

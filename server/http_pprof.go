@@ -5,16 +5,12 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"path"
-	"runtime/pprof"
-	"strings"
 
 	"github.com/tinode/chat/server/logs"
 )
-
-var pprofHttpRoot string
 
 // Expose debug profiling at the given URL path.
 func servePprof(mux *http.ServeMux, serveAt string) {
@@ -22,32 +18,13 @@ func servePprof(mux *http.ServeMux, serveAt string) {
 		return
 	}
 
-	pprofHttpRoot = path.Clean("/"+serveAt) + "/"
-	mux.HandleFunc(pprofHttpRoot, profileHandler)
+	pprofRoot := path.Clean("/"+serveAt) + "/"
 
-	logs.Info.Printf("pprof: profiling info exposed at '%s'", pprofHttpRoot)
-}
+	mux.HandleFunc(pprofRoot, pprof.Index)
+	mux.HandleFunc(path.Join(pprofRoot, "cmdline"), pprof.Cmdline)
+	mux.HandleFunc(path.Join(pprofRoot, "profile"), pprof.Profile)
+	mux.HandleFunc(path.Join(pprofRoot, "symbol"), pprof.Symbol)
+	mux.HandleFunc(path.Join(pprofRoot, "trace"), pprof.Trace)
 
-func profileHandler(wrt http.ResponseWriter, req *http.Request) {
-	wrt.Header().Set("X-Content-Type-Options", "nosniff")
-	wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
-
-	profileName := strings.TrimPrefix(req.URL.Path, pprofHttpRoot)
-
-	profile := pprof.Lookup(profileName)
-	if profile == nil {
-		servePprofError(wrt, http.StatusNotFound, "Unknown profile '"+profileName+"'")
-		return
-	}
-
-	// Respond with the requested profile.
-	profile.WriteTo(wrt, 2)
-}
-
-func servePprofError(wrt http.ResponseWriter, status int, txt string) {
-	wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	wrt.Header().Set("X-Go-Pprof", "1")
-	wrt.Header().Del("Content-Disposition")
-	wrt.WriteHeader(status)
-	fmt.Fprintln(wrt, txt)
+	logs.Info.Printf("pprof: profiling info exposed at '%s'", pprofRoot)
 }
