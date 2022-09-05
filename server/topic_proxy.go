@@ -20,21 +20,27 @@ func (t *Topic) runProxy(hub *Hub) {
 
 	for {
 		select {
-		case join := <-t.reg:
+		case msg := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				join.sess.queueOut(ErrLockedReply(join, types.TimeNow()))
-			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join, t.name, join.sess); err != nil {
+				msg.sess.queueOut(ErrLockedReply(msg, types.TimeNow()))
+			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, msg, t.name, msg.sess); err != nil {
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				logs.Warn.Printf("proxy topic[%s]: route join request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
-			if join.sess.inflightReqs != nil {
-				join.sess.inflightReqs.Done()
+			if msg.sess.inflightReqs != nil {
+				msg.sess.inflightReqs.Done()
 			}
 
 		case msg := <-t.unreg:
 			if !t.handleProxyLeaveRequest(msg, killTimer) {
-				logs.Warn.Printf("proxy topic[%s]: failed to update proxy topic state for leave request - sid %s", t.name, msg.sess.sid)
+				sid := "nil"
+				if msg.sess != nil {
+					sid = msg.sess.sid
+				}
+				logs.Warn.Printf("proxy topic[%s]: failed to update proxy topic state for leave request - sid %s", t.name, sid)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 			if msg.init && msg.sess.inflightReqs != nil {
 				// If it's a client initiated request.
@@ -45,6 +51,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			// Content message intended for broadcasting to recipients
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Printf("topic proxy[%s]: route broadcast request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 
 		case msg := <-t.serverMsg:
@@ -59,6 +66,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			// Request to get/set topic metadata
 			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Printf("proxy topic[%s]: route meta request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 
 		case upd := <-t.supd:
@@ -235,7 +243,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		}
 
 		if sess != nil && !sess.queueOut(msg.SrvMsg) {
-			logs.Err.Printf("proxy topic[%s]: timeout in sending response - sid %s", sess.sid)
+			logs.Err.Printf("proxy topic[%s]: timeout in sending response - sid %s", t.name, sess.sid)
 		}
 	}
 }

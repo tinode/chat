@@ -595,7 +595,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	if globals.cluster.isPartitioned() {
 		// The cluster is partitioned due to network or other failure and this node is a part of the smaller partition.
 		// In order to avoid data inconsistency across the cluster we must reject all requests.
-		s.queueOut(ErrClusterUnreachable(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrClusterUnreachableReply(msg, msg.Timestamp))
 		return
 	}
 

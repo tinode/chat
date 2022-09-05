@@ -1625,27 +1625,34 @@ func ErrNotImplementedReply(msg *ClientComMessage, ts time.Time) *ServerComMessa
 	return ErrNotImplemented(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrClusterUnreachable in-cluster communication has failed (502).
-func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
+// ErrClusterUnreachableReply in-cluster communication has failed error as response to a client request (502).
+func ErrClusterUnreachableReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrClusterUnreachableExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrClusterUnreachable in-cluster communication has failed error with explicit server and
+// incoming request timestamps (502).
+func ErrClusterUnreachableExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
 			Code:      http.StatusBadGateway, // 502
 			Text:      "cluster unreachable",
 			Topic:     topic,
-			Timestamp: ts,
+			Timestamp: serverTs,
 		},
 		Id:        id,
-		Timestamp: ts,
+		Timestamp: incomingReqTs,
 	}
 }
 
-// ErrServiceUnavailableReply server error in response to a client request (503).
+// ErrServiceUnavailableReply server overloaded error in response to a client request (503).
 func ErrServiceUnavailableReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrServiceUnavailableExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrServiceUnavailableExplicitTs server error (503).
+// ErrServiceUnavailableExplicitTs server overloaded error with explicit server and
+// incoming request timestamps (503).
 func ErrServiceUnavailableExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
