@@ -11,6 +11,9 @@ GRPC_BASE_PORT=16060
 
 USAGE="Usage: $0 [ --config <path_to_tinode.conf> ] {start|stop}"
 
+# Your server binary may have a different name and location.
+SERVER='./server'
+
 if [ "$#" -lt "1" ]; then
   echo $USAGE
   exit 1
@@ -48,7 +51,7 @@ while [[ $# -gt 0 ]]; do
       for NODE_NAME in "${ALL_NODE_NAMES[@]}"
       do
         # Start the node
-        ./server -config=${TINODE_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} -static_data=${STATIC_DATA_DIR} -log_flags=stdFlags,shortfile &
+        $SERVER -config=${TINODE_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} -static_data=${STATIC_DATA_DIR} -log_flags=stdFlags,shortfile &
         # Save PID of the node to a temp file.
         # /var/tmp/ does not requre root access.
         echo $!> "/var/tmp/tinode-${NODE_NAME}.pid"
