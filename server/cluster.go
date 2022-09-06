@@ -880,7 +880,7 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, msg *ClientComMessage
 	if n == nil {
 		return errors.New("node for topic not found")
 	}
-	return n.proxyToMaster(req)
+	return n.proxyToMasterAsync(req)
 }
 
 // Forward server response message to the node that owns topic.
@@ -923,7 +923,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 
 	req := c.makeClusterReq(ProxyReqLeave, nil, topicName, nil)
 	req.Gone = true
-	return n.proxyToMaster(req)
+	return n.proxyToMasterAsync(req)
 }
 
 // Returns snowflake worker id.
