@@ -16,7 +16,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-type Responses struct {
+type responses struct {
 	messages []interface{}
 }
 
@@ -32,7 +32,7 @@ type TopicTestHelper struct {
 	sessions []*Session
 	sessWg   *sync.WaitGroup
 	// Per-session responses (i.e. what gets dumped into sessions' write loops).
-	results []*Responses
+	results []*responses
 
 	// Hub.
 	hub *Hub
@@ -65,7 +65,7 @@ func (b *TopicTestHelper) finish() {
 	<-b.hubDone
 }
 
-func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Responses) {
+func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *responses) {
 	s := &Session{
 		sid:    sid,
 		uid:    uid,
@@ -73,7 +73,7 @@ func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Resp
 		send:   make(chan interface{}, 10),
 		detach: make(chan string, 10),
 	}
-	r := &Responses{}
+	r := &responses{}
 	b.sessWg.Add(1)
 	go s.testWriteLoop(r, b.sessWg)
 	return s, r
@@ -100,7 +100,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	store.Subs = b.ss
 	// Sessions.
 	b.sessions = make([]*Session, b.numUsers)
-	b.results = make([]*Responses, b.numUsers)
+	b.results = make([]*responses, b.numUsers)
 	b.sessWg = &sync.WaitGroup{}
 	for i := range b.sessions {
 		s, r := b.newSession(fmt.Sprintf("sid%d", i), b.uids[i])
@@ -167,7 +167,7 @@ func (b *TopicTestHelper) tearDown() {
 	b.ctrl.Finish()
 }
 
-func (s *Session) testWriteLoop(results *Responses, wg *sync.WaitGroup) {
+func (s *Session) testWriteLoop(results *responses, wg *sync.WaitGroup) {
 	for msg := range s.send {
 		results.messages = append(results.messages, msg)
 	}
@@ -1286,7 +1286,7 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 }
 
 // Verifies ctrl codes in session outputs.
-func registerSessionVerifyOutputs(t *testing.T, sessionOutput *Responses, expectedCtrlCodes []int) {
+func registerSessionVerifyOutputs(t *testing.T, sessionOutput *responses, expectedCtrlCodes []int) {
 	t.Helper()
 	// Session output.
 	if len(sessionOutput.messages) == len(expectedCtrlCodes) {
@@ -2350,7 +2350,7 @@ func TestHandleMetaGet(t *testing.T) {
 
 	r := helper.results[0]
 	if len(r.messages) != 4 {
-		t.Errorf("Responses received: expected 4, received %d", len(r.messages))
+		t.Errorf("responses received: expected 4, received %d", len(r.messages))
 	}
 	for _, msg := range r.messages {
 		m := msg.(*ServerComMessage)
@@ -2430,7 +2430,7 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 
 	r := helper.results[0]
 	if len(r.messages) != 1 {
-		t.Fatalf("Responses received: expected 1, received %d", len(r.messages))
+		t.Fatalf("responses received: expected 1, received %d", len(r.messages))
 	}
 	msg := r.messages[0].(*ServerComMessage)
 	if msg == nil || msg.Ctrl == nil {
