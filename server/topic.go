@@ -1895,9 +1895,9 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		}
 
 		var modeWant types.AccessMode
-		// Check if the user has been subscribed previously and if so, use previous modeWant.
+		// Check if the invitee has been subscribed previously and if so, use previous modeWant.
 		// Otherwise the inviter may delete blocked subscription and reinvite to spam the user.
-		sub, err := store.Subs.Get(t.name, asUid, true)
+		sub, err := store.Subs.Get(t.name, target, true)
 		if err != nil {
 			sess.queueOut(ErrUnknownReply(pkt, now))
 			return nil, err
