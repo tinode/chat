@@ -26,7 +26,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
    ```
    $ docker run --name mongodb --network tinode-net --restart always -d mongo:latest --replSet "rs0"
-   $ docker exec -it mongodb mongo
+   $ docker exec -it mongodb mongo		# Use mongosh instead of mongo with MongoDB versions 5.x and above 
 
    # And inside mongo shell:
    > rs.initiate( {"_id": "rs0", "members": [ {"_id": 0, "host": "mongodb:27017"} ]} )
