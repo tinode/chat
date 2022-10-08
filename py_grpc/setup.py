@@ -17,7 +17,7 @@ setuptools.setup(
     description="Tinode gRPC bindings.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/tinode/chat",
+    url="https://github.com/Limuwenan/chat",
     packages=setuptools.find_packages(),
     install_requires=['protobuf>=3.6.1', 'grpcio>=1.19.0'],
     license="Apache 2.0",

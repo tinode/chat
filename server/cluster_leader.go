@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tinode/chat/server/logs"
+	"github.com/Limuwenan/chat/server/logs"
 )
 
 // Cluster methods related to leader node election. Based on ideas from Raft protocol.

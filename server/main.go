@@ -27,35 +27,35 @@ import (
 	jcr "github.com/tinode/jsonco"
 
 	// Authenticators
-	"github.com/tinode/chat/server/auth"
-	_ "github.com/tinode/chat/server/auth/anon"
-	_ "github.com/tinode/chat/server/auth/basic"
-	_ "github.com/tinode/chat/server/auth/rest"
-	_ "github.com/tinode/chat/server/auth/token"
+	"github.com/Limuwenan/chat/server/auth"
+	_ "github.com/Limuwenan/chat/server/auth/anon"
+	_ "github.com/Limuwenan/chat/server/auth/basic"
+	_ "github.com/Limuwenan/chat/server/auth/rest"
+	_ "github.com/Limuwenan/chat/server/auth/token"
 
 	// Database backends
-	_ "github.com/tinode/chat/server/db/mongodb"
-	_ "github.com/tinode/chat/server/db/mysql"
-	_ "github.com/tinode/chat/server/db/rethinkdb"
+	_ "github.com/Limuwenan/chat/server/db/mongodb"
+	_ "github.com/Limuwenan/chat/server/db/mysql"
+	_ "github.com/Limuwenan/chat/server/db/rethinkdb"
 
-	"github.com/tinode/chat/server/logs"
+	"github.com/Limuwenan/chat/server/logs"
 
 	// Push notifications
-	"github.com/tinode/chat/server/push"
-	_ "github.com/tinode/chat/server/push/fcm"
-	_ "github.com/tinode/chat/server/push/stdout"
-	_ "github.com/tinode/chat/server/push/tnpg"
+	"github.com/Limuwenan/chat/server/push"
+	_ "github.com/Limuwenan/chat/server/push/fcm"
+	_ "github.com/Limuwenan/chat/server/push/stdout"
+	_ "github.com/Limuwenan/chat/server/push/tnpg"
 
-	"github.com/tinode/chat/server/store"
+	"github.com/Limuwenan/chat/server/store"
 
 	// Credential validators
-	_ "github.com/tinode/chat/server/validate/email"
-	_ "github.com/tinode/chat/server/validate/tel"
+	_ "github.com/Limuwenan/chat/server/validate/email"
+	_ "github.com/Limuwenan/chat/server/validate/tel"
 	"google.golang.org/grpc"
 
 	// File upload handlers
-	_ "github.com/tinode/chat/server/media/fs"
-	_ "github.com/tinode/chat/server/media/s3"
+	_ "github.com/Limuwenan/chat/server/media/fs"
+	_ "github.com/Limuwenan/chat/server/media/s3"
 )
 
 const (

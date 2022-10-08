@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # Sample Tinode REST/JSON-RPC authentication service.
-# See https://github.com/tinode/chat/rest-auth for details.
+# See https://github.com/Limuwenan/chat/rest-auth for details.
 
 from flask import Flask, jsonify, make_response, request
 import base64
@@ -18,7 +18,7 @@ def parse_secret(ecoded_secret):
 @app.route('/')
 def index():
     return 'Sample Tinode REST/JSON-RPC authentication service. '+\
-        'See <a href="https://github.com/tinode/chat/rest-auth/">https://github.com/tinode/chat/rest-auth/</a> for details.'
+        'See <a href="https://github.com/Limuwenan/chat/rest-auth/">https://github.com/Limuwenan/chat/rest-auth/</a> for details.'
 
 @app.route('/add', methods=['POST'])
 def add():

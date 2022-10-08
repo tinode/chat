@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/push/fcm"
-	"github.com/tinode/chat/server/store"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/push"
+	"github.com/Limuwenan/chat/server/push/fcm"
+	"github.com/Limuwenan/chat/server/store"
 )
 
 const (

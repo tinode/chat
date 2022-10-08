@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/store"
+	"github.com/Limuwenan/chat/server/store/types"
 )
 
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {

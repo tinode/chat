@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/pbx"
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/pbx"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/store/types"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )

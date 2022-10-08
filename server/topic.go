@@ -14,10 +14,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/auth"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/store"
+	"github.com/Limuwenan/chat/server/store/types"
 )
 
 // Topic is an isolated communication channel

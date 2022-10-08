@@ -54,8 +54,8 @@ setup() {
 # Compiles Tinode binaries.
 build() {
   go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" \
-    github.com/tinode/chat/tinode-db \
-    github.com/tinode/chat/server && \
+    github.com/Limuwenan/chat/tinode-db \
+    github.com/Limuwenan/chat/server && \
   ln -s $TINODE_BINARY
 }
 

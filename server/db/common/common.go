@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	t "github.com/tinode/chat/server/store/types"
+	t "github.com/Limuwenan/chat/server/store/types"
 )
 
 // SelectEarliestUpdatedSubs selects no more than the given number of subscriptions from the

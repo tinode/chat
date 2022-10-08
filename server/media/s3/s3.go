@@ -18,10 +18,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/media"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/media"
+	"github.com/Limuwenan/chat/server/store"
+	"github.com/Limuwenan/chat/server/store/types"
 )
 
 const (

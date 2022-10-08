@@ -27,7 +27,7 @@ WORKDIR /opt/tinode
 RUN apk add --no-cache bash
 
 # Fetch exporter build from Github.
-ADD https://github.com/tinode/chat/releases/download/v$VERSION/exporter.linux-amd64 ./exporter
+ADD https://github.com/Limuwenan/chat/releases/download/v$VERSION/exporter.linux-amd64 ./exporter
 
 COPY entrypoint.sh .
 RUN chmod +x exporter && chmod +x entrypoint.sh

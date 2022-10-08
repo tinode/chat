@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tinode/chat/server/push"
+	"github.com/Limuwenan/chat/server/push"
 )
 
 var handler stdoutPush

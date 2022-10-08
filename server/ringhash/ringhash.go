@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/tinode/chat/server/logs"
+	"github.com/Limuwenan/chat/server/logs"
 )
 
 // Hash is a signature of a hash function used by the package.

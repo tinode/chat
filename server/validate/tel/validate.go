@@ -3,8 +3,8 @@ package tel
 
 import (
 	"github.com/nyaruka/phonenumbers"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/store"
+	t "github.com/Limuwenan/chat/server/store/types"
 )
 
 const validatorName = "tel"

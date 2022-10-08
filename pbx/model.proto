@@ -1,6 +1,6 @@
 syntax = "proto3";
 package pbx;
-option go_package = "github.com/tinode/chat/pbx";
+option go_package = "github.com/Limuwenan/chat/pbx";
 
 // This is the single method that needs to be implemented by a gRPC client.
 service Node {

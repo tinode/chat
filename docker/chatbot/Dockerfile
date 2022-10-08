@@ -20,7 +20,7 @@ WORKDIR /usr/src/bot
 # VOLUME /botdata
 
 # Get tarball with the chatbot code and data.
-ADD https://github.com/tinode/chat/releases/download/v${BINVERS}/py-chatbot.tar.gz .
+ADD https://github.com/Limuwenan/chat/releases/download/v${BINVERS}/py-chatbot.tar.gz .
 # Unpack chatbot, delete archive
 RUN tar -xzf py-chatbot.tar.gz \
 	&& rm py-chatbot.tar.gz

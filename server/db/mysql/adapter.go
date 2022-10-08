@@ -16,10 +16,10 @@ import (
 
 	ms "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/db/common"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/auth"
+	"github.com/Limuwenan/chat/server/db/common"
+	"github.com/Limuwenan/chat/server/store"
+	t "github.com/Limuwenan/chat/server/store/types"
 )
 
 // adapter holds MySQL connection data.

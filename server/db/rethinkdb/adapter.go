@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/db/common"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/auth"
+	"github.com/Limuwenan/chat/server/db/common"
+	"github.com/Limuwenan/chat/server/store"
+	t "github.com/Limuwenan/chat/server/store/types"
 	rdb "gopkg.in/rethinkdb/rethinkdb-go.v6"
 )
 

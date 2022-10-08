@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
+	"github.com/Limuwenan/chat/server/auth"
 
-	_ "github.com/tinode/chat/server/db/mongodb"
-	_ "github.com/tinode/chat/server/db/mysql"
-	_ "github.com/tinode/chat/server/db/rethinkdb"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	_ "github.com/Limuwenan/chat/server/db/mongodb"
+	_ "github.com/Limuwenan/chat/server/db/mysql"
+	_ "github.com/Limuwenan/chat/server/db/rethinkdb"
+	"github.com/Limuwenan/chat/server/store"
+	"github.com/Limuwenan/chat/server/store/types"
 	jcr "github.com/tinode/jsonco"
 )
 

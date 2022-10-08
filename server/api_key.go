@@ -14,7 +14,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 
-	"github.com/tinode/chat/server/logs"
+	"github.com/Limuwenan/chat/server/logs"
 )
 
 // Singned AppID. Composition:

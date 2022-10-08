@@ -11,12 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/concurrency"
-	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/push"
-	rh "github.com/tinode/chat/server/ringhash"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/Limuwenan/chat/server/auth"
+	"github.com/Limuwenan/chat/server/concurrency"
+	"github.com/Limuwenan/chat/server/logs"
+	"github.com/Limuwenan/chat/server/push"
+	rh "github.com/Limuwenan/chat/server/ringhash"
+	"github.com/Limuwenan/chat/server/store/types"
 )
 
 const (

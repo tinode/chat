@@ -12,7 +12,7 @@ setuptools.setup(
     description="Tinode demo chatbot.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/tinode/chat",
+    url="https://github.com/Limuwenan/chat",
     packages=setuptools.find_packages(),
     install_requires=['grpcio>=1.40.0'],
     classifiers=(

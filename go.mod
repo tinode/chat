@@ -1,4 +1,4 @@
-module github.com/tinode/chat
+module github.com/Limuwenan/chat
 
 go 1.16
 

@@ -377,8 +377,8 @@
       {"at": 14, "len": 2, "key": 1}
     ],
     "ent": [
-      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/tinode/chat/?key=val"}},
-      {"tp": "BN", "data": {"name": "oops", "val": "test", "act": "url", "ref": "https://github.com/tinode/chat"}}
+      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/Limuwenan/chat/?key=val"}},
+      {"tp": "BN", "data": {"name": "oops", "val": "test", "act": "url", "ref": "https://github.com/Limuwenan/chat"}}
     ]
   }
 ]
