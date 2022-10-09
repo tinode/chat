@@ -258,6 +258,7 @@ type configType struct {
 }
 
 func main() {
+
 	executable, _ := os.Executable()
 
 	logFlags := flag.String("log_flags", "stdFlags",
@@ -283,14 +284,14 @@ func main() {
 	if err != nil {
 		logs.Err.Fatal("Couldn't get current working directory: ", err)
 	}
-
+	logs.Info.Println("我就是测试一下，你别紧张1")
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
 		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
-
+	logs.Info.Println("我就是测试一下，你别紧张2")
 	*configfile = toAbsolutePath(curwd, *configfile)
 	logs.Info.Printf("Using config from '%s'", *configfile)
-
+	logs.Info.Println("我就是测试一下，你别紧张3")
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
 		logs.Err.Fatal("Failed to read config file: ", err)
@@ -312,13 +313,16 @@ func main() {
 		}
 		file.Close()
 	}
+	logs.Info.Println("我就是测试一下，你别紧张4")
 
 	if *listenOn != "" {
 		config.Listen = *listenOn
 	}
+	logs.Info.Println("我就是测试一下，你别紧张5")
 
 	// Set up HTTP server. Must use non-default mux because of expvar.
 	mux := http.NewServeMux()
+	logs.Info.Println("我就是测试一下，你别紧张6")
 
 	// Exposing values for statistics and monitoring.
 	evpath := *expvarPath
@@ -369,6 +373,7 @@ func main() {
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
+	logs.Info.Println("我就是测试一下，你别紧张7")
 	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
 		store.Store.Close()
