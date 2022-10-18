@@ -258,8 +258,9 @@ type configType struct {
 }
 
 func main() {
-	executable, _ := os.Executable()
+	executable, _ := os.Executable() // 输出路径
 
+	// 解析启动参数
 	logFlags := flag.String("log_flags", "stdFlags",
 		"Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")
 	configfile := flag.String("config", "tinode.conf", "Path to config file.")
@@ -277,12 +278,14 @@ func main() {
 	pprofUrl := flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
-	logs.Init(os.Stderr, *logFlags)
+	logs.Init(os.Stderr, *logFlags) // 在这之后使用日志功能
+	logs.Info.Println("main.go:[main]:Output Path:", executable)
 
-	curwd, err := os.Getwd()
+	curwd, err := os.Getwd() // 工作路径
 	if err != nil {
 		logs.Err.Fatal("Couldn't get current working directory: ", err)
 	}
+	logs.Info.Println("main.go:[main]:Workable Path:", curwd)
 
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
@@ -291,6 +294,7 @@ func main() {
 	*configfile = toAbsolutePath(curwd, *configfile)
 	logs.Info.Printf("Using config from '%s'", *configfile)
 
+	// 读取配置
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
 		logs.Err.Fatal("Failed to read config file: ", err)
@@ -391,6 +395,7 @@ func main() {
 
 	authNames := store.Store.GetAuthNames()
 	for _, name := range authNames {
+		logs.Info.Println("main.go:[main]:authName:", name)
 		if authhdl := store.Store.GetLogicalAuthHandler(name); authhdl == nil {
 			logs.Err.Fatalln("Unknown authenticator", name)
 		} else if jsconf := config.Auth[authhdl.GetRealName()]; jsconf != nil {
@@ -628,6 +633,7 @@ func main() {
 	logs.Info.Printf("API served from root URL path '%s'", config.ApiPath)
 
 	sspath := *serverStatusPath
+	logs.Info.Printf("main.go:[main]:sspath:", sspath)
 	if sspath == "" || sspath == "-" {
 		sspath = config.ServerStatusPath
 	}
@@ -647,7 +653,7 @@ func main() {
 		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
-
+	logs.Info.Printf("main.go:[main]:staticMountPoint:", staticMountPoint)
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)

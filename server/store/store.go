@@ -37,6 +37,7 @@ type configType struct {
 
 func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	var config configType
+	logs.Info.Println("store.go:[openAdapter]:user_adapter", config.UseAdapter)
 	if err := json.Unmarshal(jsonconf, &config); err != nil {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}

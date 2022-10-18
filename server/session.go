@@ -458,6 +458,13 @@ func (s *Session) dispatchRaw(raw []byte) {
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}
+	logs.Info.Println("session.go:[dispatchRaw]:msg.Id", msg.Id)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.Original", msg.Original)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.RcptTo", msg.RcptTo)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.AsUser", msg.AsUser)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.AuthLvl", msg.AuthLvl)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.MetaWhat", msg.MetaWhat)
+	logs.Info.Println("session.go:[dispatchRaw]:msg.Timestamp", msg.Timestamp)
 
 	s.dispatch(&msg)
 }
@@ -535,52 +542,62 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	switch {
 	case msg.Pub != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Pub")
 		handler = checkVers(msg, checkUser(msg, s.publish))
 		msg.Id = msg.Pub.Id
 		msg.Original = msg.Pub.Topic
 		uaRefresh = true
 
 	case msg.Sub != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Sub")
 		handler = checkVers(msg, checkUser(msg, s.subscribe))
 		msg.Id = msg.Sub.Id
 		msg.Original = msg.Sub.Topic
 		uaRefresh = true
 
 	case msg.Leave != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Leave")
 		handler = checkVers(msg, checkUser(msg, s.leave))
 		msg.Id = msg.Leave.Id
 		msg.Original = msg.Leave.Topic
 
 	case msg.Hi != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Hi")
 		handler = s.hello
 		msg.Id = msg.Hi.Id
 
 	case msg.Login != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Login")
 		handler = checkVers(msg, s.login)
 		msg.Id = msg.Login.Id
 
 	case msg.Get != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Get")
 		handler = checkVers(msg, checkUser(msg, s.get))
 		msg.Id = msg.Get.Id
 		msg.Original = msg.Get.Topic
 		uaRefresh = true
 
 	case msg.Set != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Set")
 		handler = checkVers(msg, checkUser(msg, s.set))
 		msg.Id = msg.Set.Id
 		msg.Original = msg.Set.Topic
 		uaRefresh = true
 
 	case msg.Del != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Del")
 		handler = checkVers(msg, checkUser(msg, s.del))
 		msg.Id = msg.Del.Id
 		msg.Original = msg.Del.Topic
 
 	case msg.Acc != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Acc")
 		handler = checkVers(msg, s.acc)
 		msg.Id = msg.Acc.Id
 
 	case msg.Note != nil:
+		logs.Info.Println("session.go:[dispatch]:msg.Note")
 		handler = s.note
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
