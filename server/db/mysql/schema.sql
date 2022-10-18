@@ -193,7 +193,7 @@ CREATE TABLE credentials(
 		
 	PRIMARY KEY(id),
 	UNIQUE credentials_uniqueness(synthetic),
-	FOREIGN KEY(userid) REFERENCES users(id),
+	FOREIGN KEY(userid) REFERENCES users(id)
 );
 
 # Records of uploaded files. Files themselves are stored elsewhere.
