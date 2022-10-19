@@ -169,7 +169,7 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 ### [iOS](https://github.com/tinode/ios)
 
 <p align="center">
-<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=276 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=276 /> <img src="docs/ios-video-call.png" alt="iOS screenshot: video call" width="276" />
+<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=250 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=250 /> <img src="docs/ios-video-call.png" alt="iOS screenshot: video call" width="250" />
 </p>
 
 ### [Desktop Web](https://github.com/tinode/webapp/)
