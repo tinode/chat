@@ -327,6 +327,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		ContentAvailable:  1,
 		MutableContent:    1,
 		InterruptionLevel: interruptionLevel,
+		Sound:             "default",
 		ThreadID:          topic,
 	}
 
