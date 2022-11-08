@@ -52,7 +52,6 @@ func genDb(data *Data) {
 		}
 		user.CreatedAt = getCreatedTime(uu.CreatedAt)
 
-		user.Tags = make([]string, 0)
 		user.Tags = append(user.Tags, "basic:"+uu.Username)
 		if uu.Email != "" {
 			user.Tags = append(user.Tags, "email:"+uu.Email)
