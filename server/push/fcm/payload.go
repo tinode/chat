@@ -331,7 +331,8 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		ThreadID:          topic,
 	}
 
-	if config.Apns != nil && config.Apns.Enabled && what != push.ActRead {
+	// Do not present alert for read notifications and video calls.
+	if config.Apns != nil && config.Apns.Enabled && what != push.ActRead && callStatus == "" {
 		body := config.Apns.GetStringField(what, "Body")
 		if body == "$content" {
 			body = data["content"]
