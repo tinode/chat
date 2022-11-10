@@ -180,6 +180,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// 普通连接升级为websocket连接
 	ws, err := upgrader.Upgrade(wrt, req, nil)
 	if _, ok := err.(websocket.HandshakeError); ok {
 		logs.Err.Println("ws: Not a websocket handshake")

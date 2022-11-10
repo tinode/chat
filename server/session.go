@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/Limuwenan/chat/pbx"
 	"github.com/Limuwenan/chat/server/auth"
 	"github.com/Limuwenan/chat/server/logs"
 	"github.com/Limuwenan/chat/server/store"
 	"github.com/Limuwenan/chat/server/store/types"
+	"github.com/gorilla/websocket"
 
 	"golang.org/x/text/language"
 )
@@ -196,7 +196,7 @@ func (s *Session) addSub(topic string, sub *Subscription) {
 func (s *Session) getSub(topic string) *Subscription {
 	// Don't check s.multi here. Let it panic if called for proxy session.
 
-	s.subsLock.RLock()
+	s.subsLock.RLock() // 读锁
 	defer s.subsLock.RUnlock()
 
 	return s.subs[topic]
@@ -428,6 +428,7 @@ func (s *Session) cleanUp(expired bool) {
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
+// 收到包对包进行解析
 func (s *Session) dispatchRaw(raw []byte) {
 	now := types.TimeNow()
 	var msg ClientComMessage
@@ -458,13 +459,41 @@ func (s *Session) dispatchRaw(raw []byte) {
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}
-	logs.Info.Println("session.go:[dispatchRaw]:msg.Id", msg.Id)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.Original", msg.Original)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.RcptTo", msg.RcptTo)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.AsUser", msg.AsUser)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.AuthLvl", msg.AuthLvl)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.MetaWhat", msg.MetaWhat)
-	logs.Info.Println("session.go:[dispatchRaw]:msg.Timestamp", msg.Timestamp)
+
+	if msg.Hi != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Hi: ", msg.Hi)
+	}
+	if msg.Acc != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Acc: ", msg.Acc)
+	}
+	if msg.Login != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Login: ", msg.Login)
+	}
+	if msg.Sub != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Sub: ", msg.Sub)
+	}
+	if msg.Leave != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Leave: ", msg.Leave)
+	}
+	if msg.Pub != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Pub: ", msg.Pub)
+	}
+	if msg.Get != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Get: ", msg.Get)
+	}
+	if msg.Set != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Set: ", msg.Set)
+	}
+	if msg.Del != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Del: ", msg.Del)
+	}
+	if msg.Note != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Note: ", msg.Note)
+	}
+	if msg.Extra != nil {
+		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Extra: ", msg.Extra)
+	}
+
 
 	s.dispatch(&msg)
 }
@@ -517,16 +546,20 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	var uaRefresh bool
 
 	// Check if s.ver is defined
+	// checkVers是一个函数, func(*ClientComMessage)
+	// 这个函数的函数体是 return 中的语句
+	// 下面这个匿名函数中的第一个参数没啥用，传了也没用到：暂时
 	checkVers := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
-		return func(m *ClientComMessage) {
+		return func(m *ClientComMessage) { // 这行的m和上一行的m不是同一个东西
 			if s.ver == 0 {
 				logs.Warn.Println("s.dispatch: {hi} is missing", s.sid)
 				s.queueOut(ErrCommandOutOfSequence(m.Id, m.Original, msg.Timestamp))
 				return
 			}
-			handler(m)
+			handler(m) // 这行的m是return那行的m
 		}
 	}
+
 
 	// Check if user is logged in
 	checkUser := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
@@ -540,64 +573,68 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		}
 	}
 
+	logs.Info.Println("[session.go]:[dispatch]:s.ver: ", s.ver)
+	logs.Info.Println("[session.go]:[dispatch]:msg.AsUser: ", msg.AsUser)
+
+	// 这里根据不同的包头，给 handler 对应的处理函数
 	switch {
 	case msg.Pub != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Pub")
-		handler = checkVers(msg, checkUser(msg, s.publish))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Pub: ", msg.Pub)
+		handler = checkVers(msg, checkUser(msg, s.publish)) // 上面两个函数体if都不走，相当于handler=s.publish
 		msg.Id = msg.Pub.Id
 		msg.Original = msg.Pub.Topic
 		uaRefresh = true
 
 	case msg.Sub != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Sub")
-		handler = checkVers(msg, checkUser(msg, s.subscribe))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Sub: ", msg.Sub)
+		handler = checkVers(msg, checkUser(msg, s.subscribe)) // 上面两个函数体if都不走，相当于handler=s.subscribe
 		msg.Id = msg.Sub.Id
-		msg.Original = msg.Sub.Topic
+		msg.Original = msg.Sub.Topic // 这里将客户端json中的topic给了msg的original
 		uaRefresh = true
 
 	case msg.Leave != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Leave")
-		handler = checkVers(msg, checkUser(msg, s.leave))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Leave: ", msg.Leave)
+		handler = checkVers(msg, checkUser(msg, s.leave)) // 上面两个函数体if都不走，相当于handler=s.leave
 		msg.Id = msg.Leave.Id
 		msg.Original = msg.Leave.Topic
 
 	case msg.Hi != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Hi")
+		logs.Info.Println("[session.go]:[dispatch]:msg.Hi: ", msg.Hi)
 		handler = s.hello
 		msg.Id = msg.Hi.Id
 
 	case msg.Login != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Login")
-		handler = checkVers(msg, s.login)
+		logs.Info.Println("[session.go]:[dispatch]:msg.Login: ", msg.Login)
+		handler = checkVers(msg, s.login) // // 上面两个函数体if都不走，相当于handler=s.login
 		msg.Id = msg.Login.Id
 
 	case msg.Get != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Get")
-		handler = checkVers(msg, checkUser(msg, s.get))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Get: ", msg.Get)
+		handler = checkVers(msg, checkUser(msg, s.get)) // 上面两个函数体if都不走，相当于handler=s.get
 		msg.Id = msg.Get.Id
 		msg.Original = msg.Get.Topic
 		uaRefresh = true
 
 	case msg.Set != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Set")
-		handler = checkVers(msg, checkUser(msg, s.set))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Set: ", msg.Set)
+		handler = checkVers(msg, checkUser(msg, s.set)) // 上面两个函数体if都不走，相当于handler=s.set
 		msg.Id = msg.Set.Id
 		msg.Original = msg.Set.Topic
 		uaRefresh = true
 
 	case msg.Del != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Del")
-		handler = checkVers(msg, checkUser(msg, s.del))
+		logs.Info.Println("[session.go]:[dispatch]:msg.Del: ", msg.Del)
+		handler = checkVers(msg, checkUser(msg, s.del)) // 上面两个函数体if都不走，相当于handler=s.del
 		msg.Id = msg.Del.Id
 		msg.Original = msg.Del.Topic
 
 	case msg.Acc != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Acc")
-		handler = checkVers(msg, s.acc)
+		logs.Info.Println("[session.go]:[dispatch]:msg.Acc: ", msg.Acc)
+		handler = checkVers(msg, s.acc) // 上面两个函数体if都不走，相当于handler=s.acc
 		msg.Id = msg.Acc.Id
 
 	case msg.Note != nil:
-		logs.Info.Println("session.go:[dispatch]:msg.Note")
+		logs.Info.Println("[session.go]:[dispatch]:msg.Note: ", msg.Note)
 		handler = s.note
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
@@ -634,7 +671,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	if strings.HasPrefix(msg.Original, "new") || strings.HasPrefix(msg.Original, "nch") {
 		// Request to create a new group/channel topic.
 		// If we are in a cluster, make sure the new topic belongs to the current node.
-		msg.RcptTo = globals.cluster.genLocalTopicName()
+		msg.RcptTo = globals.cluster.genLocalTopicName() // 这里传回来grpxxxxxxxx的名字
 	} else {
 		var resp *ServerComMessage
 		msg.RcptTo, resp = s.expandTopicName(msg)
@@ -646,11 +683,11 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(msg.RcptTo); sub != nil {
-		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp)) // 已经subscribe过了
 	} else {
 		s.inflightReqs.Add(1)
 		select {
-		case globals.hub.join <- msg:
+		case globals.hub.join <- msg: // 在hub.go中有go h.run()来读取管道里的东西
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))

@@ -653,7 +653,7 @@ func main() {
 		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
-	logs.Info.Printf("main.go:[main]:staticMountPoint:", staticMountPoint)
+	logs.Info.Printf("main.go:[main]:staticMountPoint:%v", staticMountPoint)
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
