@@ -285,6 +285,7 @@ func main() {
 	if err != nil {
 		logs.Err.Fatal("Couldn't get current working directory: ", err)
 	}
+
 	logs.Info.Println("main.go:[main]:Workable Path:", curwd)
 
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
@@ -295,6 +296,7 @@ func main() {
 	logs.Info.Printf("Using config from '%s'", *configfile)
 
 	// 读取配置
+
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
 		logs.Err.Fatal("Failed to read config file: ", err)
@@ -373,6 +375,7 @@ func main() {
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
+	logs.Info.Println("我就是测试一下，你别紧张7")
 	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
 		store.Store.Close()
