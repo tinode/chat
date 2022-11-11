@@ -296,6 +296,10 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	return ac
 }
 
+func apnsShouldPresentAlert(what, callStatus, isSilent string, config *configType) bool {
+	return config.Apns != nil && config.Apns.Enabled && what != push.ActRead && callStatus == "" && isSilent == ""
+}
+
 func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
 	callStatus := data["webrtc"]
 	expires := time.Now().UTC().Add(time.Duration(defaultTimeToLive) * time.Second)
@@ -332,7 +336,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 	}
 
 	// Do not present alert for read notifications and video calls.
-	if config.Apns != nil && config.Apns.Enabled && what != push.ActRead && callStatus == "" {
+	if apnsShouldPresentAlert(what, callStatus, data["silent"], config) {
 		body := config.Apns.GetStringField(what, "Body")
 		if body == "$content" {
 			body = data["content"]
