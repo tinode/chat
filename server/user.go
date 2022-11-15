@@ -1061,7 +1061,8 @@ func userUpdater() {
 				}
 
 				var delta int
-				if upd.PushRcpt.Payload.What != "read" {
+				// Increment unread counter only on msg event.
+				if upd.PushRcpt.Payload.What == "msg" {
 					delta = 1
 				} else {
 					delta = 0
