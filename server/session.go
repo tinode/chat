@@ -1238,7 +1238,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			logs.Err.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.Note.What == "recv" || (msg.Note.What == "call" && (msg.Note.Event == "ringing" || msg.Note.Event == "hang-up" || msg.Note.Event == "accept")) {
-		// One of the folowing events happened:
+		// One of the following events happened:
 		// 1. Client received a pres notification about a new message, initiated a fetch
 		// from the server (and detached from the topic) and acknowledges receipt.
 		// 2. Client is either accepting or terminating the current video call or

@@ -66,7 +66,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 			data["silent"] = "true"
 		}
 		if pl.Replace != "" {
-			// Notification of a message edit should be silet too.
+			// Notification of a message edit should be silent too.
 			data["silent"] = "true"
 			data["replace"] = pl.Replace
 		}
