@@ -2,7 +2,7 @@
 
 ## What is API key?
 
-Trinode encrypts data for security. For this purpose, two keys are used:
+These keys are used to generate an API key which provides some minor protection from automated tools scraping the API. For this purpose, two keys are used:
 
 * `HMAC salt` that is used on the server side to verify the API key.
 * `API key` that is used on the client side.
@@ -56,4 +56,6 @@ const API_KEY = 'AQAAAAAFAAAqXLPhti0JwhyVXBWKXTPW';
 ....
 
 ```
+
+*Note*: The preferred way is to edit the source file then recompile.
 
