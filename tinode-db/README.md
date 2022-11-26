@@ -23,6 +23,7 @@ Run from the command line.
 Command line parameters:
  - `--reset`: delete the database then re-create it in a blank state; it has no effect if the database does not exist.
  - `--upgrade`: upgrade database from an earlier version retaining all the data; make sure to backup the DB before upgrading.
+ - `--no_init`: check that database exists but don't create it if missing.
  - `--data=FILENAME`: fill `tinode` database with data from the provided file. See [data.json](data.json).
  - `--config=FILENAME`: load configuration from FILENAME. Example config is included as [tinode.conf](tinode.conf).
 

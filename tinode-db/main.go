@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
@@ -186,9 +184,8 @@ func main() {
 	reset := flag.Bool("reset", false, "force database reset")
 	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
 	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
-	uid := flag.String("uid", "", "ID of the user to update")
-	scheme := flag.String("scheme", "basic", "User's authentication scheme to update")
-	authLevel := flag.String("auth", "", "change user's authentication level (one of ROOT, AUTH, ANON)")
+	addRoot := flag.String("add_root", "", "create ROOT user")
+	makeRoot := flag.String("make_root", "", "promote ordinary user to root")
 	datafile := flag.String("data", "", "name of file with sample data to load")
 	conffile := flag.String("config", "./tinode.conf", "config of the database connection")
 
@@ -256,24 +253,6 @@ func main() {
 		}
 	} else if *reset {
 		log.Println("Database reset requested")
-	} else if *authLevel != "" {
-		level := auth.ParseAuthLevel(*authLevel)
-		if level == auth.LevelNone {
-			log.Fatalf("Invalid authentication level: '%s'", *authLevel)
-		}
-		userId := types.ParseUserId(*uid)
-		if userId.IsZero() {
-			log.Fatalf("Must specify a valid user ID to update level: '%s'", *uid)
-		}
-		if *scheme == "" {
-			log.Fatalln("Must specify user's authentication scheme to update level")
-		}
-		adapter := store.Store.GetAdapter()
-		if err := adapter.AuthUpdRecord(userId, *scheme, "", level, nil, time.Time{}); err != nil {
-			log.Fatalln("Failed to update user's auth level:", err)
-		}
-		log.Printf("User's %s level set to %s for scheme %s.", *uid, level.String(), *scheme)
-		os.Exit(0)
 	} else {
 		log.Println("Database exists, DB version is correct. All done.")
 		os.Exit(0)
@@ -306,7 +285,41 @@ func main() {
 	if !*upgrade {
 		genDb(&data)
 	} else if len(data.Users) > 0 {
-		log.Println("Sample data ignored. All done.")
+		log.Println("Sample data ignored.")
 	}
+
+	// Check if add_root flag is present (even if empty).
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "add_root" {
+			var uname, password string
+			if *addRoot == "" {
+				uname = "root"
+				password = getPassword(10)
+			} else {
+				parts := strings.Split(*addRoot, ":")
+				uname = parts[0]
+				if len(parts) == 1 || parts[1] == "" {
+					password = getPassword(10)
+				} else {
+					password = parts[1]
+				}
+			}
+
+			var user types.User
+			user.Public = &card{
+				Fn: "ROOT",
+			}
+			store.Users.Create(&user, nil)
+
+			if _, err := store.Users.Create(&user, nil); err != nil {
+				log.Fatalln("Failed to create ROOT user:", err)
+			}
+			adapter := store.Store.GetAdapter()
+			log.Printf("Root user created %s:%s", uname, password)
+		}
+	})
+
+	log.Println("All done.")
+
 	os.Exit(0)
 }
