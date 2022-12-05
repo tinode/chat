@@ -31,7 +31,7 @@ fi
 
 echo "Releasing $version"
 
-GOSRC=${GOPATH}/src/github.com/tinode
+GOSRC=..
 
 pushd ${GOSRC}/chat > /dev/null
 
