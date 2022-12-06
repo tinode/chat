@@ -940,7 +940,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		// Check responses. Ignore invalid responses, just keep cred unvalidated.
 		if validated, _, err = validatedCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred, false); err == nil {
 			// Get a list of credentials which have not been validated.
-			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
+			_, missing, _ = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		}
 	}
 	if err != nil {

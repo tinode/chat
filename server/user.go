@@ -2,6 +2,8 @@ package main
 
 import (
 	"container/heap"
+	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -149,7 +151,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			globals.authValidators[rec.AuthLevel], s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
-		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
+		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
 		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, "", msg.Timestamp,
 			map[string]interface{}{"creds": missing}))
 		return
@@ -180,7 +182,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	var reply *ServerComMessage
 	if msg.Acc.Login {
 		// Process user's login request.
-		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
+		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		reply = s.onLogin(msg.Id, msg.Timestamp, rec, missing)
 	} else {
 		// Not using the new account for logging in.
@@ -291,7 +293,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 				for i := range allCreds {
 					validated = append(validated, allCreds[i].Method)
 				}
-				_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+				_, missing, _ := stringSliceDelta(globals.authValidators[authLvl], validated)
 				if len(missing) > 0 {
 					params = map[string]interface{}{"cred": missing}
 				}
@@ -424,6 +426,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient,
 
 		vld := store.Store.GetValidator(cr.Method) // No need to check for nil, unknown methods are removed earlier.
 		value, err := vld.Check(uid, cr.Response)
+
 		if err != nil {
 			// Check failed.
 			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
@@ -1142,4 +1145,56 @@ func userUpdater() {
 
 Exit:
 	logs.Info.Println("users: shutdown")
+}
+
+// garbageCollectUsers runs every 'period' and deletes up to 'blockSize'
+// stale unvalidated user accounts which have been last updated at least
+// 'minAccountAgeDays' days.
+// Returns channel which can be used to stop the process.
+func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int, dryRun bool) chan<- bool {
+	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
+	stop := make(chan bool)
+	go func() {
+		// Add some randomness to the tick period to desynchronize runs on cluster nodes:
+		// 0.75 * period + rand(0, 0.5) * period.
+		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
+		gcTicker := time.Tick(period)
+		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d days", period, blockSize, minAccountAgeDays)
+		staleAge := time.Hour * 24 * time.Duration(minAccountAgeDays)
+		for {
+			select {
+			case <-gcTicker:
+				if uids, authLvls, creds, err := store.Users.GetUnvalidatedUsers(time.Now().Add(-staleAge)); err == nil {
+					numUsers := len(uids)
+					if numUsers > blockSize {
+						numUsers = blockSize
+					}
+					var uidsToDelete []types.Uid
+					for i := 0; i < numUsers; i++ {
+						uid := uids[i]
+						authLvl := authLvls[i]
+						cred := strings.Split(creds[i], ",")
+						_, _, missing := stringSliceDelta(globals.authValidators[authLvl], cred)
+						if len(missing) > 0 {
+							uidsToDelete = append(uidsToDelete, uid)
+						}
+					}
+					logs.Info.Println("Stale account GC will delete the following uids", uidsToDelete)
+					if len(uidsToDelete) > 0 && !dryRun {
+						for _, uid := range uidsToDelete {
+							if err := store.Users.Delete(uid, true); err != nil {
+								logs.Warn.Printf("Could not delete user %s: %w", uid.UserId(), err)
+							}
+						}
+					}
+				} else {
+					logs.Warn.Println("User account gc error: %+v", err)
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	return stop
 }

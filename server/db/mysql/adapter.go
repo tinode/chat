@@ -1377,6 +1377,46 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	return counts, err
 }
 
+// UserGetUnvalidated returns a list of uids which have unvalidated credentials
+// and haven't been updated since lastUpdatedBefore.
+func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []auth.Level, []string, error) {
+	var uids []t.Uid
+	var authLvls []auth.Level
+	var unvalidatedCreds []string
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	rows, err := a.db.QueryxContext(ctx,
+		"SELECT u.id, a.authlvl, GROUP_CONCAT(c.method ORDER BY c.method SEPARATOR ',') "+
+			"FROM users u JOIN credentials c ON u.id = c.userid JOIN auth a ON u.id = a.userid "+
+			"WHERE u.updatedat<? AND c.done = 0 GROUP BY u.id, a.authlvl", lastUpdatedBefore)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	var userId int64
+	var authLvl int
+	var creds string
+	for rows.Next() {
+		if err = rows.Scan(&userId, &authLvl, &creds); err != nil {
+			break
+		}
+		uid := store.EncodeUid(userId)
+		uids = append(uids, uid)
+		authLvls = append(authLvls, auth.Level(authLvl))
+		unvalidatedCreds = append(unvalidatedCreds, creds)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+
+	return uids, authLvls, unvalidatedCreds, err
+}
+
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
