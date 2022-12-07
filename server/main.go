@@ -203,10 +203,8 @@ type accountGcConfig struct {
 	GcPeriod int `json:"gc_period"`
 	// Number of accounts to delete in one pass.
 	GcBlockSize int `json:"gc_block_size"`
-	// Minimum days since account was last modified.
+	// Minimum hours since account was last modified.
 	GcMinAccountAge int `json:"gc_min_account_age"`
-	// If true, GC will only print accounts to delete without actually deleting them.
-	DryRun bool `json:"dry_run"`
 }
 
 // Large file handler config.
@@ -563,7 +561,7 @@ func main() {
 		if config.AccountGC.GcPeriod > 0 && config.AccountGC.GcBlockSize > 0 &&
 			config.AccountGC.GcMinAccountAge > 0 {
 			gcPeriod := time.Second * time.Duration(config.AccountGC.GcPeriod)
-			stopAccountGc := garbageCollectUsers(gcPeriod, config.AccountGC.GcBlockSize, config.AccountGC.GcMinAccountAge, config.AccountGC.DryRun)
+			stopAccountGc := garbageCollectUsers(gcPeriod, config.AccountGC.GcBlockSize, config.AccountGC.GcMinAccountAge)
 
 			defer func() {
 				stopAccountGc <- true

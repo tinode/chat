@@ -1151,7 +1151,7 @@ Exit:
 // stale unvalidated user accounts which have been last updated at least
 // 'minAccountAgeDays' days.
 // Returns channel which can be used to stop the process.
-func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int, dryRun bool) chan<- bool {
+func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int) chan<- bool {
 	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
@@ -1160,35 +1160,33 @@ func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int,
 		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
 		gcTicker := time.Tick(period)
 		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d days", period, blockSize, minAccountAgeDays)
-		staleAge := time.Hour * 24 * time.Duration(minAccountAgeDays)
+		staleAge := time.Hour * time.Duration(minAccountAgeDays)
 		for {
 			select {
 			case <-gcTicker:
-				if uids, authLvls, creds, err := store.Users.GetUnvalidatedUsers(time.Now().Add(-staleAge)); err == nil {
+				if uids, authLvls, creds, err := store.Users.GetUnvalidated(time.Now().Add(-staleAge)); err == nil {
 					numUsers := len(uids)
 					if numUsers > blockSize {
 						numUsers = blockSize
 					}
 					var uidsToDelete []types.Uid
 					for i := 0; i < numUsers; i++ {
-						uid := uids[i]
-						authLvl := authLvls[i]
 						cred := strings.Split(creds[i], ",")
-						_, _, missing := stringSliceDelta(globals.authValidators[authLvl], cred)
-						if len(missing) > 0 {
-							uidsToDelete = append(uidsToDelete, uid)
+						_, _, unvalidated := stringSliceDelta(globals.authValidators[authLvls[i]], cred)
+						if len(unvalidated) > 0 {
+							uidsToDelete = append(uidsToDelete, uids[i])
 						}
 					}
-					logs.Info.Println("Stale account GC will delete the following uids", uidsToDelete)
-					if len(uidsToDelete) > 0 && !dryRun {
+					if len(uidsToDelete) > 0 {
+						logs.Info.Println("Stale account GC will delete the following uids:", uidsToDelete)
 						for _, uid := range uidsToDelete {
 							if err := store.Users.Delete(uid, true); err != nil {
-								logs.Warn.Printf("Could not delete user %s: %w", uid.UserId(), err)
+								logs.Warn.Printf("Could not delete user %s: %+v", uid.UserId(), err)
 							}
 						}
 					}
 				} else {
-					logs.Warn.Println("User account gc error: %+v", err)
+					logs.Warn.Println("User account gc error:", err)
 				}
 			case <-stop:
 				return

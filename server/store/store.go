@@ -277,7 +277,7 @@ type UsersPersistenceInterface interface {
 	GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error)
 	DelCred(id types.Uid, method, value string) error
 	GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error)
-	GetUnvalidatedUsers(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error)
+	GetUnvalidated(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error)
 }
 
 // usersMapper is a concrete type which implements UsersPersistenceInterface.
@@ -500,9 +500,9 @@ func (usersMapper) GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error) {
 	return adp.UserUnreadCount(ids...)
 }
 
-// GetUnvalidatedUsers returns a list of stale user ids which have unvalidated credentials,
+// GetUnvalidated returns a list of stale user ids which have unvalidated credentials,
 // their auth levels and a comma-separated list of these credential names.
-func (usersMapper) GetUnvalidatedUsers(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error) {
+func (usersMapper) GetUnvalidated(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error) {
 	return adp.UserGetUnvalidated(lastUpdatedBefore)
 }
 
