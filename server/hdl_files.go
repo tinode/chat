@@ -35,13 +35,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 		if err != nil {
-			logs.Warn.Println("media serve:", err)
+			logs.Warn.Println("media serve:", req.URL.String(), err)
 		}
 	}
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		writeHttpResponse(ErrAPIKeyRequired(now), nil)
+		writeHttpResponse(ErrAPIKeyRequired(now), errors.New("invalid or missing API key"))
 		return
 	}
 
@@ -51,13 +51,15 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
+
 	if challenge != nil {
 		writeHttpResponse(InfoChallenge("", now, challenge), nil)
 		return
 	}
+
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now, now), nil)
+		writeHttpResponse(ErrAuthRequired("", "", now, now), errors.New("user not authenticated"))
 		return
 	}
 
