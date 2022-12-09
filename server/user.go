@@ -1149,9 +1149,9 @@ Exit:
 
 // garbageCollectUsers runs every 'period' and deletes up to 'blockSize'
 // stale unvalidated user accounts which have been last updated at least
-// 'minAccountAgeDays' days.
+// 'minAccountAgeHours' hours.
 // Returns channel which can be used to stop the process.
-func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int) chan<- bool {
+func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeHours int) chan<- bool {
 	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
@@ -1159,8 +1159,8 @@ func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeDays int)
 		// 0.75 * period + rand(0, 0.5) * period.
 		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
 		gcTicker := time.Tick(period)
-		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d days", period, blockSize, minAccountAgeDays)
-		staleAge := time.Hour * time.Duration(minAccountAgeDays)
+		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d hours", period, blockSize, minAccountAgeHours)
+		staleAge := time.Hour * time.Duration(minAccountAgeHours)
 		for {
 			select {
 			case <-gcTicker:
