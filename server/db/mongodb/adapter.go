@@ -952,6 +952,101 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	return counts, nil
 }
 
+// UserGetUnvalidated returns a list of uids which have unvalidated credentials
+// and haven't been updated since lastUpdatedBefore.
+func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []auth.Level, []string, error) {
+	/*
+		Query:
+			db.users.aggregate([
+				{ $match: { updatedat: { $lt: ISODate("2022-12-09T01:26:15.819Z") } } },
+				{ $lookup: { from: "auth", localField: "_id", foreignField: "userid", as: "fauth"} },
+				{ $replaceRoot: { newRoot: { $mergeObjects: [ {$arrayElemAt: [ "$fauth", 0 ]} , "$$ROOT" ] } } },
+				{ $lookup: { from: "credentials", localField: "_id", foreignField: "user", as: "fcred"} },
+				{ $unwind: "$fcred" },
+				{ $replaceRoot: { newRoot: { $mergeObjects: [ "$fcred", "$$ROOT" ] } } },
+				{ $match: { done: { $eq: false } } },
+				{ $project: { _id: 0, userid: 1, authlvl: 1, method: 1 } },
+				{ $group: { _id: {userid:"$userid", authlvl:"$authlvl"}, meth: { $push: { $concat: ["$method"] } } } }
+			])
+		Result: [{ _id: { userid: 'Q_aVB7uiWvQ', authlvl: 30 }, meth: [ 'email', 'tel' ] },
+						{  _id: { userid: 'mbyUHrLQcjw', authlvl: 20 }, meth: [ 'email', 'tel' ] }]
+	*/
+	pipeline := b.A{
+		b.M{"$match": b.M{"updatedat": b.M{"$lt": lastUpdatedBefore}}},
+		// Join with auth collection
+		b.M{"$lookup": b.M{
+			"from":         "auth",
+			"localField":   "_id",
+			"foreignField": "userid",
+			"as":           "fauth"},
+		},
+		// Merge two documents into one
+		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fauth", 0}}, "$$ROOT"}}}},
+
+		// Join with credentials collection
+		b.M{"$lookup": b.M{
+			"from":         "credentials",
+			"localField":   "_id",
+			"foreignField": "user",
+			"as":           "fcred"},
+		},
+		// Unwind credentials
+		b.M{"$unwind": "$fcred"},
+		// Merge documents into one
+		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{"$fcred", "$$ROOT"}}}},
+		b.M{"$match": b.M{"done": b.M{"$eq": false}}},
+
+		// Remove unused fields.
+		b.M{"$project": b.M{"_id": 0, "userid": 1, "authlvl": 1, "method": 1}},
+		// GROUP BY userid and authlvl.
+		b.M{"$group": b.M{"_id": b.M{"userid": "$userid", "authlvl": "$authlvl"}, "meth": b.M{"$push": b.M{"$concat": b.A{"$method"}}}}},
+	}
+	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var uids []t.Uid
+	var authLvls []auth.Level
+	var unvalidatedCreds []string
+	for cur.Next(a.ctx) {
+		var oneUser struct {
+			Id     map[string]interface{} `bson:"_id"`
+			Method []string `bson:"meth"`
+		}
+		cur.Decode(&oneUser)
+		var uid t.Uid
+		if uidInt, found := oneUser.Id["userid"]; found {
+			if uidStr, ok := uidInt.(string); ok {
+				uid = t.ParseUid(uidStr)
+			} else {
+				return nil, nil, nil, errors.New("Could not deserialize uid field")
+			}
+		} else {
+			return nil, nil, nil, errors.New("userid field not found in result")
+		}
+
+		var authLvl int
+		if authInt, found := oneUser.Id["authlvl"]; found {
+			if authNum, ok := authInt.(int32); ok {
+				authLvl = int(authNum)
+			} else {
+				return nil, nil, nil, errors.New("Could not deserialize authLvl field")
+			}
+		} else {
+			return nil, nil, nil, errors.New("authlvl field not found in result")
+		}
+
+		creds := strings.Join(oneUser.Method, ",")
+		uids = append(uids, uid)
+		authLvls = append(authLvls, auth.Level(authLvl))
+		unvalidatedCreds = append(unvalidatedCreds, creds)
+	}
+
+	return uids, authLvls, unvalidatedCreds, err
+}
+
 // Credential management
 
 // CredUpsert adds or updates a validation record. Returns true if inserted, false if updated.

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"mime"
 	qp "mime/quotedprintable"
 	"net/mail"
 	"net/smtp"
@@ -540,7 +541,11 @@ func (v *validator) send(to string, content *emailContent) error {
 	// Common headers.
 	fmt.Fprintf(message, "From: %s\r\n", v.SendFrom)
 	fmt.Fprintf(message, "To: %s\r\n", to)
-	fmt.Fprintf(message, "Subject: %s\r\n", content.subject)
+	message.WriteString("Subject: ")
+	// Old email clients may barf on UTF-8 strings.
+	// Encode as quoted printable with 75-char strings separated by spaces, split by spaces, reassemble.
+	message.WriteString(strings.Join(strings.Split(mime.QEncoding.Encode("utf-8", content.subject), " "), "\r\n    "))
+	message.WriteString("\r\n")
 	message.WriteString("MIME-version: 1.0;\r\n")
 
 	if content.html == "" {

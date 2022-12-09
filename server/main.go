@@ -197,6 +197,16 @@ type validatorConfig struct {
 	Config json.RawMessage `json:"config"`
 }
 
+// Stale unvalidated user account GC config.
+type accountGcConfig struct {
+	// How often to run GC (seconds).
+	GcPeriod int `json:"gc_period"`
+	// Number of accounts to delete in one pass.
+	GcBlockSize int `json:"gc_block_size"`
+	// Minimum hours since account was last modified.
+	GcMinAccountAge int `json:"gc_min_account_age"`
+}
+
 // Large file handler config.
 type mediaConfig struct {
 	// The name of the handler to use for file uploads.
@@ -265,6 +275,7 @@ type configType struct {
 	TLS       json.RawMessage             `json:"tls"`
 	Auth      map[string]json.RawMessage  `json:"auth_config"`
 	Validator map[string]*validatorConfig `json:"acc_validation"`
+	AccountGC *accountGcConfig            `json:"acc_gc_config"`
 	Media     *mediaConfig                `json:"media"`
 	WebRTC    json.RawMessage             `json:"webrtc"`
 }
@@ -542,6 +553,20 @@ func main() {
 					logs.Info.Println("Stopped files garbage collector")
 				}()
 			}
+		}
+	}
+
+	// Stale unvalidated user account garbage collection.
+	if config.AccountGC != nil {
+		if config.AccountGC.GcPeriod > 0 && config.AccountGC.GcBlockSize > 0 &&
+			config.AccountGC.GcMinAccountAge > 0 {
+			gcPeriod := time.Second * time.Duration(config.AccountGC.GcPeriod)
+			stopAccountGc := garbageCollectUsers(gcPeriod, config.AccountGC.GcBlockSize, config.AccountGC.GcMinAccountAge)
+
+			defer func() {
+				stopAccountGc <- true
+				logs.Info.Println("Stopped account garbage collector")
+			}()
 		}
 	}
 
