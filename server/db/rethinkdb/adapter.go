@@ -1073,6 +1073,77 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	return counts, err
 }
 
+// UserGetUnvalidated returns a list of uids which have unvalidated credentials
+// and haven't been updated since lastUpdatedBefore.
+func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []auth.Level, []string, error) {
+	/*
+		Query:
+			r.db('tinode').table('users')
+				.filter(r.row('UpdatedAt').lt(new Date('???')))
+				.eqJoin('Id', r.db('tinode').table('auth'), {index: 'userid'})
+				.eqJoin(function(row) { return row('left')('Id') }, r.db('tinode').table('credentials'), {index: 'User'})
+				.filter(r.row('right')('Done').eq(false))
+				.map({
+					'id': r.row('left')('left')('Id'),
+					'authLvl': r.row('left')('right')('authLvl'),
+					'method': r.row('right')('Method')
+				})
+				.group('id', 'authLvl')
+				.merge(r.row('method'))
+
+		Result: [{ "group": [ "FM-pU6xs3N0" , 20 ], "reduction": [ "email" , "tel" ] },
+						{  "group": [ "H-JTBLtkO9Y" , 30 ], "reduction": [ "tel" , "email" ] }]
+	*/
+	cursor, err := rdb.DB(a.dbName).Table("users").
+		Filter(rdb.Row.Field("UpdatedAt").Lt(lastUpdatedBefore)).
+		EqJoin("Id", rdb.DB(a.dbName).Table("auth"), rdb.EqJoinOpts{Index: "userid"}).
+		EqJoin(func(row rdb.Term) rdb.Term { return row.Field("left").Field("Id") },
+			rdb.DB(a.dbName).Table("credentials"), rdb.EqJoinOpts{Index: "User"}).
+		Filter(rdb.Row.Field("right").Field("Done").Eq(false)).
+		Map(map[string]interface{}{
+			"id":      rdb.Row.Field("left").Field("left").Field("Id"),
+			"authLvl": rdb.Row.Field("left").Field("right").Field("authLvl"),
+			"method":  rdb.Row.Field("right").Field("Method"),
+		}).
+		Group("id", "authLvl").
+		Merge(rdb.Row.Field("method")).
+		Run(a.conn)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer cursor.Close()
+
+	var rec struct {
+		// string, int
+		Group     [2]interface{}
+		Reduction []string
+	}
+	var uids []t.Uid
+	var authLvls []auth.Level
+	var unvalidatedCreds []string
+	for cursor.Next(&rec) {
+		var uid t.Uid
+		if uidStr, ok := rec.Group[0].(string); ok {
+			uid = t.ParseUid(uidStr)
+		} else {
+			return nil, nil, nil, errors.New("Could not deserialize uid field")
+		}
+		var authLvl int
+		if authNum, ok := rec.Group[1].(float64); ok {
+			authLvl = int(authNum)
+		} else {
+			return nil, nil, nil, errors.New("Could not deserialize authLvl field")
+		}
+		creds := strings.Join(rec.Reduction, ",")
+		uids = append(uids, uid)
+		authLvls = append(authLvls, auth.Level(authLvl))
+		unvalidatedCreds = append(unvalidatedCreds, creds)
+	}
+	err = cursor.Err()
+
+	return uids, authLvls, unvalidatedCreds, err
+}
+
 // *****************************
 
 // TopicCreate creates a topic from template

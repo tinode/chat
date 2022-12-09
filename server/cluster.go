@@ -1148,7 +1148,7 @@ func (c *Cluster) gcProxySessions(activeNodes []string) {
 	for name := range c.nodes {
 		allNodes = append(allNodes, name)
 	}
-	_, failedNodes := stringSliceDelta(allNodes, activeNodes)
+	_, failedNodes, _ := stringSliceDelta(allNodes, activeNodes)
 	for _, node := range failedNodes {
 		// Iterate sessions of a failed node
 		c.gcProxySessionsForNode(node)

@@ -2384,7 +2384,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
 						allReq := types.FlattenDoubleSlice(req)
-						restr, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(allReq, opt...),
+						restr, _, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(allReq, opt...),
 							globals.maskedTagNS))
 
 						if len(restr) > 0 {
@@ -2767,7 +2767,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDeniedReply(msg, now)
 		} else {
-			added, removed := stringSliceDelta(t.tags, tags)
+			added, removed, _ := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
 				update := map[string]interface{}{"Tags": tags, "UpdatedAt": now}
 				if t.cat == types.TopicCatMe {
@@ -3066,7 +3066,7 @@ func (t *Topic) replyDelCred(sess *Session, asUid types.Uid, authLvl auth.Level,
 	tags, err := deleteCred(asUid, authLvl, del.Cred)
 	if tags != nil {
 		// Check if anything has been actually removed.
-		_, removed := stringSliceDelta(t.tags, tags)
+		_, removed, _ := stringSliceDelta(t.tags, tags)
 		if len(removed) > 0 {
 			t.tags = tags
 			t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
