@@ -1092,13 +1092,14 @@ note: {
 ```
 
 The following actions types are currently defined:
- * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
- * recv: a `{data}` message is received by the client software but may not yet seen by user.
- * read: a `{data}` message is seen by the user. It implies `recv` as well.
- * data: a generic packet of structured data, usually a form response.
  * call: a video call status update.
- * arc: audio message is in the process of recording.
- * vrc: video message is in the process of recording.
+ * cala: an audio call status update.
+ * data: a generic packet of structured data, usually a form response.
+ * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
+ * kpa: audio message is in the process of recording.
+ * kpv: video message is in the process of recording.
+ * read: a `{data}` message is seen (read) by the user. It implies `recv` as well.
+ * recv: a `{data}` message is received by the client software but may not yet seen by user.
 
 The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The per-user `unread` count is maintained by the server: it's incremented when new `{data}` messages are sent to user and reset to the values reported by the `{note unread=...}` message. The `unread` value is never decremented by the server. The value is included in push notifications to be shown on a badge on iOS:
 <p align="center">
