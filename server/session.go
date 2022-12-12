@@ -1210,7 +1210,12 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 
 	switch msg.Note.What {
-	case "kp":
+	case "data":
+		if msg.Note.Payload == nil {
+			// Payload must be present in 'data' notifications.
+			return
+		}
+	case "kp", "kpa", "kpv":
 		if msg.Note.SeqId != 0 {
 			return
 		}
