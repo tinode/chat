@@ -65,6 +65,7 @@ If key is provided, it's a 0-based index into the `ent` array which contains ext
  * `MN`: mention such as [@tinode](#).
  * `RW`: logical grouping of formats, a row; may also be represented as a basic decoration.
  * `VC`: video (and audio) calls.
+ * `VD`: inline video.
 
 Examples:
  * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
@@ -142,18 +143,20 @@ In general, an entity is a text decoration which requires additional (possibly l
 {
   "tp": "AU",
   "data": {
-    "mime": "audio/ogg",
+    "mime": "audio/aac",
     "val": "Rt53jUU...iVBORw0KGgoA==",
-    "ref": "https://api.tinode.co/file/s/abc1234567.ogg",
+    "ref": "/v0/file/s/e769gvt1ILE.m4v",
+    "preview": "Aw4JKBkAAAAKMSM...vHxgcJhsgESAY"
     "duration": 180000,
-    "name": "some_audio.ogg",
-    "size": 123456
+    "name": "ding_dong.m4a",
+    "size": 595496
   }
 }
 ```
  * `mime`: data type, such as 'audio/ogg'.
  * `val`: optional in-band audio data: base64-encoded audio bits.
  * `ref`: optional reference to out-of-band audio data. Either `val` or `ref` must be present.
+ * `preview`: base64-encoded array of amplitude bars to generate vidual preview.
  * `duration`: duration of the record in milliseconds.
  * `name`: optional name of the original file.
  * `size`: optional size of the file in bytes.
@@ -167,7 +170,7 @@ To create a message with just a single audio record and no text, use the followi
 }
 ```
 
-_IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only. The client should present content of `val` field to the user only if it's correctly converted to an image.
+_IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malicious payload. The client should restrict URL scheme in the `ref` field to `http` and `https` only. The client should present content of `val` field to the user only if it's correctly converted to an audio.
 
 
 #### `BN`: interactive button
@@ -201,7 +204,7 @@ If the `name` is provided but `val` is not, `val` is assumed to be `1`. If `name
 
 The button in the example above will send an HTTP GET to https://www.example.com/path/?foo=bar&confirmation=some-value&uid=usrFsk73jYRR&topic=grpnG99YhENiQU&seq=3 assuming the current user ID is `usrFsk73jYRR`, the topic is `grpnG99YhENiQU`, and the sequence ID of message with the button is `3`.
 
-_IMPORTANT Security Consideration_: the client should restrict URL scheme in the `url` field to `http` and `https` only.
+_IMPORTANT Security Consideration_: the client should restrict URL scheme in the `ref` field to `http` and `https` only.
 
 
 #### `EX`: file attachment
@@ -212,7 +215,7 @@ _IMPORTANT Security Consideration_: the client should restrict URL scheme in the
   "data": {
     "mime", "text/plain",
     "val", "Q3l0aG9uPT0w...PT00LjAuMAo=",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.txt",
+    "ref": "/v0/file/s/abcdef12345.txt",
     "name", "requirements.txt",
     "size": 1234
   }
@@ -244,7 +247,7 @@ _IMPORTANT Security Consideration_: the `ref` fields may contain malicious paylo
   "data": {
     "mime": "image/png",
     "val": "Rt53jUU...iVBORw0KGgoA==",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.jpg",
+    "ref": "/v0/file/s/abcdef12345.jpg",
     "width": 512,
     "height": 512,
     "name": "sample_image.png",
@@ -315,3 +318,41 @@ Video call `data` contains current state of the call and its duration:
 * `incoming`: if the call is incoming or outgoing.
 
 The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` with no entity. In such a case all call information is contained in the `head` fields of the enclosing message.
+
+#### `VD`: video with preview
+`VD` represents a video recording. The `data` contains the following fields:
+```js
+{
+  "tp": "VD",
+  "data": {
+    "mime": "video/webm",
+    "val": "Rt53jUU...iVBORw0KGgoA==",
+    "ref": "/v0/file/s/abcdef12345.webm",
+    "preview": "/v0/file/s/abcdef54321.jpeg",
+    "width": 640,
+    "height": 360,
+    "duration": 32000,
+    "name": " bigbuckbunny.webm",
+    "size": 1234567
+  }
+}
+```
+ * `mime`: data type, such as 'video/webm'.
+ * `val`: optional in-band video data: base64-encoded video bits, usually not present (null).
+ * `ref`: optional reference to out-of-band video data. Either `val` or `ref` must be present.
+ * `preview`: optional screen from the video as a reference to an image or base64-encoded image bits.
+ * `width`, `height`: linear dimensions of the video in pixels.
+ * `duration`: duration of the video in milliseconds.
+ * `name`: optional name of the original file.
+ * `size`: optional size of the file in bytes.
+
+To create a message with just a single video and no text, use the following Drafty:
+```js
+{
+  txt: " ",
+  fmt: [{len: 1}],
+  ent: [{tp: "VD", data: {<your video data here>}]}
+}
+```
+
+_IMPORTANT Security Consideration_: the `val`, `ref`, `preview` fields may contain malicious payload. The client should restrict URL scheme in the `ref` and `preview` fields to `http` and `https` only. The client should present content of `val` field to the user only if it's correctly converted to a video.
