@@ -326,9 +326,9 @@ The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` w
   "tp": "VD",
   "data": {
     "mime": "video/webm",
-    "val": "Rt53jUU...iVBORw0KGgoA==",
     "ref": "/v0/file/s/abcdef12345.webm",
-    "preview": "/v0/file/s/abcdef54321.jpeg",
+    "preview": "AsTrsU...k86n00Ggo=="
+    "preref": "/v0/file/s/abcdef54321.jpeg",
     "width": 640,
     "height": 360,
     "duration": 32000,
@@ -339,8 +339,10 @@ The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` w
 ```
  * `mime`: data type, such as 'video/webm'.
  * `val`: optional in-band video data: base64-encoded video bits, usually not present (null).
- * `ref`: optional reference to out-of-band video data. Either `val` or `ref` must be present.
- * `preview`: optional screen from the video as a reference to an image or base64-encoded image bits.
+ * `ref`: optional reference to an out-of-band video data. Either `val` or `ref` must be present.
+ * `preview`: optional base64-encoded screencapture (image) from the video.
+ * `preref`: optional reference to an out-of-band screencapture (image) from the video.
+ * `premime`: optional data type of the screencapture image; if missing should be assumed to be 'image/jpeg'.
  * `width`, `height`: linear dimensions of the video in pixels.
  * `duration`: duration of the video in milliseconds.
  * `name`: optional name of the original file.
