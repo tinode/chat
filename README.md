@@ -83,7 +83,7 @@ When you register a new account you are asked for an email address to send valid
   * Scriptable [command line](tn-cli/) (Python)
 * User features:
   * One-on-one and group messaging. Voice messages.
-  * Video and audio calling.
+  * Video calls.
   * Channels with unlimited number of read-only subscribers.
   * All chats are synchronized across all devices.
   * Granular access control with permissions for various actions.
@@ -116,8 +116,11 @@ When you register a new account you are asked for an email address to send valid
 ### Planned
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
-* Location sharing.
+* Location and contacts sharing.
 * Previews of attached videos, documents, links.
+* Recording video messages.
+* Attaching music/audio.
+* Audio-only calls.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
