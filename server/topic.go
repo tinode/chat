@@ -105,6 +105,7 @@ type Topic struct {
 
 	// Channel functionality is enabled for the group topic.
 	isChan bool
+	isCate bool
 
 	// If isProxy == true, the actual topic is hosted by another cluster member.
 	// The topic should:

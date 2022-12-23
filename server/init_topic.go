@@ -42,11 +42,14 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 		err = initTopicP2P(t, join)
 	case strings.HasPrefix(t.xoriginal, "new"):
 		// Processing request to create a new group topic.
-		err = initTopicNewGrp(t, join, false)
+		err = initTopicNewGrp(t, join, false, false)
 	case strings.HasPrefix(t.xoriginal, "nch"):
 		// Processing request to create a new channel.
-		err = initTopicNewGrp(t, join, true)
-	case strings.HasPrefix(t.xoriginal, "grp") || strings.HasPrefix(t.xoriginal, "chn"):
+		err = initTopicNewGrp(t, join, true, false)
+	case strings.HasPrefix(t.xoriginal, "nct"):
+		// Processing request to create a new category.
+		err = initTopicNewGrp(t, join, false, true)
+	case strings.HasPrefix(t.xoriginal, "grp") || strings.HasPrefix(t.xoriginal, "chn") || strings.HasPrefix(t.xoriginal, "ctg"):
 		// Load existing group topic (or channel).
 		err = initTopicGrp(t)
 	case t.xoriginal == "sys":
@@ -497,12 +500,13 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 }
 
 // Create a new group topic
-func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
+func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool, isCate bool) error {
 	timestamp := types.TimeNow()
 	pktsub := sreg.Sub
 
 	t.cat = types.TopicCatGrp
 	t.isChan = isChan
+	t.isCate = isCate
 
 	// Generic topics have parameters stored in the topic object
 	t.owner = types.ParseUserId(sreg.AsUser)

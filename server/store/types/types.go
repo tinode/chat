@@ -1284,7 +1284,7 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatMe
 	case "p2p":
 		return TopicCatP2P
-	case "grp", "chn":
+	case "grp", "chn", "ctg":
 		return TopicCatGrp
 	case "fnd":
 		return TopicCatFnd
