@@ -136,7 +136,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
-| Portugese | &check; |   |   |   |
+| Portugese | &check; |   | &check; |   |
 | Romanian |   | &check; |   |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
