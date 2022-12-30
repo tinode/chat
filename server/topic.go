@@ -1638,24 +1638,22 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		if modeWant != types.ModeUnset {
 			// Explicit modeWant is provided
 
+			// Make sure the current owner cannot unset the owner flag or ban himself.
+			if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
+				sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+				return nil, errors.New("cannot unset ownership or self-ban the owner")
+			}
+
 			// Perform sanity checks
 			if userData.modeGiven.IsOwner() {
 				// Check for possible ownership transfer. Handle the following cases:
-				// 1. Owner joining the topic without any changes
+				// 1. Acceptance or rejection of the ownership transfer
 				// 2. Owner changing own settings
-				// 3. Acceptance or rejection of the ownership transfer
-
-				// Make sure the current owner cannot unset the owner flag or ban himself
-				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
-					sess.queueOut(ErrPermissionDeniedReply(pkt, now))
-					return nil, errors.New("cannot unset ownership or self-ban the owner")
-				}
 
 				// Ownership transfer
 				ownerChange = modeWant.IsOwner() && !userData.modeWant.IsOwner()
 
 				// The owner should be able to grant himself any access permissions.
-				// If ownership transfer is rejected don't upgrade.
 				if modeWant.IsOwner() && !userData.modeGiven.BetterEqual(modeWant) {
 					userData.modeGiven |= modeWant
 				}
@@ -1821,16 +1819,11 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 	now := types.TimeNow()
 	set := pkt.Set
 
-	// Access mode values as they were before this request was processed.
-	oldWant := types.ModeUnset
-	oldGiven := types.ModeUnset
-
-	// Access mode of the person who is executing this approval process
-	var hostMode types.AccessMode
-
 	// Check if approver actually has permission to manage sharing
-	userData, ok := t.perUser[asUid]
-	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
+	hostData, ok := t.perUser[asUid]
+	// Access mode of the person who is executing this approval process
+	hostMode := hostData.modeGiven & hostData.modeWant
+	if !ok || !hostMode.IsSharer() {
 		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 		return nil, errors.New("topic access denied; approver has no permission")
 	}
@@ -1846,8 +1839,6 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 		return nil, errors.New("topic is suspended")
 	}
-
-	hostMode = userData.modeGiven & userData.modeWant
 
 	// Parse the access mode granted
 	modeGiven := types.ModeUnset
@@ -1875,6 +1866,10 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 		return nil, errors.New("attempt to transfer ownership by non-owner")
 	}
+
+	// Access mode values as they were before this request was processed.
+	oldWant := types.ModeUnset
+	oldGiven := types.ModeUnset
 
 	// Check if it's a new invite. If so, save it to database as a subscription.
 	// Saved subscription does not mean the user is allowed to post/read
@@ -1968,14 +1963,21 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 			// Request to re-send invite without changing the access mode
 			modeGiven = userData.modeGiven
 		} else if modeGiven != userData.modeGiven {
-			// Changing the previously assigned value
-			userData.modeGiven = modeGiven
+			// Changing the previously assigned value.
+
+			// Cannot strip owner of ownership or ban the owner.
+			if t.owner == target && (!modeGiven.IsOwner() || !modeGiven.IsJoiner()) {
+				sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+				return nil, errors.New("cannot stip ownership or ban the owner")
+			}
 
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
 				map[string]interface{}{"ModeGiven": modeGiven}); err != nil {
 				return nil, err
 			}
+
+			userData.modeGiven = modeGiven
 			t.perUser[target] = userData
 		}
 	}

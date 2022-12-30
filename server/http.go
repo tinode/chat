@@ -282,23 +282,27 @@ func cacheControlHandler(maxAge int, handler http.Handler) http.Handler {
 func getAPIKey(req *http.Request) string {
 	// Check header.
 	apikey := req.Header.Get("X-Tinode-APIKey")
+	if apikey != "" {
+		return apikey
+	}
 
 	// Check URL query parameters.
-	if apikey == "" {
-		apikey = req.URL.Query().Get("apikey")
+	apikey = req.URL.Query().Get("apikey")
+	if apikey != "" {
+		return apikey
 	}
 
 	// Check form values.
-	if apikey == "" {
-		apikey = req.FormValue("apikey")
+	apikey = req.FormValue("apikey")
+	if apikey != "" {
+		return apikey
 	}
 
 	// Check cookies.
-	if apikey == "" {
-		if c, err := req.Cookie("apikey"); err == nil {
-			apikey = c.Value
-		}
+	if c, err := req.Cookie("apikey"); err == nil {
+		apikey = c.Value
 	}
+
 	return apikey
 }
 
@@ -319,6 +323,7 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 
 	// Check URL query parameters.
 	if method = req.URL.Query().Get("auth"); method != "" {
+		// Get the auth secret.
 		secret = req.URL.Query().Get("secret")
 		// Convert base64 URL-encoding to standard encoding.
 		secret = strings.NewReplacer("-", "+", "_", "/").Replace(secret)

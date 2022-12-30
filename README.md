@@ -39,7 +39,7 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 
 ## Public service
 
-A [public Tinode service](https://web.tinode.co/) is now available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
+A [public Tinode service](https://web.tinode.co/) is available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
 
 ### Web
 
@@ -88,7 +88,7 @@ When you register a new account you are asked for an email address to send valid
   * All chats are synchronized across all devices.
   * Granular access control with permissions for various actions.
   * User search/discovery.
-  * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
+  * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, videos, file attachments.
   * Forms and templated responses suitable for chatbots.
   * Verified/staff/untrusted account markers.
   * Message status notifications: message delivery to server; received and read notifications; typing notifications.
@@ -139,6 +139,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
+| Portugese | &check; |   | &check; |   |
 | Romanian |   | &check; |   |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |

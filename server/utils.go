@@ -54,7 +54,7 @@ func delrangeDeserialize(in []types.Range) []MsgDelRange {
 // Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
 // the number of tags does not exceed the maximum.
 func normalizeTags(src []string) types.StringSlice {
-	if len(src) == 0 {
+	if src == nil {
 		return nil
 	}
 
@@ -358,7 +358,9 @@ func parseVersionPart(vers string) int {
 }
 
 // Parses semantic version string in the following formats:
-//  1.2, 1.2abc, 1.2.3, 1.2.3-abc, v0.12.34-rc5
+//
+//	1.2, 1.2abc, 1.2.3, 1.2.3-abc, v0.12.34-rc5
+//
 // Unparceable values are replaced with zeros.
 func parseVersion(vers string) int {
 	var major, minor, patch int
