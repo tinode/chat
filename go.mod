@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go v0.102.0 // indirect
 	cloud.google.com/go/firestore v1.6.1 // indirect
 	firebase.google.com/go v3.13.0+incompatible
-	github.com/aws/aws-sdk-go v1.29.29
+	github.com/aws/aws-sdk-go v1.33.0
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
