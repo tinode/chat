@@ -424,6 +424,8 @@ const (
 	StateDeleted ObjState = 20
 	// StateUndefined indicates state which has not been set explicitly.
 	StateUndefined ObjState = 30
+	// StateCustomService
+	StateCustomService ObjState = 40
 )
 
 // String returns string representation of ObjState.
@@ -437,6 +439,8 @@ func (os ObjState) String() string {
 		return "del"
 	case StateUndefined:
 		return "undef"
+	case StateCustomService:
+		return "cs"
 	}
 	return ""
 }
@@ -453,6 +457,8 @@ func NewObjState(in string) (ObjState, error) {
 		return StateDeleted, nil
 	case "undef":
 		return StateUndefined, nil
+	case "cs":
+		return StateCustomService, nil
 	}
 	// This is the default.
 	return StateOK, errors.New("failed to parse object state")
@@ -494,6 +500,9 @@ func (os ObjState) Value() (driver.Value, error) {
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader `bson:",inline"`
+
+	//
+	ShopId string `json:"shopid"`
 
 	State   ObjState
 	StateAt *time.Time `json:"StateAt,omitempty" bson:",omitempty"`

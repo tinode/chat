@@ -34,6 +34,15 @@ type MsgGetOpts struct {
 	Limit int `json:"limit,omitempty"`
 }
 
+// MsgServiceGetOpts defines ServiceGet query parameters.
+type MsgServiceGetOpts struct {
+	User string `json:"user,omitempty"`
+	Topic string `json:"topic,omitempty"`
+	SinceId *time.Time `json:"since"`
+	BeforeId *time.Time `json:"before"`
+	Limit int `json:"limit,omitempty"`
+}
+
 // MsgGetQuery is a topic metadata or data query.
 type MsgGetQuery struct {
 	What string `json:"what"`
@@ -316,6 +325,15 @@ type MsgClientExtra struct {
 	AuthLevel string `json:"authlevel,omitempty"`
 }
 
+type MsgClientSer struct {
+	Opt string `json:"opt"`
+	What string `json:"what"`
+	// Parameters of "data" request: Since, Before, Limit.
+	Get *MsgServiceGetOpts `json:"get"`
+	Del *MsgServiceGetOpts `json:"del"`
+	Set *MsgServiceGetOpts `json:"set"`
+}
+
 // ClientComMessage is a wrapper for client messages.
 type ClientComMessage struct {
 	Hi    *MsgClientHi    `json:"hi"`
@@ -328,6 +346,7 @@ type ClientComMessage struct {
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
+	Ser   *MsgClientSer	  `json:"service"`
 	// Optional data.
 	Extra *MsgClientExtra `json:"extra"`
 

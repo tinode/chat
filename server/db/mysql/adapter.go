@@ -2526,6 +2526,42 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	return msgs, err
 }
 
+// 根据时间区间和topic返回消息数据
+func (a *adapter) MessageServiceGetAll(topic string, forUser t.Uid, since *time.Time, before *time.Time, limit int) ([]t.Message, error) {
+	if limit<0 {
+		limit = a.maxMessageResults
+	}
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	rows, err := a.db.QueryxContext(
+		ctx,
+		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
+			" FROM messages AS m WHERE topic = ? AND createdat BETWEEN ? AND ? limit ?",
+		topic, since, before, limit)
+
+	if err != nil {
+		return nil, err
+	}
+
+	msgs := make([]t.Message, 0, limit)
+	for rows.Next() {
+		var msg t.Message
+		if err = rows.StructScan(&msg); err != nil {
+			break
+		}
+		msg.From = encodeUidString(msg.From).String()
+		msg.Content = fromJSON(msg.Content)
+		msgs = append(msgs, msg)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	return msgs, err
+}
+
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = a.maxResults

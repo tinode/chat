@@ -149,6 +149,8 @@ type Adapter interface {
 	MessageSave(msg *t.Message) error
 	// MessageGetAll returns messages matching the query
 	MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error)
+	// MessageServiceGetAll returns messages matching the query
+	MessageServiceGetAll(topic string, forUser t.Uid, since *time.Time, before *time.Time, limit int) ([]t.Message, error)
 	// MessageDeleteList marks messages as deleted.
 	// Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error

@@ -453,47 +453,13 @@ func (s *Session) dispatchRaw(raw []byte) {
 	}
 	logs.Info.Printf("in: '%s%s' sid='%s' uid='%s'", toLog, truncated, s.sid, s.uid)
 
+	// 字符串转对象
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		logs.Warn.Println("s.dispatch", err, s.sid)
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}
-
-	if msg.Hi != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Hi: ", msg.Hi)
-	}
-	if msg.Acc != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Acc: ", msg.Acc)
-	}
-	if msg.Login != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Login: ", msg.Login)
-	}
-	if msg.Sub != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Sub: ", msg.Sub)
-	}
-	if msg.Leave != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Leave: ", msg.Leave)
-	}
-	if msg.Pub != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Pub: ", msg.Pub)
-	}
-	if msg.Get != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Get: ", msg.Get)
-	}
-	if msg.Set != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Set: ", msg.Set)
-	}
-	if msg.Del != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Del: ", msg.Del)
-	}
-	if msg.Note != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Note: ", msg.Note)
-	}
-	if msg.Extra != nil {
-		logs.Info.Println("[session.go]: [dispatchRaw]: msg.Extra: ", msg.Extra)
-	}
-
 
 	s.dispatch(&msg)
 }
@@ -638,7 +604,9 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		handler = s.note
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
-
+	case msg.Ser != nil:
+		logs.Info.Println("[session.go]:[dispatch]:msg.Service: ", msg.Ser)
+		handler = s.service
 	default:
 		// Unknown message
 		s.queueOut(ErrMalformed("", "", msg.Timestamp))
@@ -1294,6 +1262,20 @@ func (s *Session) note(msg *ClientComMessage) {
 	} else {
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		logs.Warn.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
+	}
+}
+
+// 处理外部接口调用
+func (s *Session) service(msg *ClientComMessage) {
+
+	if msg.Ser.Opt == "select" {
+		go selectService(s, msg)
+	} else if msg.Ser.Opt == "update" {
+		go updateService(s, msg)
+	} else if msg.Ser.Opt == "create" {
+		go createService(s, msg)
+	} else {
+		go deleteService(s, msg)
 	}
 }
 
