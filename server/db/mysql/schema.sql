@@ -27,6 +27,7 @@ CREATE TABLE users(
 	id 			BIGINT NOT NULL,
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,
+	shopid 		VARCHAR(60),
 	state 		SMALLINT NOT NULL DEFAULT 0,
 	stateat 	DATETIME(3),
 	access 		JSON,

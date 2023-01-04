@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	ms "github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 	"github.com/Limuwenan/chat/server/auth"
 	"github.com/Limuwenan/chat/server/db/common"
 	"github.com/Limuwenan/chat/server/store"
 	t "github.com/Limuwenan/chat/server/store/types"
+	ms "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 )
 
 // adapter holds MySQL connection data.
@@ -319,6 +319,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			id        BIGINT NOT NULL,
 			createdat DATETIME(3) NOT NULL,
 			updatedat DATETIME(3) NOT NULL,
+			shopid	  VARCHAR(60),
 			state     SMALLINT NOT NULL DEFAULT 0,
 			stateat   DATETIME(3),
 			access    JSON,
@@ -818,9 +819,10 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}()
 
 	decoded_uid := store.DecodeUid(user.Uid())
-	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,state,access,public,trusted,tags) VALUES(?,?,?,?,?,?,?,?)",
+	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,shopid,state,access,public,trusted,tags) VALUES(?,?,?,?,?,?,?,?,?)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
+		user.ShopId,
 		user.State, user.Access,
 		toJSON(user.Public), toJSON(user.Trusted), user.Tags); err != nil {
 		return err
@@ -2528,7 +2530,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // 根据时间区间和topic返回消息数据
 func (a *adapter) MessageServiceGetAll(topic string, forUser t.Uid, since *time.Time, before *time.Time, limit int) ([]t.Message, error) {
-	if limit<0 {
+	if limit < 0 {
 		limit = a.maxMessageResults
 	}
 	ctx, cancel := a.getContext()

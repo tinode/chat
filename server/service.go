@@ -4,6 +4,7 @@ import (
 	"github.com/Limuwenan/chat/server/logs"
 	"github.com/Limuwenan/chat/server/store"
 	"github.com/Limuwenan/chat/server/store/types"
+	"time"
 )
 
 func selectService(s *Session, msg *ClientComMessage) {
@@ -29,12 +30,20 @@ func selectService(s *Session, msg *ClientComMessage) {
 		}
 	}
 	s.queueOutBatch(outgoingMessages)
+	resp := &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Topic:     opts.Topic,
+			Code:      200,
+			Text:      "Get messages successful",
+			Timestamp: time.Now(),
+		},
+	}
+	s.queueOut(resp)
 }
 
 func updateService(s *Session, msg *ClientComMessage) {
 	s.queueOutBytes([]byte("update msg"))
 }
-
 
 func createService(s *Session, msg *ClientComMessage) {
 	s.queueOutBytes([]byte("create msg"))
@@ -43,7 +52,3 @@ func createService(s *Session, msg *ClientComMessage) {
 func deleteService(s *Session, msg *ClientComMessage) {
 	s.queueOutBytes([]byte("delete msg"))
 }
-
-
-
-

@@ -258,6 +258,7 @@ type configType struct {
 }
 
 func main() {
+	fmt.Printf("now: %s\n", time.Now())
 	executable, _ := os.Executable() // 输出路径
 
 	// 解析启动参数
@@ -375,7 +376,7 @@ func main() {
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
-	logs.Info.Println("我就是测试一下，你别紧张7")
+
 	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
 		store.Store.Close()
