@@ -156,7 +156,7 @@ In general, an entity is a text decoration which requires additional (possibly l
  * `mime`: data type, such as 'audio/ogg'.
  * `val`: optional in-band audio data: base64-encoded audio bits.
  * `ref`: optional reference to out-of-band audio data. Either `val` or `ref` must be present.
- * `preview`: base64-encoded array of amplitude bars to generate vidual preview.
+ * `preview`: base64-encoded array of bytes to generate a visual preview; each byte is an amplitude bar.
  * `duration`: duration of the record in milliseconds.
  * `name`: optional name of the original file.
  * `size`: optional size of the file in bytes.
