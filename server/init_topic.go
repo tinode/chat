@@ -576,9 +576,10 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool, isCate bool)
 			userData.modeWant |= types.ModeJoin | types.ModeOwner
 		}
 
-		tags = normalizeTags(pktsub.Set.Tags)
-		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
-			return types.ErrPermissionDenied
+		if tags = normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
+			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
+				return types.ErrPermissionDenied
+			}
 		}
 	}
 
@@ -607,6 +608,14 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool, isCate bool)
 	err := store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
 	if err != nil {
 		return err
+	}
+
+	// Link uploaded avatar to topic.
+	if sreg.Extra != nil && len(sreg.Extra.Attachments) > 0 {
+		if err := store.Files.LinkAttachments(t.name, types.ZeroUid, sreg.Extra.Attachments); err != nil {
+			logs.Warn.Printf("topic[%s] failed to link avatar attachment: %v", t.name, err)
+			// This is not a critical error, continue execution.
+		}
 	}
 
 	t.xoriginal = t.name // keeping 'new' or 'nch' as original has no value to the client

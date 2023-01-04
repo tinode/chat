@@ -59,7 +59,11 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 						globals.tlsRedirectHTTP, addr)
 
 					// This is a second HTTP server listenning on a different port.
-					go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr))
+					go func() {
+						if err := http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr)); err != nil && err != http.ErrServerClosed {
+							logs.Info.Println("HTTP redirect failed:", err)
+						}
+					}()
 				}
 			}
 
@@ -278,23 +282,27 @@ func cacheControlHandler(maxAge int, handler http.Handler) http.Handler {
 func getAPIKey(req *http.Request) string {
 	// Check header.
 	apikey := req.Header.Get("X-Tinode-APIKey")
+	if apikey != "" {
+		return apikey
+	}
 
 	// Check URL query parameters.
-	if apikey == "" {
-		apikey = req.URL.Query().Get("apikey")
+	apikey = req.URL.Query().Get("apikey")
+	if apikey != "" {
+		return apikey
 	}
 
 	// Check form values.
-	if apikey == "" {
-		apikey = req.FormValue("apikey")
+	apikey = req.FormValue("apikey")
+	if apikey != "" {
+		return apikey
 	}
 
 	// Check cookies.
-	if apikey == "" {
-		if c, err := req.Cookie("apikey"); err == nil {
-			apikey = c.Value
-		}
+	if c, err := req.Cookie("apikey"); err == nil {
+		apikey = c.Value
 	}
+
 	return apikey
 }
 
@@ -315,6 +323,7 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 
 	// Check URL query parameters.
 	if method = req.URL.Query().Get("auth"); method != "" {
+		// Get the auth secret.
 		secret = req.URL.Query().Get("secret")
 		// Convert base64 URL-encoding to standard encoding.
 		secret = strings.NewReplacer("-", "+", "_", "/").Replace(secret)
@@ -343,6 +352,7 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
 		if err != nil {
+			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
 			return uid, nil, types.ErrMalformed
 		}
 
@@ -356,7 +366,7 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 			}
 			uid = rec.Uid
 		} else {
-			logs.Info.Println("fileUpload: auth data is present but handler is not found", authMethod)
+			logs.Info.Println("media: unknown auth method", authMethod)
 		}
 	} else {
 		// Find the session, make sure it's appropriately authenticated.

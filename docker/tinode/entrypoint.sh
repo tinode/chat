@@ -39,6 +39,10 @@ else
 		TNPG_PUSH_ENABLED=true
 	fi
 
+	if [ ! -z "$ICE_SERVERS_FILE" ] ; then
+		WEBRTC_ENABLED=true
+	fi
+
 	# Generate a new 'working.config' from template and environment
 	while IFS='' read -r line || [[ -n $line ]] ; do
 		while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do

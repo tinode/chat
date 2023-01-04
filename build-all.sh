@@ -31,7 +31,7 @@ fi
 
 echo "Releasing $version"
 
-GOSRC=${GOPATH}/src/github.com/tinode
+GOSRC=..
 
 pushd ${GOSRC}/chat > /dev/null
 
@@ -62,7 +62,8 @@ then
 
   cp ./server/static/img/*.png ./releases/tmp/static/img
   cp ./server/static/img/*.svg ./releases/tmp/static/img
-  cp ./server/static/audio/*.mp3 ./releases/tmp/static/audio
+  cp ./server/static/img/*.jpeg ./releases/tmp/static/img
+  cp ./server/static/audio/*.m4a ./releases/tmp/static/audio
   cp ./server/static/css/*.css ./releases/tmp/static/css
   cp ./server/static/index.html ./releases/tmp/static
   cp ./server/static/index-dev.html ./releases/tmp/static
@@ -81,19 +82,28 @@ do
   plat="${goplat[$i]}"
   arc="${goarc[$i]}"
 
-  # Remove possibly existing keygen.
-  rm -f ./releases/tmp/keygen*
+  # Use .exe file extension for binaries on Windows.
+  ext=""
+  if [ "$plat" = "windows" ]; then
+    ext=".exe"
+  fi
+
+  # Remove possibly existing keygen from previous build.
+  rm -f ./releases/tmp/keygen
+  rm -f ./releases/tmp/keygen.exe
 
   # Keygen is database-independent
-  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o ./releases/tmp/keygen ./keygen > /dev/null
+  env GOOS="${plat}" GOARCH="${arc}" go build -ldflags "-s -w" -o ./releases/tmp/keygen${ext} ./keygen > /dev/null
 
   for dbtag in "${dbtags[@]}"
   do
     echo "Building ${dbtag}-${plat}/${arc}..."
 
-    # Remove possibly existing binaries from earlier builds.
-    rm -f ./releases/tmp/tinode*
-    rm -f ./releases/tmp/init-db*
+    # Remove possibly existing binaries from previous build.
+    rm -f ./releases/tmp/tinode
+    rm -f ./releases/tmp/tinode.exe
+    rm -f ./releases/tmp/init-db
+    rm -f ./releases/tmp/init-db.exe
 
     # Build tinode server and database initializer for RethinkDb and MySQL.
     # For 'alldbs' tag, we compile in all available DB adapters.
@@ -105,9 +115,9 @@ do
 
     env GOOS="${plat}" GOARCH="${arc}" go build \
       -ldflags "-s -w -X main.buildstamp=`git describe --tags`" -tags "${buildtag}" \
-      -o ./releases/tmp/tinode ./server > /dev/null
+      -o ./releases/tmp/tinode${ext} ./server > /dev/null
     env GOOS="${plat}" GOARCH="${arc}" go build \
-      -ldflags "-s -w" -tags "${buildtag}" -o ./releases/tmp/init-db ./tinode-db > /dev/null
+      -ldflags "-s -w" -tags "${buildtag}" -o ./releases/tmp/init-db${ext} ./tinode-db > /dev/null
 
     # Build archive. All platforms but Windows use tar for archiving. Windows uses zip.
     if [ "$plat" = "windows" ]; then

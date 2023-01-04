@@ -20,10 +20,18 @@ import (
 )
 
 const (
+	// Network connection timeout.
+	clusterNetworkTimeout = 3 * time.Second
 	// Default timeout before attempting to reconnect to a node.
-	defaultClusterReconnect = 200 * time.Millisecond
+	clusterDefaultReconnectTime = 200 * time.Millisecond
 	// Number of replicas in ringhash.
 	clusterHashReplicas = 20
+	// Buffer size for sending requests from proxy to master.
+	clusterProxyToMasterBuffer = 64
+	// Buffer size for master to proxy answers, per node.
+	clusterMasterToProxyBuffer = 64
+	// Buffer size for receiving responses from other nodes, per node.
+	clusterRpcCompletionBuffer = 64
 )
 
 // ProxyReqType is the type of proxy requests.
@@ -31,13 +39,14 @@ type ProxyReqType int
 
 // Individual request types.
 const (
-	ProxyReqNone ProxyReqType = iota
-	ProxyReqJoin
-	ProxyReqLeave
-	ProxyReqMeta
-	ProxyReqBroadcast
+	ProxyReqNone      ProxyReqType = iota
+	ProxyReqJoin                   // {sub}.
+	ProxyReqLeave                  // {leave}
+	ProxyReqMeta                   // {meta set|get}
+	ProxyReqBroadcast              // {pub}, {note}
 	ProxyReqBgSession
 	ProxyReqMeUserAgent
+	ProxyReqCall // Used in video call proxy sessions for routing call events.
 )
 
 type clusterNodeConfig struct {
@@ -76,19 +85,36 @@ type ClusterNode struct {
 	// A number of times this node has failed in a row
 	failCount int
 
-	// Channel for shutting down the runner; buffered, 1
+	// Channel for shutting down the runner; buffered, 1.
 	done chan bool
 
 	// IDs of multiplexing sessions belonging to this node.
 	msess map[string]struct{}
 
 	// Default channel for receiving responses to RPC calls issued by this node.
+	// Buffered, clusterRpcCompletionBuffer * number_of_nodes.
 	rpcDone chan *rpc.Call
+
+	// Channel for sending proxy to master requests; buffered, clusterProxyToMasterBuffer.
+	p2mSender chan *ClusterReq
 }
 
 func (n *ClusterNode) asyncRpcLoop() {
 	for call := range n.rpcDone {
 		n.handleRpcResponse(call)
+	}
+}
+
+func (n *ClusterNode) p2mSenderLoop() {
+	for req := range n.p2mSender {
+		if req == nil {
+			// Stop
+			return
+		}
+
+		if err := n.proxyToMaster(req); err != nil {
+			logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+		}
 	}
 }
 
@@ -230,14 +256,14 @@ func (n *ClusterNode) reconnect() {
 	n.lock.Unlock()
 
 	count := 0
-	var err error
 	for {
 		// Attempt to reconnect right away
-		if n.endpoint, err = rpc.Dial("tcp", n.address); err == nil {
+		if conn, err := net.DialTimeout("tcp", n.address, clusterNetworkTimeout); err == nil {
 			if reconnTicker != nil {
 				reconnTicker.Stop()
 			}
 			n.lock.Lock()
+			n.endpoint = rpc.NewClient(conn)
 			n.connected = true
 			n.reconnecting = false
 			n.lock.Unlock()
@@ -253,7 +279,7 @@ func (n *ClusterNode) reconnect() {
 				&unused)
 			return
 		} else if count == 0 {
-			reconnTicker = time.NewTicker(defaultClusterReconnect)
+			reconnTicker = time.NewTicker(clusterDefaultReconnectTime)
 		}
 
 		count++
@@ -365,6 +391,16 @@ func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
 	return err
 }
 
+// proxyToMaster forwards request from topic proxy to topic master.
+func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
+	select {
+	case n.p2mSender <- msg:
+		return nil
+	default:
+		return errors.New("cluster: load exceeded")
+	}
+}
+
 // masterToProxyAsync forwards response from topic master to topic proxy
 // in a fire-and-forget manner.
 func (n *ClusterNode) masterToProxyAsync(msg *ClusterResp) error {
@@ -409,6 +445,16 @@ type Cluster struct {
 	proxyEventQueue *concurrency.GoRoutinePool
 }
 
+func (n *ClusterNode) stopMultiplexingSession(msess *Session) {
+	if msess == nil {
+		return
+	}
+	msess.stopSession(nil)
+	n.lock.Lock()
+	delete(n.msess, msess.sid)
+	n.lock.Unlock()
+}
+
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
@@ -420,17 +466,29 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	}
 
 	// Master maintains one multiplexing session per proxy topic per node.
-	msid := msg.RcptTo + "-" + msg.Node
+	// Except channel topics:
+	// * one multiplexing session for channel subscriptions.
+	// * one multiplexing session for group subscriptions.
+	var msid string
+	if msg.CliMsg != nil && types.IsChannel(msg.CliMsg.Original) {
+		// If it's a channel request, use channel name.
+		msid = msg.CliMsg.Original
+	} else {
+		msid = msg.RcptTo
+	}
+	// Append node name.
+	msid += "-" + msg.Node
 	msess := globals.sessionStore.Get(msid)
 
 	if msg.Gone {
 		// Proxy topic is gone. Tear down the local auxiliary session.
 		// If it was the last session, master topic will shut down as well.
-		if msess != nil {
-			msess.stopSession(nil)
-			node.lock.Lock()
-			delete(node.msess, msid)
-			node.lock.Unlock()
+		node.stopMultiplexingSession(msess)
+
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil && t.isChan {
+			// If it's a channel topic, also stop the "chnX-" local auxiliary session.
+			msidChn := types.GrpToChn(t.name) + "-" + msg.Node
+			node.stopMultiplexingSession(globals.sessionStore.Get(msidChn))
 		}
 
 		return nil
@@ -561,27 +619,32 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 // Route endpoint receives intra-cluster messages destined for the nodes hosting the topic.
 // Called by Hub.route channel consumer for messages send without attaching to topic first.
 func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
+	logError := func(err string) {
+		sid := ""
+		if msg.Sess != nil {
+			sid = msg.Sess.Sid
+		}
+		logs.Warn.Println(err, sid)
+		*rejected = true
+	}
+
 	*rejected = false
 	if msg.Signature != c.ring.Signature() {
-		sid := ""
-		if msg.Sess != nil {
-			sid = msg.Sess.Sid
-		}
-		logs.Warn.Println("cluster Route: session signature mismatch", sid)
-		*rejected = true
+		logError("cluster Route: session signature mismatch")
 		return nil
 	}
+
 	if msg.SrvMsg == nil {
-		sid := ""
-		if msg.Sess != nil {
-			sid = msg.Sess.Sid
-		}
 		// TODO: maybe panic here.
-		logs.Warn.Println("cluster Route: nil server message", sid)
-		*rejected = true
+		logError("cluster Route: nil server message")
 		return nil
 	}
-	globals.hub.routeSrv <- msg.SrvMsg
+
+	select {
+	case globals.hub.routeSrv <- msg.SrvMsg:
+	default:
+		logError("cluster Route: server busy")
+	}
 	return nil
 }
 
@@ -801,21 +864,23 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, msg *ClientComMessage
 		// Cluster may be nil due to shutdown.
 		return nil
 	}
-	if sess != nil {
+
+	if sess != nil && reqType != ProxyReqLeave {
 		if atomic.LoadInt32(&sess.terminating) > 0 {
 			// The session is terminating.
+			// Do not forward any requests except "leave" to the topic master.
 			return nil
 		}
 	}
+
+	req := c.makeClusterReq(reqType, msg, topic, sess)
 
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
 		return errors.New("node for topic not found")
 	}
-
-	req := c.makeClusterReq(reqType, msg, topic, sess)
-	return n.proxyToMaster(req)
+	return n.proxyToMasterAsync(req)
 }
 
 // Forward server response message to the node that owns topic.
@@ -858,7 +923,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 
 	req := c.makeClusterReq(ProxyReqLeave, nil, topicName, nil)
 	req.Gone = true
-	return n.proxyToMaster(req)
+	return n.proxyToMasterAsync(req)
 }
 
 // Returns snowflake worker id.
@@ -973,8 +1038,10 @@ func (c *Cluster) start() {
 
 	for _, n := range c.nodes {
 		go n.reconnect()
-		n.rpcDone = make(chan *rpc.Call, len(c.nodes)*50)
+		n.rpcDone = make(chan *rpc.Call, len(c.nodes)*clusterRpcCompletionBuffer)
+		n.p2mSender = make(chan *ClusterReq, clusterProxyToMasterBuffer)
 		go n.asyncRpcLoop()
+		go n.p2mSenderLoop()
 	}
 
 	if c.fo != nil {
@@ -998,6 +1065,7 @@ func (c *Cluster) shutdown() {
 	}
 	for _, n := range c.nodes {
 		close(n.rpcDone)
+		close(n.p2mSender)
 	}
 
 	globals.cluster.proxyEventQueue.Stop()
@@ -1132,7 +1200,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent:
+				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent, ProxyReqCall:
 				// Do nothing
 				case ProxyReqBroadcast, ProxyReqNone:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {

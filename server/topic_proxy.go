@@ -20,21 +20,27 @@ func (t *Topic) runProxy(hub *Hub) {
 
 	for {
 		select {
-		case join := <-t.reg:
+		case msg := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				join.sess.queueOut(ErrLockedReply(join, types.TimeNow()))
-			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join, t.name, join.sess); err != nil {
+				msg.sess.queueOut(ErrLockedReply(msg, types.TimeNow()))
+			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, msg, t.name, msg.sess); err != nil {
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
-				logs.Warn.Println("proxy topic: route join request from proxy to master failed:", err)
+				logs.Warn.Printf("proxy topic[%s]: route join request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
-			if join.sess.inflightReqs != nil {
-				join.sess.inflightReqs.Done()
+			if msg.sess.inflightReqs != nil {
+				msg.sess.inflightReqs.Done()
 			}
 
 		case msg := <-t.unreg:
 			if !t.handleProxyLeaveRequest(msg, killTimer) {
-				logs.Warn.Println("Failed to update proxy topic state for leave request", msg.sess.sid)
+				sid := "nil"
+				if msg.sess != nil {
+					sid = msg.sess.sid
+				}
+				logs.Warn.Printf("proxy topic[%s]: failed to update proxy topic state for leave request - sid %s", t.name, sid)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 			if msg.init && msg.sess.inflightReqs != nil {
 				// If it's a client initiated request.
@@ -44,7 +50,8 @@ func (t *Topic) runProxy(hub *Hub) {
 		case msg := <-t.clientMsg:
 			// Content message intended for broadcasting to recipients
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
-				logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
+				logs.Warn.Printf("topic proxy[%s]: route broadcast request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 
 		case msg := <-t.serverMsg:
@@ -52,13 +59,14 @@ func (t *Topic) runProxy(hub *Hub) {
 				globals.cluster.routeToTopicIntraCluster(t.name, msg, msg.sess)
 			} else {
 				// FIXME: should something be done here?
-				logs.Err.Printf("ERROR!!! Unexpected server-side message in proxy topic %s", msg.describe())
+				logs.Err.Printf("ERROR!!! topic proxy[%s]: unexpected server-side message in proxy topic %s", t.name, msg.describe())
 			}
 
 		case msg := <-t.meta:
 			// Request to get/set topic metadata
 			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, msg, t.name, msg.sess); err != nil {
-				logs.Warn.Println("proxy topic: route meta request from proxy to master failed:", err)
+				logs.Warn.Printf("proxy topic[%s]: route meta request from proxy to master failed - %s", t.name, err)
+				msg.sess.queueOut(ErrClusterUnreachableReply(msg, types.TimeNow()))
 			}
 
 		case upd := <-t.supd:
@@ -70,7 +78,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				// Subscribed user may not match session user. Find out who is subscribed
 				pssd, ok := t.sessions[upd.sess]
 				if !ok {
-					logs.Warn.Println("proxy topic: sess update request from detached session")
+					logs.Warn.Printf("proxy topic[%s]: sess update request from detached session - sid %s", t.name, upd.sess.sid)
 					continue
 				}
 				req = ProxyReqBgSession
@@ -79,7 +87,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				tmpSess.userAgent = upd.sess.userAgent
 			}
 			if err := globals.cluster.routeToTopicMaster(req, nil, t.name, tmpSess); err != nil {
-				logs.Warn.Println("proxy topic: route sess update request from proxy to master failed:", err)
+				logs.Warn.Printf("proxy topic[%s]: route sess update request from proxy to master failed - %s", t.name, err)
 			}
 
 		case msg := <-t.proxy:
@@ -92,7 +100,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 
 			if err := globals.cluster.topicProxyGone(t.name); err != nil {
-				logs.Warn.Printf("topic proxy shutdown [%s]: failed to notify master - %s", t.name, err)
+				logs.Warn.Printf("proxy topic[%s] shutdown: failed to notify master - %s", t.name, err)
 			}
 
 			// Report completion back to sender, if 'done' is not nil.
@@ -122,14 +130,14 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 		if pssd, ok := t.sessions[msg.sess]; ok {
 			asUid = pssd.uid
 		} else {
-			logs.Warn.Println("proxy topic: leave request sent for unknown session")
+			logs.Warn.Printf("proxy topic[%s]: leave request sent for unknown session", t.name)
 			return false
 		}
 	}
 	// Remove the session from the topic without waiting for a response from the master node
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
-	_, result := t.remSession(msg.sess, asUid)
+	pssd, result := t.remSession(msg.sess, asUid)
 	if !msg.init {
 		// Explicitly specify the uid because the master multiplex session needs to know which
 		// of its multiple hosted sessions to delete.
@@ -137,9 +145,22 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 		msg.Leave = &MsgClientLeave{}
 		msg.init = true
 	}
+	// Make sure we set the Original field if it's empty (e.g. when session is terminating altogether).
+	if msg.Original == "" {
+		if t.cat == types.TopicCatGrp && t.isChan {
+			// It's a channel topic. Original topic name depends the subscription type.
+			if result && pssd.isChanSub {
+				msg.Original = types.GrpToChn(t.xoriginal)
+			} else {
+				msg.Original = t.xoriginal
+			}
+		} else {
+			msg.Original = t.original(asUid)
+		}
+	}
 
 	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, msg, t.name, msg.sess); err != nil {
-		logs.Warn.Println("proxy topic: route leave request from proxy to master failed:", err)
+		logs.Warn.Printf("proxy topic[%s]: route leave request from proxy to master failed - %s", t.name, err)
 	}
 	if len(t.sessions) == 0 {
 		// No more sessions attached. Start the countdown.
@@ -172,7 +193,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	} else {
 		sess := globals.sessionStore.Get(msg.OrigSid)
 		if sess == nil {
-			logs.Warn.Println("topic_proxy: session not found; already terminated?", msg.OrigSid)
+			logs.Warn.Printf("proxy topic[%s]: session %s not found; already terminated?", t.name, msg.OrigSid)
 		}
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
@@ -201,7 +222,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					killTimer.Reset(keepAlive)
 				}
 			}
-		case ProxyReqBroadcast, ProxyReqMeta:
+		case ProxyReqBroadcast, ProxyReqMeta, ProxyReqCall:
 			// no processing
 		case ProxyReqLeave:
 			if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
@@ -217,12 +238,12 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 			}
 
 		default:
-			logs.Err.Printf("proxy topic [%s] received response referencing unexpected request type %d",
+			logs.Err.Printf("proxy topic[%s] received response referencing unexpected request type %d",
 				t.name, msg.OrigReqType)
 		}
 
 		if sess != nil && !sess.queueOut(msg.SrvMsg) {
-			logs.Err.Println("topic proxy: timeout")
+			logs.Err.Printf("proxy topic[%s]: timeout in sending response - sid %s", t.name, sess.sid)
 		}
 	}
 }
@@ -246,7 +267,7 @@ func (t *Topic) proxyCtrlBroadcast(msg *ServerComMessage) {
 	if msg.Ctrl.Code == http.StatusResetContent && msg.Ctrl.Text == "evicted" {
 		// We received a ctrl command for evicting a user.
 		if msg.uid.IsZero() {
-			logs.Err.Panicf("topic[%s]: proxy received evict message with empty uid", t.name)
+			logs.Err.Panicf("proxy topic[%s]: proxy received evict message with empty uid", t.name)
 		}
 		for sess := range t.sessions {
 			// Proxy topic may only have ordinary sessions. No multiplexing or proxy sessions here.
@@ -274,11 +295,11 @@ func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 	pud := t.perUser[uid]
 	dacs := pres.Acs
 	if err := pud.modeWant.ApplyMutation(dacs.Want); err != nil {
-		logs.Warn.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
+		logs.Warn.Printf("proxy topic[%s]: could not process acs change - want: %s", t.name, err)
 		return
 	}
 	if err := pud.modeGiven.ApplyMutation(dacs.Given); err != nil {
-		logs.Warn.Printf("proxy topic[%s]: could not process acs change - given: %+v", t.name, err)
+		logs.Warn.Printf("proxy topic[%s]: could not process acs change - given: %s", t.name, err)
 		return
 	}
 	// Update existing or add new.

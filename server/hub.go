@@ -626,7 +626,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 				Anon: stopic.Access.Anon.String(),
 			}
 		}
-		// Report appropriate access level. Could be overriden below if subscription exists.
+		// Report appropriate access level. Could be overridden below if subscription exists.
 		desc.Acs = &MsgAccessMode{}
 		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
 			desc.Acs.Mode = stopic.Access.Auth.String()
@@ -673,7 +673,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 			desc.State = suser.State.String()
 		}
 
-		// Report appropriate access level. Could be overriden below if subscription exists.
+		// Report appropriate access level. Could be overridden below if subscription exists.
 		desc.Acs = &MsgAccessMode{}
 		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
 			desc.Acs.Mode = suser.Access.Auth.String()

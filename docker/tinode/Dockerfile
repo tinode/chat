@@ -102,6 +102,10 @@ ENV TNPG_AUTH_TOKEN=
 # Tinode Push Gateway organization name as registered at console.tinode.co
 ENV TNPG_ORG=
 
+# Video calls configuration.
+ENV WEBRTC_ENABLED=false
+ENV ICE_SERVERS_FILE=
+
 # Use the target db by default.
 # When TARGET_DB is "alldbs", it is the user's responsibility
 # to set STORE_USE_ADAPTER to the desired db adapter correctly.

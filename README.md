@@ -4,7 +4,7 @@
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
-Version 0.18. This is beta-quality software: feature-complete and stable but probably with a few bugs or missing features. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
+Version 0.20. This is beta-quality software: feature-complete and stable but probably with a few bugs or missing features. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
 
 <a href="https://apps.apple.com/us/app/tinode/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
@@ -39,19 +39,19 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 
 ## Public service
 
-A [public Tinode service](https://web.tinode.co/) is now available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
+A [public Tinode service](https://web.tinode.co/) is available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
 
 ### Web
 
-TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below.
 
 ### Android
 
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience.
 
 ### iOS
 
-[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Spanish. More translations are welcome.
+[Tinode for iOS](https://apps.apple.com/us/app/tinode/id1483763538) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below.
 
 
 ## Demo/Sandbox
@@ -83,10 +83,12 @@ When you register a new account you are asked for an email address to send valid
   * Scriptable [command line](tn-cli/) (Python)
 * User features:
   * One-on-one and group messaging. Voice messages.
+  * Video and audio calling.
   * Channels with unlimited number of read-only subscribers.
+  * All chats are synchronized across all devices.
   * Granular access control with permissions for various actions.
   * User search/discovery.
-  * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
+  * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, videos, file attachments.
   * Forms and templated responses suitable for chatbots.
   * Verified/staff/untrusted account markers.
   * Message status notifications: message delivery to server; received and read notifications; typing notifications.
@@ -99,6 +101,7 @@ When you register a new account you are asked for an email address to send valid
   * Ability to block unwanted communication server-side.
   * Anonymous users (important for use cases related to tech support over chat).
   * Plugins to extend functionality, for example, to support moderation or chatbots.
+  * Scriptable [command-line tool](tn-cli/) for server administration.
 * Performance, reliability and development:
   * Sharded clustering with failover.
   * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with plugins).
@@ -113,7 +116,6 @@ When you register a new account you are asked for an email address to send valid
 ### Planned
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
-* Video or audio calling.
 * Location sharing.
 * Previews of attached videos, documents, links.
 * Hot standby.
@@ -134,6 +136,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
+| Portugese | &check; |   | &check; |   |
 | Romanian |   | &check; |   |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
@@ -161,13 +164,13 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 <p align="center">
 <img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=250 />
 <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=250 />
-<img src="docs/android-account.png" alt="Android screenshot: account settings" width=250 />
+<img src="docs/android-video-call.png" alt="Android screenshot: video call" width=250 />
 </p>
 
 ### [iOS](https://github.com/tinode/ios)
 
 <p align="center">
-<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 /> <img src="docs/ios-acc-personal.png" alt="iOS screenshot: account settings" width="207" />
+<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=250 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=250 /> <img src="docs/ios-video-call.png" alt="iOS screenshot: video call" width="250" />
 </p>
 
 ### [Desktop Web](https://github.com/tinode/webapp/)
@@ -179,7 +182,7 @@ More translations are [welcome](docs/translations.md). Particularly interested i
 ### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info.png" alt="Mobile web: topic info" width=250 />
+  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-video-call.png" alt="Mobile web: topic info" width=250 />
 </p>
 
 

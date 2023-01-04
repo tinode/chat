@@ -8,6 +8,16 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
+
+import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/Limuwenan/chat/server/logs"
@@ -18,6 +28,8 @@ import (
 
 const (
 	baseTargetAddress = "https://pushgw.tinode.co/"
+	pushPath          = "pushv1"
+	subsPath          = "sub"
 	pushBatchSize     = 100
 	subBatchSize      = 1000
 	bufferSize        = 1024
@@ -35,9 +47,10 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled   bool   `json:"enabled"`
-	OrgID     string `json:"org"`
-	AuthToken string `json:"token"`
+	Enabled         bool   `json:"enabled"`
+	OrgID           string `json:"org"`
+	AuthToken       string `json:"token"`
+	DebugPushGWHost string `json:"debug_server"`
 }
 
 // subUnsubReq is a request to subscribe/unsubscribe device ID(s) to channel(s) (FCM topic).
@@ -52,12 +65,15 @@ type subUnsubReq struct {
 
 type tnpgResponse struct {
 	// Push message response only.
-	MessageID    string `json:"msg_id,omitempty"`
-	ErrorMessage string `json:"errmsg,omitempty"`
+	MessageID string `json:"msg_id,omitempty"`
+	// Server response HTTP code.
+	Code int `json:"code,omitempty"`
+	// FCM response code. Both push and sub/unsub response.
+	ErrorCode     string `json:"errcode,omitempty"`
+	ExtendedError string `json:"exerr,omitempty"`
+	ErrorMessage  string `json:"errmsg,omitempty"`
 	// Channel sub/unsub response only.
 	Index int `json:"index,omitempty"`
-	// Both push and sub/unsub response.
-	ErrorCode string `json:"errcode,omitempty"`
 }
 
 type batchResponse struct {
@@ -83,38 +99,46 @@ const (
 	invalidArgument                = "invalid-argument"
 	messageRateExceeded            = "message-rate-exceeded"
 	mismatchedCredential           = "mismatched-credential"
-	quotaExceeded                  = "quota-exceeded"
 	registrationTokenNotRegistered = "registration-token-not-registered"
-	senderIDMismatch               = "sender-id-mismatch"
 	serverUnavailable              = "server-unavailable"
-	thirdPartyAuthError            = "third-party-auth-error"
 	tooManyTopics                  = "too-many-topics"
-	unavailableError               = "unavailable-error"
 	unknownError                   = "unknown-error"
-	unregisteredError              = "unregistered-error"
 )
 
 // Init initializes the handler
-func (Handler) Init(jsonconf string) error {
+func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return false, errors.New("failed to parse config: " + err.Error())
 	}
 
 	if !config.Enabled {
-		return nil
+		return false, nil
 	}
 
 	config.OrgID = strings.TrimSpace(config.OrgID)
 	if config.OrgID == "" {
-		return errors.New("push.tnpg.org not specified.")
+		return false, errors.New("organization name is missing")
 	}
 
 	// Convert to lower case to avoid confusion.
 	config.OrgID = strings.ToLower(config.OrgID)
 
-	handler.pushUrl = baseTargetAddress + "push/" + config.OrgID
-	handler.subUrl = baseTargetAddress + "sub/" + config.OrgID
+	// Construct server URLs.
+	serverAddr := baseTargetAddress
+	if config.DebugPushGWHost != "" {
+		serverAddr = config.DebugPushGWHost
+	}
+	serverUrl, err := url.Parse(serverAddr)
+	if err != nil {
+		return false, err
+	}
+	serverUrl.Path += pushPath + "/" + config.OrgID
+	handler.pushUrl = serverUrl.String()
+	serverUrl, _ = url.Parse(serverAddr)
+	serverUrl.Path += subsPath + "/" + config.OrgID
+	handler.subUrl = serverUrl.String()
+
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
@@ -132,7 +156,7 @@ func (Handler) Init(jsonconf string) error {
 		}
 	}()
 
-	return nil
+	return true, nil
 }
 
 func postMessage(endpoint string, body interface{}, config *configType) (*batchResponse, error) {
@@ -176,7 +200,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 
 	if err != nil {
 		// Just log the error, but don't report it to caller. The push succeeded.
-		logs.Warn.Println("tnpg failed to decode response", err)
+		logs.Warn.Println("tnpg failed to decode respons:", err)
 	}
 
 	batch.httpCode = resp.StatusCode
@@ -186,7 +210,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareNotifications(rcpt, nil)
+	messages, uids := fcm.PrepareV1Notifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
@@ -196,7 +220,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		}
 		var payloads []interface{}
 		for j := i; j < upper; j++ {
-			payloads = append(payloads, messages[j].Message)
+			payloads = append(payloads, messages[j])
 		}
 		resp, err := postMessage(handler.pushUrl, payloads, config)
 		if err != nil {
@@ -212,7 +236,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 			break
 		}
 		// Check for expired tokens and other errors.
-		handlePushResponse(resp, messages[i:upper])
+		handlePushResponse(resp, messages[i:upper], uids[i:upper])
 	}
 }
 
@@ -256,7 +280,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
-func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
+func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []types.Uid) {
 	if batch.FailureCount <= 0 {
 		return
 	}
@@ -264,22 +288,30 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	for i, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
-		case messageRateExceeded, quotaExceeded, serverUnavailable, unavailableError, internalError, unknownError:
+		case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
 			// Transient errors. Stop sending this batch.
-			logs.Warn.Println("tnpg: transient failure", resp.ErrorMessage)
+			logs.Warn.Println("tnpg transient failure:", resp.ErrorMessage)
 			return
-		case mismatchedCredential, invalidArgument, senderIDMismatch, thirdPartyAuthError, invalidAPNSCredentials:
+		case common.ErrorInvalidArgument:
+			// Usually an invalid token.
+			logs.Warn.Println("tnpg invalid argument:", resp.ExtendedError, resp.ErrorMessage)
+			if strings.Contains(resp.ExtendedError, "message.token") {
+				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+					logs.Warn.Println("tnpg failed to delete invalid token:", err)
+				}
+			}
+		case common.ErrorSenderIDMismatch, common.ErrorThirdPartyAuth:
 			// Config errors
-			logs.Warn.Println("tnpg: invalid config", resp.ErrorMessage)
+			logs.Warn.Println("tnpg invalid config:", resp.ExtendedError, resp.ErrorMessage)
 			return
-		case registrationTokenNotRegistered, unregisteredError:
+		case common.ErrorUnregistered:
 			// Token is no longer valid.
-			logs.Warn.Println("tnpg: invalid token", resp.ErrorMessage)
-			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {
-				logs.Warn.Println("tnpg: failed to delete invalid token", err)
+			logs.Info.Println("tnpg invalid token:", resp.ErrorMessage, resp.ExtendedError, resp.MessageID)
+			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+				logs.Warn.Println("tnpg failed to delete invalid token:", err)
 			}
 		default:
-			logs.Warn.Println("tnpg: unrecognized error", resp.ErrorMessage)
+			logs.Warn.Println("tnpg unrecognized error:", resp.ErrorCode, resp.ErrorMessage, resp.ExtendedError, resp.Code)
 		}
 	}
 }

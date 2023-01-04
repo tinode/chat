@@ -158,9 +158,8 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// Save credentials, update tags if necessary.
 	tmpToken, _, _ := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       user.Uid(),
-		AuthLevel: auth.LevelNone,
+		AuthLevel: auth.LevelAuth,
 		Lifetime:  auth.Duration(time.Hour * 24),
-		Features:  auth.FeatureNoLogin,
 	})
 	validated, _, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
 	if err != nil {
@@ -1061,7 +1060,14 @@ func userUpdater() {
 					allUids = append(allUids, uid)
 				}
 
-				allUnread := unreadUpdater(allUids, 1, true)
+				var delta int
+				// Increment unread counter only on msg event.
+				if upd.PushRcpt.Payload.What == "msg" {
+					delta = 1
+				} else {
+					delta = 0
+				}
+				allUnread := unreadUpdater(allUids, delta, true)
 				for uid, unread := range allUnread {
 					rcptTo := upd.PushRcpt.To[uid]
 					// Handle update

@@ -128,7 +128,7 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
 	```
 
-	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
+	DB initializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
 3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by unzipping `https://github.com/tinode/webapp/archive/master.zip` and `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
@@ -192,6 +192,16 @@ A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 ### Enabling Push Notifications
 
 Follow [instructions](./docs/faq.md#q-how-to-setup-push-notifications-with-google-fcm).
+
+
+### Enabling Video Calls
+
+Video calls use [WebRTC](https://en.wikipedia.org/wiki/WebRTC). WebRTC is a peer to peer protocol: once the call is established, the client applications exchange data directly. Direct data exchange is efficient but creates a problem when the parties are not accessible from the internet. WebRTC solves it by means of [ICE](https://en.wikipedia.org/wiki/Interactive_Connectivity_Establishment) servers  which implement protocols [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and [STUN](https://en.wikipedia.org/wiki/STUN) as fallback.
+
+Tinode does not provide ICE servers out of the box. You must install and configure (or purchase) your own servers otherwise video and voice calling will not be available.
+
+Once you obtain the ICE TURN/STUN configuration from your service provider, add it to `tinode.conf` section `"webrtc"` - `"ice_servers"` (or `"ice_servers_file"`). Also change `"webrtc"` - `"enabled"` to `true`. An example configuration is provided in the `tinode.conf` for illustration only. IT WILL NOT FUNCTION because it uses dummy values instead of actual server addresses.
+
 
 ### Note on Running the Server in Background
 

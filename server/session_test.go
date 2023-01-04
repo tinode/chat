@@ -21,7 +21,7 @@ func TestDispatchHello(t *testing.T) {
 		authLvl: auth.LevelAuth,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 	msg := &ClientComMessage{
@@ -36,7 +36,7 @@ func TestDispatchHello(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 	if len(r.messages) != 1 {
-		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+		t.Errorf("responses: expected 1, received %d.", len(r.messages))
 	}
 	resp := r.messages[0].(*ServerComMessage)
 	if resp == nil {
@@ -67,9 +67,9 @@ func TestDispatchHello(t *testing.T) {
 	}
 }
 
-func verifyResponseCodes(r *Responses, codes []int, t *testing.T) {
+func verifyResponseCodes(r *responses, codes []int, t *testing.T) {
 	if len(r.messages) != len(codes) {
-		t.Errorf("Responses: expected %d, received %d.", len(codes), len(r.messages))
+		t.Errorf("responses: expected %d, received %d.", len(codes), len(r.messages))
 	}
 	for i := 0; i < len(codes); i++ {
 		resp := r.messages[i].(*ServerComMessage)
@@ -92,7 +92,7 @@ func TestDispatchInvalidVersion(t *testing.T) {
 		authLvl: auth.LevelAuth,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 	msg := &ClientComMessage{
@@ -115,7 +115,7 @@ func TestDispatchUnsupportedVersion(t *testing.T) {
 		authLvl: auth.LevelAuth,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 	msg := &ClientComMessage{
@@ -164,7 +164,7 @@ func TestDispatchLogin(t *testing.T) {
 		ver:     16,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -181,7 +181,7 @@ func TestDispatchLogin(t *testing.T) {
 	wg.Wait()
 
 	if len(r.messages) != 1 {
-		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+		t.Errorf("responses: expected 1, received %d.", len(r.messages))
 	}
 	resp := r.messages[0].(*ServerComMessage)
 	if resp == nil {
@@ -219,7 +219,7 @@ func TestDispatchSubscribe(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -248,7 +248,7 @@ func TestDispatchSubscribe(t *testing.T) {
 
 	// Check we've routed the join request via the hub.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(hub.join) == 1 {
 		join := <-hub.join
@@ -274,7 +274,7 @@ func TestDispatchAlreadySubscribed(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -308,7 +308,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -336,7 +336,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchLeave(t *testing.T) {
@@ -349,7 +349,7 @@ func TestDispatchLeave(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -374,7 +374,7 @@ func TestDispatchLeave(t *testing.T) {
 
 	// Check we've routed the join request via the leave channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(leave) == 1 {
 		req := <-leave
@@ -403,7 +403,7 @@ func TestDispatchLeaveUnsubMe(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -436,7 +436,7 @@ func TestDispatchLeaveUnknownTopic(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -468,7 +468,7 @@ func TestDispatchLeaveUnsubFromUnknownTopic(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -501,7 +501,7 @@ func TestDispatchPublish(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -529,7 +529,7 @@ func TestDispatchPublish(t *testing.T) {
 
 	// Check we've routed the join request via the broadcast channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(brdcst) == 1 {
 		req := <-brdcst
@@ -557,7 +557,7 @@ func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -585,7 +585,7 @@ func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchPublishMissingSubcription(t *testing.T) {
@@ -598,7 +598,7 @@ func TestDispatchPublishMissingSubcription(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -633,7 +633,7 @@ func TestDispatchGet(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -662,7 +662,7 @@ func TestDispatchGet(t *testing.T) {
 
 	// Check we've routed the join request via the meta channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(meta) == 1 {
 		req := <-meta
@@ -684,7 +684,7 @@ func TestDispatchGetMalformedWhat(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -717,7 +717,7 @@ func TestDispatchGetMetaChannelFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -745,7 +745,7 @@ func TestDispatchGetMetaChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchSet(t *testing.T) {
@@ -758,7 +758,7 @@ func TestDispatchSet(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -790,7 +790,7 @@ func TestDispatchSet(t *testing.T) {
 
 	// Check we've routed the join request via the meta channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(meta) == 1 {
 		req := <-meta
@@ -816,7 +816,7 @@ func TestDispatchSetMalformedWhat(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -848,7 +848,7 @@ func TestDispatchSetMetaChannelFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -880,7 +880,7 @@ func TestDispatchSetMetaChannelFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchDelMsg(t *testing.T) {
@@ -893,7 +893,7 @@ func TestDispatchDelMsg(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -922,7 +922,7 @@ func TestDispatchDelMsg(t *testing.T) {
 
 	// Check we've routed the join request via the meta channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(meta) == 1 {
 		req := <-meta
@@ -944,7 +944,7 @@ func TestDispatchDelMalformedWhat(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -975,7 +975,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1003,7 +1003,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchDelUnsubscribedSession(t *testing.T) {
@@ -1016,7 +1016,7 @@ func TestDispatchDelUnsubscribedSession(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1050,7 +1050,7 @@ func TestDispatchNote(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1077,7 +1077,7 @@ func TestDispatchNote(t *testing.T) {
 
 	// Check we've routed the join request via the broadcast channel.
 	if len(r.messages) != 0 {
-		t.Errorf("Responses: expected 0, received %d.", len(r.messages))
+		t.Errorf("responses: expected 0, received %d.", len(r.messages))
 	}
 	if len(brdcst) == 1 {
 		req := <-brdcst
@@ -1108,7 +1108,7 @@ func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1134,7 +1134,7 @@ func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 	close(s.send)
 	wg.Wait()
 
-	verifyResponseCodes(&r, []int{http.StatusInternalServerError}, t)
+	verifyResponseCodes(&r, []int{http.StatusServiceUnavailable}, t)
 }
 
 func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {
@@ -1147,7 +1147,7 @@ func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {
 		ver:          15,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1216,7 +1216,7 @@ func TestDispatchAccNew(t *testing.T) {
 		remoteAddr: remoteAddr,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1237,7 +1237,7 @@ func TestDispatchAccNew(t *testing.T) {
 	wg.Wait()
 
 	if len(r.messages) != 1 {
-		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+		t.Errorf("responses: expected 1, received %d.", len(r.messages))
 	}
 	resp := r.messages[0].(*ServerComMessage)
 	if resp == nil {
@@ -1277,7 +1277,7 @@ func TestDispatchNoMessage(t *testing.T) {
 		remoteAddr: remoteAddr,
 	}
 	wg := sync.WaitGroup{}
-	r := Responses{}
+	r := responses{}
 	wg.Add(1)
 	go s.testWriteLoop(&r, &wg)
 
@@ -1288,7 +1288,7 @@ func TestDispatchNoMessage(t *testing.T) {
 	wg.Wait()
 
 	if len(r.messages) != 1 {
-		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+		t.Errorf("responses: expected 1, received %d.", len(r.messages))
 	}
 	resp := r.messages[0].(*ServerComMessage)
 	if resp == nil {

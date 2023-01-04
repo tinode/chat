@@ -16,7 +16,7 @@ Create a copy of the files naming them `email-password-reset-XX.teml` and `email
 
 The translations are located in two places: [/src/i18n/](https://github.com/tinode/webapp/tree/devel/src/i18n/) and [/service-worker.js](https://github.com/tinode/webapp/blob/devel/service-worker.js#L11).
 
-In order to add a translation, copy `/src/i18n/en.json` to a file named `/src/i18n/XX.json` where `XX` is the [BCP-47](https://tools.ietf.org/rfc/bcp/bcp47.txt) code of the new language. If in doubt how to choose the BCP-47 language code, use a two letter [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes). Only the `"translation":` line have to be translated, the `"defaultMessage"`, `"description"` etc should NOT be translated, they serve as help only, i.e.:
+In order to add a translation, copy `/src/i18n/en.json` to a file named `/src/i18n/XX.json` where `XX` is the [BCP-47](https://tools.ietf.org/rfc/bcp/bcp47.txt) code of the new language. If in doubt how to choose the BCP-47 language code, use a two letter [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes). Only the `"translation":` line has to be translated, the `"defaultMessage"`, `"description"` etc should NOT be translated, they serve as help only, i.e.:
 
 ```js
 "action_block_contact": {

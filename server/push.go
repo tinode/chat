@@ -26,7 +26,7 @@ func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 // Prepares a payload to be delivered to a mobile device as a push notification in response to a {data} message.
 func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receipt {
 	// Passing `Topic` as `t.name` for group topics and P2P topics. The p2p topic name is later rewritten for
-	// each recipient then the payload is created: p2p recepient sees the topic as the ID of the other user.
+	// each recipient then the payload is created: p2p recipient sees the topic as the ID of the other user.
 
 	// Initialize the push receipt.
 	contentType, _ := data.Head["mime"].(string)
@@ -42,6 +42,12 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			ContentType: contentType,
 			Content:     data.Content,
 		},
+	}
+	if webrtc, found := data.Head["webrtc"].(string); found {
+		receipt.Payload.Webrtc = webrtc
+	}
+	if replace, found := data.Head["replace"].(string); found {
+		receipt.Payload.Replace = replace
 	}
 
 	if t.isChan {
@@ -110,11 +116,16 @@ func (t *Topic) pushForP2PSub(fromUid, toUid types.Uid, want, given types.Access
 // Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a group topic.
 func (t *Topic) pushForGroupSub(fromUid types.Uid, now time.Time) *push.Receipt {
 	receipt := t.preparePushForSubReceipt(fromUid, now)
+	if pud, ok := t.perUser[fromUid]; ok {
+		receipt.Payload.ModeWant = pud.modeWant
+		receipt.Payload.ModeGiven = pud.modeGiven
+	} else {
+		// Sender is not a subscriber (BUG?)
+		return nil
+	}
+
 	for uid, pud := range t.perUser {
-		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid == fromUid {
-			continue
-		}
+		// Send only to those who have notifications enabled.
 		mode := pud.modeWant & pud.modeGiven
 		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
 			receipt.To[uid] = push.Recipient{}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/Limuwenan/chat/server/logs"
@@ -399,7 +400,7 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 			// For p2p topics topic name is dependent on receiver.
 			// It's OK to change the pointer here because the message will be serialized in queueOut
 			// before being placed into the channel.
-			t.maybeFixTopicName(msg, pssd.uid)
+			t.prepareBroadcastableMessage(msg, pssd.uid, pssd.isChanSub)
 		}
 		s.queueOut(msg)
 	}
@@ -496,6 +497,37 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 			SkipSid: skipSid,
 		}
 	}
+}
+
+// Publish {info what=call} to topic subscribers's sessions on subscriber's 'me'.
+func (t *Topic) infoCallSubsOffline(from string, target types.Uid, event string, seq int,
+	sdp json.RawMessage, skipSid string, offlineOnly bool) {
+	if target.IsZero() {
+		logs.Err.Printf("callSubs could not find target: topic %s - from %s", t.name, from)
+		return
+	}
+	pud := t.perUser[target]
+	mode := pud.modeGiven & pud.modeWant
+	if pud.deleted || !mode.IsPresencer() || !mode.IsReader() {
+		return
+	}
+	msg := &ServerComMessage{
+		Info: &MsgServerInfo{
+			Topic:   "me",
+			Src:     t.original(target),
+			From:    from,
+			What:    "call",
+			Event:   event,
+			SeqId:   seq,
+			Payload: sdp,
+		},
+		RcptTo:  target.UserId(),
+		SkipSid: skipSid,
+	}
+	if offlineOnly {
+		msg.Info.SkipTopic = t.name
+	}
+	globals.hub.routeSrv <- msg
 }
 
 // Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers

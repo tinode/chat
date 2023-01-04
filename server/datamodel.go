@@ -313,6 +313,10 @@ type MsgClientNote struct {
 	SeqId int `json:"seq,omitempty"`
 	// Client's count of unread messages to report back to the server. Used in push notifications on iOS.
 	Unread int `json:"unread,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used in video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 // MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
@@ -774,11 +778,15 @@ type MsgServerInfo struct {
 	// Topic where the even has occurred (set only when Topic='me').
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
-	From string `json:"from"`
-	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
+	From string `json:"from,omitempty"`
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
+	// Call event.
+	Event string `json:"event,omitempty"`
+	// Arbitrary json payload (used by video calls).
+	Payload json.RawMessage `json:"payload,omitempty"`
 
 	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.
 	// They are still serialized for intra-cluster communication.
@@ -805,6 +813,9 @@ func (src *MsgServerInfo) describe() string {
 	s += " what=" + src.What + " from=" + src.From
 	if src.SeqId > 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	if len(src.Payload) > 0 {
+		s += " payload=<..." + strconv.Itoa(len(src.Payload)) + " bytes ...>"
 	}
 	return s
 }
@@ -1364,7 +1375,7 @@ func ErrUserNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage
 	return ErrUserNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrNotFound is an error for missing objects other than user or topic.
+// ErrNotFound is an error for missing objects other than user or topic (404).
 func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrNotFoundExplicitTs(id, topic, ts, ts)
 }
@@ -1567,6 +1578,26 @@ func ErrPolicyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrPolicyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
+// ErrCallBusyExplicitTs indicates a "busy" reply to a video call request (486).
+func ErrCallBusyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Id:        id,
+			Code:      486, // Busy here.
+			Text:      "busy here",
+			Topic:     topic,
+			Timestamp: serverTs,
+		},
+		Id:        id,
+		Timestamp: incomingReqTs,
+	}
+}
+
+// ErrCallBusyReply indicates a "busy" reply in response to a video call request (486)
+func ErrCallBusyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrCallBusyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrUnknown database or other server error (500).
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
@@ -1608,27 +1639,39 @@ func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *Ser
 	}
 }
 
-// ErrClusterUnreachable in-cluster communication has failed (502).
-func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
+// ErrNotImplementedReply feature not implemented error in response to a client request (501).
+func ErrNotImplementedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrNotImplemented(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrClusterUnreachableReply in-cluster communication has failed error as response to a client request (502).
+func ErrClusterUnreachableReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrClusterUnreachableExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrClusterUnreachable in-cluster communication has failed error with explicit server and
+// incoming request timestamps (502).
+func ErrClusterUnreachableExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
 			Code:      http.StatusBadGateway, // 502
 			Text:      "cluster unreachable",
 			Topic:     topic,
-			Timestamp: ts,
+			Timestamp: serverTs,
 		},
 		Id:        id,
-		Timestamp: ts,
+		Timestamp: incomingReqTs,
 	}
 }
 
-// ErrServiceUnavailableReply server error in response to a client request (503).
+// ErrServiceUnavailableReply server overloaded error in response to a client request (503).
 func ErrServiceUnavailableReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrServiceUnavailableExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrServiceUnavailableExplicitTs server error (503).
+// ErrServiceUnavailableExplicitTs server overloaded error with explicit server and
+// incoming request timestamps (503).
 func ErrServiceUnavailableExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{

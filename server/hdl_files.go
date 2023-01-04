@@ -35,13 +35,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 		if err != nil {
-			logs.Warn.Println("media serve:", err)
+			logs.Warn.Println("media serve:", req.URL.String(), err)
 		}
 	}
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		writeHttpResponse(ErrAPIKeyRequired(now), nil)
+		writeHttpResponse(ErrAPIKeyRequired(now), errors.New("invalid or missing API key"))
 		return
 	}
 
@@ -51,13 +51,15 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
+
 	if challenge != nil {
 		writeHttpResponse(InfoChallenge("", now, challenge), nil)
 		return
 	}
+
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now, now), nil)
+		writeHttpResponse(ErrAuthRequired("", "", now, now), errors.New("user not authenticated"))
 		return
 	}
 
@@ -130,7 +132,9 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 
-		logs.Info.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		if err != nil {
+			logs.Info.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		}
 	}
 
 	// Check if this is a POST/PUT/OPTIONS/HEAD request.
@@ -162,8 +166,8 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(InfoChallenge(msgID, now, challenge), nil)
 		return
 	}
-	if uid.IsZero() {
-		// Not authenticated
+	if uid.IsZero() && req.FormValue("topic") != "newacc" {
+		// Not authenticated and not signup.
 		writeHttpResponse(ErrAuthRequired(msgID, "", now, now), nil)
 		return
 	}
@@ -171,6 +175,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	// Check if uploads are handled elsewhere.
 	headers, statusCode, err := mh.Headers(req, false)
 	if err != nil {
+		logs.Info.Println("Headers check failed", err)
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
@@ -205,6 +210,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 
 	file, _, err := req.FormFile("file")
 	if err != nil {
+		logs.Info.Println("Invalid multipart form", err)
 		if strings.Contains(err.Error(), "request body too large") {
 			writeHttpResponse(ErrTooLarge(msgID, "", now), err)
 		} else {
@@ -242,7 +248,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 
 	fdef, err = store.Files.FinishUpload(fdef, true, size)
 	if err != nil {
-		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
+		logs.Info.Println("Failed to finalize upload", file, "key", fdef.Location, err)
 		// Best effort cleanup.
 		mh.Delete([]string{fdef.Location})
 		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
@@ -254,7 +260,9 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		// How long this file is guaranteed to exist without being attached to a message or a topic.
 		params["expires"] = now.Add(globals.mediaGcPeriod).Format(types.TimeFormatRFC3339)
 	}
+
 	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
+	logs.Info.Println("media upload: ok", fdef.Location)
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.

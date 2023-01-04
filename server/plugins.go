@@ -176,10 +176,10 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 }
 
 // PluginRPCFilterConfig filters for an individual RPC call. Filter strings are formatted as follows:
-// <comma separated list of packet names> : <comma separated list of topics or topic types> : <actions (combination of C U D)>
+// <comma separated list of packet names> ; <comma separated list of topics or topic types> ; <actions (combination of C U D)>
 // For instance:
-// "acc,login::CU" - grab packets {acc} or {login}; no filtering by topic, Create or Update action
-// "pub,pres:me,p2p:"
+// "acc,login;;CU" - grab packets {acc} or {login}; no filtering by topic, Create or Update action
+// "pub,pres;me,p2p;"
 type pluginRPCFilterConfig struct {
 	// Filter by packet name, topic type [or exact name - not supported yet]. 2D: "pub,pres;p2p,me"
 	FireHose *string `json:"fire_hose"`

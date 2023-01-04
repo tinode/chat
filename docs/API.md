@@ -42,6 +42,7 @@
 		- [Tinode Push Gateway](#tinode-push-gateway)
 		- [Google FCM](#google-fcm)
 		- [Stdout](#stdout)
+	- [Video Calls](#video-calls)
 	- [Messages](#messages)
 		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -471,8 +472,9 @@ The format of the `private` field in group and peer to peer topics is a set of k
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
-  arch: true, // boolean value indicating that the topic is archived by the user, i.e.
+  arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
+  starred: false,  // boolean, an indicator that the topic is starred or pinned by the user.
   accepted: "JRWS" // string, 'given' mode accepted by the user.
 }
 ```
@@ -595,6 +597,9 @@ Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push noti
 
 The `stdout` adapter is mostly useful for debugging and logging. It writes push payload to `STDOUT` where it can be redirected to file or read by some other process.
 
+## Video Calls
+
+[See separate document](call-establishment.md).
 
 ## Messages
 
@@ -879,6 +884,14 @@ The following values are currently defined for the `head` field:
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
  * `sender`: a user ID of the sender added by the server when the message is sent by on behalf of another user, `"usr1XUtEhjv6HND"`.
  * `thread`: an indicator that the message is a part of a conversation thread, a topic-unique ID of the first message in the thread, `":123"`; `thread` is intended for tagging a flat list of messages as opposite to a creating a tree.
+ * `webrtc`: a string representing the state of the video call the message represents. Possible values:
+   * `"started"`: call has been initiated and being established
+   * `"accepted"`: call has been accepted and established
+   * `"finished"`: previously successfully established call has been ended
+   * `"missed"`: call was hung up by the caller or timed out before getting established
+   * `"declined"`: call was hung up by the callee before getting established
+   * `"disconnected"`: call was terminated by the server for other reasons (e.g. due to an error)
+ * `webrtc-duration`: a number represeting video call duration after establishment (in milliseconds).
 
 Application-specific fields should start with an `x-<application-name>-`. Although the server does not enforce this rule yet, it may start doing so in the future.
 

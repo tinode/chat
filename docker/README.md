@@ -110,8 +110,8 @@ is `83_Or_So_Random_Looking_Characters`, start the container with the following 
 
 ```
 $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
-		-v /Users/jdoe:/fcm \
-		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
+		-v /Users/jdoe:/config \
+		--env FCM_CRED_FILE=/config/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
 		--env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ \
 		--env FCM_APP_ID=1:141421356237:web:abc7de1234fab56cd78abc \
 		--env FCM_PROJECT_ID=myproject-1234 \
@@ -119,6 +119,40 @@ $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 		--env FCM_VAPID_KEY=83_Or_So_Random_Looking_Characters \
 		tinode/tinode-mysql:latest
 ```
+
+### Configure video calling
+
+Tinode uses [WebRTC](https://webrtc.org/) for video and audio calls. WebRTC needs [Interactive Communication Establishment (ICE)](https://tools.ietf.org/id/draft-ietf-ice-rfc5245bis-13.html) [TURN(S)](https://en.wikipedia.org/wiki/Traversal_Using_Relays_around_NAT) and/or [STUN](https://en.wikipedia.org/wiki/STUN) servers to traverse [NAT](https://en.wikipedia.org/wiki/Network_address_translation), otherwise calls may not work. Tinode does not include TURN(S) or STUN out of the box. You need to obtain and configure your own service. Once you setup your TURN(S) and/or STUN service, save its configuration to a file, for example `/Users/jdoe/turn-config.json` and provide path to this file when starting the container:
+
+```
+$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
+		-v /Users/jdoe:/config \
+		--env ICE_SERVERS_FILE=/config/turn-config.json \
+		< ... other config parameters ... >
+		tinode/tinode-mysql:latest
+```
+
+The config file uses the following format:
+```json
+[
+  {
+    "urls": [
+      "stun:stun.example.com"
+    ]
+  },
+  {
+    "username": "user-name-to-use-for-authentication-with-the-server",
+    "credential": "your-password",
+    "urls": [
+      "turn:turn.example.com:80?transport=udp",
+      "turn:turn.example.com:3478?transport=tcp",
+      "turns:turn.example.com:443?transport=tcp",
+    ]
+  }
+]
+```
+
+[XIRSYS](https://xirsys.com/) offers a free tier for developers. We are in no way affiliated with XIRSYS. We do not endorse or otherwise take any responsibility for your use of their services.
 
 ### Run the chatbot
 
@@ -143,13 +177,14 @@ You can specify the following environment variables when issuing `docker run` co
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
 | `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
 | `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files) |
-| `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
+| `FCM_CRED_FILE` | string |  | Path to JSON file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_API_KEY` | string |  | Firebase API key; required for receiving push notifications in the web client |
 | `FCM_APP_ID` | string |  | Firebase web app ID; required for receiving push notifications in the web client |
 | `FCM_PROJECT_ID` | string |  | Firebase project ID; required for receiving push notifications in the web client |
 | `FCM_SENDER_ID` | string |  | Firebase FCM sender ID; required for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
+| `ICE_SERVERS_FILE` | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot |

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/api/option"
 )
 
+
 var handler Handler
 
 const (
@@ -36,67 +37,85 @@ const (
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
-	input   chan *push.Receipt
-	channel chan *push.ChannelReq
-	stop    chan bool
-	client  *fcm.Client
+	input     chan *push.Receipt
+	channel   chan *push.ChannelReq
+	stop      chan bool
+	projectID string
+
+	client *legacy.Client
+	v1     *fcmv1.Service
 }
 
 type configType struct {
 	Enabled         bool            `json:"enabled"`
+	DryRun          bool            `json:"dry_run"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
-	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	Android         AndroidConfig   `json:"android,omitempty"`
+	TimeToLive      int             `json:"time_to_live,omitempty"`
+	ApnsBundleID    string          `json:"apns_bundle_id,omitempty"`
+	Android         *common.Config  `json:"android,omitempty"`
+	Apns            *common.Config  `json:"apns,omitempty"`
+	Webpush         *common.Config  `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
-func (Handler) Init(jsonconf string) error {
+func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 
 	var config configType
 	err := json.Unmarshal([]byte(jsonconf), &config)
 	if err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+		return false, errors.New("failed to parse config: " + err.Error())
 	}
 
 	if !config.Enabled {
-		return nil
+		return false, nil
 	}
-	ctx := context.Background()
 
-	var opt option.ClientOption
-	if config.Credentials != nil {
-		credentials, err := google.CredentialsFromJSON(ctx, config.Credentials,
-			"https://www.googleapis.com/auth/firebase.messaging")
+	if config.Credentials == nil && config.CredentialsFile != "" {
+		config.Credentials, err = os.ReadFile(config.CredentialsFile)
 		if err != nil {
-			return err
+			return false, err
 		}
-		opt = option.WithCredentials(credentials)
-	} else if config.CredentialsFile != "" {
-		opt = option.WithCredentialsFile(config.CredentialsFile)
-	} else {
-		return errors.New("missing credentials")
 	}
 
-	app, err := fbase.NewApp(ctx, &fbase.Config{}, opt)
+	if config.Credentials == nil {
+		return false, errors.New("missing credentials")
+	}
+
+	ctx := context.Background()
+	credentials, err := google.CredentialsFromJSON(ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
-		return err
+		return false, err
+	}
+	if credentials.ProjectID == "" {
+		return false, errors.New("missing project ID")
+	}
+
+	app, err := fbase.NewApp(ctx, &fbase.Config{}, option.WithCredentials(credentials))
+	if err != nil {
+		return false, err
 	}
 
 	handler.client, err = app.Messaging(ctx)
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	handler.v1, err = fcmv1.NewService(ctx, option.WithCredentials(credentials), option.WithScopes(fcmv1.FirebaseMessagingScope))
+	if err != nil {
+		return false, err
 	}
 
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
+	handler.projectID = credentials.ProjectID
 
 	go func() {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				go sendNotifications(rcpt, &config)
+				go sendFcmV1(rcpt, &config)
 			case sub := <-handler.channel:
 				go processSubscription(sub)
 			case <-handler.stop:
@@ -105,36 +124,43 @@ func (Handler) Init(jsonconf string) error {
 		}
 	}()
 
-	return nil
+	return true, nil
 }
 
-func sendNotifications(rcpt *push.Receipt, config *configType) {
-	messages := PrepareNotifications(rcpt, &config.Android)
-	n := len(messages)
-	if n == 0 {
-		return
-	}
-
-	ctx := context.Background()
-	for i := 0; i < n; i += pushBatchSize {
-		upper := i + pushBatchSize
-		if upper > n {
-			upper = n
+func sendFcmV1(rcpt *push.Receipt, config *configType) {
+	messages, uids := PrepareV1Notifications(rcpt, config)
+	for i := range messages {
+		req := &fcmv1.SendMessageRequest{
+			Message:      messages[i],
+			ValidateOnly: config.DryRun,
 		}
-		var batch []*fcm.Message
-		for j := i; j < upper; j++ {
-			batch = append(batch, messages[j].Message)
-		}
-		resp, err := handler.client.SendAll(ctx, batch)
+		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
-			// Complete failure.
-			logs.Warn.Println("fcm SendAll failed", err)
-			break
-		}
-
-		// Check for partial failure.
-		if !handlePushErrors(resp, messages[i:upper]) {
-			break
+			gerr, decodingErrs := common.DecodeGoogleApiError(err)
+			for _, err := range decodingErrs {
+				logs.Info.Println("fcm googleapi.Error decoding:", err)
+			}
+			switch gerr.FcmErrCode {
+			case "": // no error
+			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
+				// Transient errors. Stop sending this batch.
+				logs.Warn.Println("fcm transient failure:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
+				// Config errors. Stop.
+				logs.Warn.Println("fcm invalid config:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			case common.ErrorUnregistered:
+				// Token is no longer valid. Delete token from DB and continue sending.
+				logs.Warn.Println("fcm invalid token:", gerr.FcmErrCode, gerr.ErrMessage)
+				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
+					logs.Warn.Println("tnpg failed to delete invalid token:", err)
+				}
+			default:
+				// Unknown error. Stop sending just in case.
+				logs.Warn.Println("tnpg unrecognized error:", gerr.FcmErrCode, gerr.ErrMessage)
+				return
+			}
 		}
 	}
 }
@@ -165,7 +191,7 @@ func processSubscription(req *push.ChannelReq) {
 	}
 
 	var err error
-	var resp *fcm.TopicManagementResponse
+	var resp *legacy.TopicManagementResponse
 	if channel != "" && len(devices) > 0 {
 		if req.Unsub {
 			resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
@@ -206,22 +232,7 @@ func processSubscription(req *push.ChannelReq) {
 		len(devices), len(channels))
 }
 
-// handlePushError processes errors returned by a call to fcm.SendAll.
-// returns false to stop further processing of other messages.
-func handlePushErrors(response *fcm.BatchResponse, batch []MessageData) bool {
-	if response.FailureCount <= 0 {
-		return true
-	}
-
-	for i, resp := range response.Responses {
-		if !handleFcmError(resp.Error, batch[i].Uid, batch[i].DeviceId) {
-			return false
-		}
-	}
-	return true
-}
-
-func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devices []string) {
+func handleSubErrors(response *legacy.TopicManagementResponse, uid types.Uid, devices []string) {
 	if response.FailureCount <= 0 {
 		return
 	}
@@ -230,34 +241,6 @@ func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devic
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
 		logs.Warn.Println("fcm sub/unsub error", errinfo.Reason, uid, devices[errinfo.Index])
 	}
-}
-
-func handleFcmError(err error, uid types.Uid, deviceId string) bool {
-	if fcm.IsMessageRateExceeded(err) ||
-		fcm.IsServerUnavailable(err) ||
-		fcm.IsInternal(err) ||
-		fcm.IsUnknown(err) {
-		// Transient errors. Stop sending this batch.
-		logs.Warn.Println("fcm transient failure", err)
-		return false
-	}
-	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
-		// Config errors
-		logs.Warn.Println("fcm: request failed", err)
-		return false
-	}
-
-	if fcm.IsRegistrationTokenNotRegistered(err) {
-		// Token is no longer valid.
-		logs.Warn.Println("fcm: invalid token", uid, err)
-		if err := store.Devices.Delete(uid, deviceId); err != nil {
-			logs.Warn.Println("fcm: failed to delete invalid token", err)
-		}
-	} else {
-		// All other errors are treated as non-fatal.
-		logs.Warn.Println("fcm error:", err)
-	}
-	return true
 }
 
 // IsReady checks if the push handler has been initialized.

@@ -617,7 +617,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	if globals.cluster.isPartitioned() {
 		// The cluster is partitioned due to network or other failure and this node is a part of the smaller partition.
 		// In order to avoid data inconsistency across the cluster we must reject all requests.
-		s.queueOut(ErrClusterUnreachable(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrClusterUnreachableReply(msg, msg.Timestamp))
 		return
 	}
 
@@ -658,8 +658,8 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		select {
 		case globals.hub.join <- msg: // 在hub.go中有go h.run()来读取管道里的东西
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			s.inflightReqs.Done()
 			logs.Err.Println("s.subscribe: hub.join queue full, topic ", msg.RcptTo, s.sid)
 		}
@@ -728,8 +728,8 @@ func (s *Session) publish(msg *ClientComMessage) {
 		select {
 		case sub.broadcast <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.publish: sub.broadcast channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.RcptTo == "sys" {
@@ -737,8 +737,8 @@ func (s *Session) publish(msg *ClientComMessage) {
 		select {
 		case globals.hub.routeCli <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.publish: hub.route channel full", s.sid)
 		}
 	} else {
@@ -777,6 +777,12 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"maxTagLength":       maxTagLength,
 			"maxTagCount":        globals.maxTagCount,
 			"maxFileUploadSize":  globals.maxFileUploadSize,
+		}
+		if len(globals.iceServers) > 0 {
+			params["iceServers"] = globals.iceServers
+		}
+		if globals.callEstablishmentTimeout > 0 {
+			params["callTimeout"] = globals.callEstablishmentTimeout
 		}
 
 		// Set ua & platform in the beginning of the session.
@@ -1087,8 +1093,8 @@ func (s *Session) get(msg *ClientComMessage) {
 		select {
 		case sub.meta <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.get: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
@@ -1096,8 +1102,8 @@ func (s *Session) get(msg *ClientComMessage) {
 		select {
 		case globals.hub.meta <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.get: hub.meta channel full", s.sid)
 		}
 	} else {
@@ -1135,8 +1141,8 @@ func (s *Session) set(msg *ClientComMessage) {
 		select {
 		case sub.meta <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
@@ -1147,8 +1153,8 @@ func (s *Session) set(msg *ClientComMessage) {
 		select {
 		case globals.hub.meta <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: hub.meta channel full", s.sid)
 		}
 	}
@@ -1184,8 +1190,8 @@ func (s *Session) del(msg *ClientComMessage) {
 		select {
 		case sub.meta <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.MetaWhat == constMsgDelTopic {
@@ -1199,8 +1205,8 @@ func (s *Session) del(msg *ClientComMessage) {
 			del:    true,
 		}:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.del: hub.unreg channel full", s.sid)
 		}
 	} else {
@@ -1231,6 +1237,12 @@ func (s *Session) note(msg *ClientComMessage) {
 		if msg.Note.SeqId != 0 {
 			return
 		}
+	case "call":
+		if types.GetTopicCat(msg.RcptTo) != types.TopicCatP2P {
+			// Calls are only available in P2P topics.
+			return
+		}
+		fallthrough
 	case "read", "recv":
 		if msg.Note.SeqId <= 0 {
 			return
@@ -1244,19 +1256,24 @@ func (s *Session) note(msg *ClientComMessage) {
 		select {
 		case sub.broadcast <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.Note.What == "recv" {
-		// Client received a pres notification about a new message, initiated a fetch
+	} else if msg.Note.What == "recv" || (msg.Note.What == "call" && (msg.Note.Event == "ringing" || msg.Note.Event == "hang-up" || msg.Note.Event == "accept")) {
+		// One of the following events happened:
+		// 1. Client received a pres notification about a new message, initiated a fetch
 		// from the server (and detached from the topic) and acknowledges receipt.
+		// 2. Client is either accepting or terminating the current video call or
+		// letting the initiator of the call know that it is ringing/notifying
+		// the user about the call.
+		//
 		// Hub will forward to topic, if appropriate.
 		select {
 		case globals.hub.routeCli <- msg:
 		default:
-			// Reply with a 500 to the user.
-			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.note: hub.route channel full", s.sid)
 		}
 	} else {

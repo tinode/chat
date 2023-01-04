@@ -29,22 +29,22 @@ type configType struct {
 }
 
 // Init initializes the handler
-func (stdoutPush) Init(jsonconf string) error {
+func (stdoutPush) Init(jsonconf json.RawMessage) (bool, error) {
 
 	// Check if the handler is already initialized
 	if handler.initialized {
-		return errors.New("already initialized")
+		return false, errors.New("already initialized")
 	}
 
 	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("failed to parse config: " + err.Error())
+		return false, errors.New("failed to parse config: " + err.Error())
 	}
 
 	handler.initialized = true
 
 	if !config.Enabled {
-		return nil
+		return false, nil
 	}
 
 	if config.Buffer <= 0 {
@@ -68,7 +68,7 @@ func (stdoutPush) Init(jsonconf string) error {
 		}
 	}()
 
-	return nil
+	return true, nil
 }
 
 // IsReady checks if the handler is initialized.
