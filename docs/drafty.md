@@ -303,7 +303,8 @@ Video call `data` contains current state of the call and its duration:
   "data": {
     "duration": 10000,
     "state": "disconnected",
-    "incoming": false
+    "incoming": false,
+    "aonly": true
   }
 }
 ```
@@ -315,7 +316,8 @@ Video call `data` contains current state of the call and its duration:
 	* `disconnected`: the call is dropped for example because of an error.
 	* `missed`: the call is missed, i.e. the callee didn't pick up the phone.
 	* `declined`: the call is declined, i.e. the callee hung up before picking up.
-* `incoming`: if the call is incoming or outgoing.
+* `incoming`: true if the call is incoming, otherwise the call is outgoing.
+* `aonly`: true if this is an audio-only call (no video).
 
 The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` with no entity. In such a case all call information is contained in the `head` fields of the enclosing message.
 
@@ -329,6 +331,7 @@ The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` w
     "ref": "/v0/file/s/abcdef12345.webm",
     "preview": "AsTrsU...k86n00Ggo=="
     "preref": "/v0/file/s/abcdef54321.jpeg",
+    "premime": "image/jpeg",
     "width": 640,
     "height": 360,
     "duration": 32000,
@@ -337,13 +340,13 @@ The `VC` may also be represented as a format `"fmt": [{"len": 1, "tp": "VC"}]` w
   }
 }
 ```
- * `mime`: data type, such as 'video/webm'.
+ * `mime`: data type of the video, such as 'video/webm'.
  * `val`: optional in-band video data: base64-encoded video bits, usually not present (null).
  * `ref`: optional reference to an out-of-band video data. Either `val` or `ref` must be present.
- * `preview`: optional base64-encoded screencapture (image) from the video.
- * `preref`: optional reference to an out-of-band screencapture (image) from the video.
- * `premime`: optional data type of the screencapture image; if missing should be assumed to be 'image/jpeg'.
- * `width`, `height`: linear dimensions of the video in pixels.
+ * `preview`: optional base64-encoded screencapture image from the video (poster).
+ * `preref`: optional reference to an out-of-band screencapture image from the video (poster).
+ * `premime`: data type of the optional screencapture image (poster); assumed 'image/jpeg' if missing.
+ * `width`, `height`: linear dimensions of the video and poster in pixels.
  * `duration`: duration of the video in milliseconds.
  * `name`: optional name of the original file.
  * `size`: optional size of the file in bytes.
