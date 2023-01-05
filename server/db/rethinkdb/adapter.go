@@ -848,7 +848,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		q := rdb.DB(a.dbName).Table("users").Get(uid.String())
+		q := rdb.DB(a.dbName).Table("users").GetAll(uid.String())
 
 		// Unlink user's attachment.
 		if err = a.decFileUseCounter(q); err != nil {
