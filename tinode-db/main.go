@@ -1,6 +1,7 @@
 package main
 
 import (
+	crand "crypto/rand"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
@@ -51,24 +52,25 @@ type DefAccess struct {
 
 /*
 User object in data.json
-   "createdAt": "-140h",
-   "email": "alice@example.com",
-   "tel": "17025550001",
-   "passhash": "alice123",
-   "private": {"comment": "some comment 123"},
-   "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
-   "state": "ok",
-   "authLevel": "auth",
-   "status": {
-     "text": "DND"
-   },
-   "username": "alice",
-	"tags": ["tag1"],
-	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tob@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
-  }
+
+	   "createdAt": "-140h",
+	   "email": "alice@example.com",
+	   "tel": "17025550001",
+	   "passhash": "alice123",
+	   "private": {"comment": "some comment 123"},
+	   "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
+	   "state": "ok",
+	   "authLevel": "auth",
+	   "status": {
+	     "text": "DND"
+	   },
+	   "username": "alice",
+		"tags": ["tag1"],
+		"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+			"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tob@example.com",
+			"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+			"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+	  }
 */
 type User struct {
 	CreatedAt   string      `json:"createdAt"`
@@ -89,11 +91,11 @@ type User struct {
 /*
 GroupTopic object in data.json
 
-   "createdAt": "-128h",
-   "name": "*ABC",
-   "owner": "carol",
-   "channel": true,
-   "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
+	"createdAt": "-128h",
+	"name": "*ABC",
+	"owner": "carol",
+	"channel": true,
+	"public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
 */
 type GroupTopic struct {
 	CreatedAt    string    `json:"createdAt"`
@@ -110,13 +112,13 @@ type GroupTopic struct {
 /*
 GroupSub object in data.json
 
- "createdAt": "-112h",
- "private": "My super cool group topic",
- "topic": "*ABC",
- "user": "alice",
- "asChan: false,
- "want": "JRWPSA",
- "have": "JRWP"
+	"createdAt": "-112h",
+	"private": "My super cool group topic",
+	"topic": "*ABC",
+	"user": "alice",
+	"asChan: false,
+	"want": "JRWPSA",
+	"have": "JRWP"
 */
 type GroupSub struct {
 	CreatedAt string   `json:"createdAt"`
@@ -133,8 +135,10 @@ P2PUser topic in data.json
 
 "createdAt": "-117h",
 "users": [
-  {"name": "eve", "private": {"comment":"ho ho"}, "want": "JRWP", "have": "N"},
-  {"name": "alice", "private": {"comment": "ha ha"}}
+
+	{"name": "eve", "private": {"comment":"ho ho"}, "want": "JRWP", "have": "N"},
+	{"name": "alice", "private": {"comment": "ha ha"}}
+
 ]
 */
 type P2PUser struct {
@@ -172,12 +176,17 @@ func genTopicName() string {
 func getPassword(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/.+?=&"
 
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+	rbuf := make([]byte, n)
+	if _, err := crand.Read(rbuf); err != nil {
+		log.Fatalln("Unable to generate password", err)
 	}
 
-	return string(b)
+	passwd := make([]byte, n)
+	for i, r := range rbuf {
+		passwd[i] = letters[int(r)%len(letters)]
+	}
+
+	return string(passwd)
 }
 
 func main() {
@@ -185,7 +194,7 @@ func main() {
 	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
 	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
 	addRoot := flag.String("add_root", "", "create ROOT user")
-	makeRoot := flag.String("make_root", "", "promote ordinary user to root")
+	// makeRoot := flag.String("make_root", "", "promote ordinary user to root")
 	datafile := flag.String("data", "", "name of file with sample data to load")
 	conffile := flag.String("config", "./tinode.conf", "config of the database connection")
 
