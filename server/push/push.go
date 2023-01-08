@@ -79,6 +79,8 @@ type Payload struct {
 	Content interface{} `json:"content,omitempty"`
 	// State of the video call (available in video call messages only).
 	Webrtc string `json:"webrtc,omitempty"`
+	// If call is audio-only (available only if Webrtc is present).
+	AudioOnly bool `json:"aonly,omitempty"`
 	// Seq id the message is supposed to replace.
 	Replace string `json:"replace,omitempty"`
 

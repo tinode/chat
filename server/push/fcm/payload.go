@@ -62,6 +62,9 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 		if pl.Webrtc != "" {
 			data["webrtc"] = pl.Webrtc
+			if pl.AudioOnly {
+				data["aonly"] = "true"
+			}
 			// Video call push notifications are silent.
 			data["silent"] = "true"
 		}

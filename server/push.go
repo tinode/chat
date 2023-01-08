@@ -45,6 +45,8 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 	}
 	if webrtc, found := data.Head["webrtc"].(string); found {
 		receipt.Payload.Webrtc = webrtc
+		audioOnly, _ := data.Head["aonly"].(bool)
+		receipt.Payload.AudioOnly = audioOnly
 	}
 	if replace, found := data.Head["replace"].(string); found {
 		receipt.Payload.Replace = replace
