@@ -120,6 +120,7 @@ When you register a new account you are asked for an email address to send valid
 * Location and contacts sharing.
 * Previews of attached documents, links.
 * Recording video messages.
+* Better emoji support.
 * Attaching music/audio other than voice messages.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
