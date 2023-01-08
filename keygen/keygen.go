@@ -15,20 +15,22 @@ import (
 
 // Generate API key
 // Composition:
-//  [1:algorithm version][4:deprecated (used to be application ID)][2:key sequence][1:isRoot][16:signature] = 24 bytes
+//
+//	[1:algorithm version][4:deprecated (used to be application ID)][2:key sequence][1:isRoot][16:signature] = 24 bytes
+//
 // convertible to base64 without padding.
 // All integers are little-endian.
 func main() {
 	version := flag.Int("sequence", 1, "Sequential number of the API key")
 	isRoot := flag.Int("isroot", 0, "Is this a root API key?")
 	apikey := flag.String("validate", "", "API key to validate")
-	hmacSalt := flag.String("salt", "auto", "HMAC salt, 32 random bytes base64 encoded or 'auto' to generate salt")
+	hmacSalt := flag.String("salt", "", "HMAC salt, 32 random bytes base64-encoded")
 
 	flag.Parse()
 
 	if *apikey != "" {
-		if *hmacSalt == "auto" {
-			log.Println("Error: Cannot validate the key with 'auto' HMAC salt")
+		if *hmacSalt == "" {
+			log.Println("Error: must provide HMAC salt for key validation")
 			os.Exit(1)
 		}
 		os.Exit(validate(*apikey, *hmacSalt))
@@ -56,7 +58,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 	var data [APIKEY_LENGTH]byte
 	var hmacSalt []byte
 
-	if hmacSaltB64 == "auto" {
+	if hmacSaltB64 == "" {
 		hmacSalt = make([]byte, 32)
 		_, err := rand.Read(hmacSalt)
 		if err != nil {
@@ -100,7 +102,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 		strIsRoot = "ordinary"
 	}
 
-	fmt.Printf("API key v%d seq%d [%s]: %s\nUsed HMAC salt: %s\n", 1, sequence, strIsRoot,
+	fmt.Printf("API key v%d seq%d [%s]: %s\nHMAC salt: %s\n", 1, sequence, strIsRoot,
 		base64.URLEncoding.EncodeToString(data[:]), hmacSaltB64)
 
 	return 0

@@ -82,8 +82,8 @@ When you register a new account you are asked for an email address to send valid
   * [Web](https://github.com/tinode/webapp/) (React.js)
   * Scriptable [command line](tn-cli/) (Python)
 * User features:
-  * One-on-one and group messaging. Voice messages.
-  * Video calls.
+  * One-on-one and group messaging.
+  * Video and voice calls. Voice messages.
   * Channels with unlimited number of read-only subscribers.
   * All chats are synchronized across all devices.
   * Granular access control with permissions for various actions.
@@ -95,6 +95,7 @@ When you register a new account you are asked for an email address to send valid
   * Most recent message preview in contact list.
   * Server-generated presence notifications for people, group chats.
   * Forwarding and replying to messages.
+  * Editing sent messages.
 * Administration:
   * Granular access control with permissions for various actions.
   * Support for custom authentication backends.
@@ -117,10 +118,9 @@ When you register a new account you are asked for an email address to send valid
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * Location and contacts sharing.
-* Previews of attached videos, documents, links.
+* Previews of attached documents, links.
 * Recording video messages.
-* Attaching music/audio.
-* Audio-only calls.
+* Attaching music/audio other than voice messages.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
