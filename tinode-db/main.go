@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
@@ -193,8 +194,8 @@ func main() {
 	reset := flag.Bool("reset", false, "force database reset")
 	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
 	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
-	addRoot := flag.String("add_root", "", "create ROOT user")
-	// makeRoot := flag.String("make_root", "", "promote ordinary user to root")
+	addRoot := flag.String("add_root", "", "create ROOT user, auth scheme 'basic'")
+	makeRoot := flag.String("make_root", "", "promote ordinary user to ROOT, auth scheme 'basic'")
 	datafile := flag.String("data", "", "name of file with sample data to load")
 	conffile := flag.String("config", "./tinode.conf", "config of the database connection")
 
@@ -297,36 +298,51 @@ func main() {
 		log.Println("Sample data ignored.")
 	}
 
-	// Check if add_root flag is present (even if empty).
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "add_root" {
-			var uname, password string
-			if *addRoot == "" {
-				uname = "root"
-				password = getPassword(10)
-			} else {
-				parts := strings.Split(*addRoot, ":")
-				uname = parts[0]
-				if len(parts) == 1 || parts[1] == "" {
-					password = getPassword(10)
-				} else {
-					password = parts[1]
-				}
-			}
-
-			var user types.User
-			user.Public = &card{
-				Fn: "ROOT",
-			}
-			store.Users.Create(&user, nil)
-
-			if _, err := store.Users.Create(&user, nil); err != nil {
-				log.Fatalln("Failed to create ROOT user:", err)
-			}
-			adapter := store.Store.GetAdapter()
-			log.Printf("Root user created %s:%s", uname, password)
+	// Promote existing user account to root
+	if *makeRoot != "" {
+		adapter := store.Store.GetAdapter()
+		userId := types.ParseUserId(*makeRoot)
+		if userId.IsZero() {
+			log.Fatalf("Must specify a valid user ID '%s' to promote to ROOT", *makeRoot)
 		}
-	})
+		if err := adapter.AuthUpdRecord(userId, "basic", "", auth.LevelRoot, nil, time.Time{}); err != nil {
+			log.Fatalln("Failed to promote user to ROOT", err)
+		}
+		log.Printf("User '%s' promoted to ROOT", *makeRoot)
+	}
+
+	// Create root user account.
+	if *addRoot != "" {
+		var password string
+		parts := strings.Split(*addRoot, ":")
+		uname := parts[0]
+		if len(uname) < 3 {
+			log.Fatalf("Failed to create a ROOT user: username '%s' is too short", uname)
+		}
+
+		if len(parts) == 1 || parts[1] == "" {
+			password = getPassword(10)
+		} else {
+			password = parts[1]
+		}
+
+		var user types.User
+		user.Public = &card{
+			Fn: "ROOT " + uname,
+		}
+		store.Users.Create(&user, nil)
+
+		if _, err := store.Users.Create(&user, nil); err != nil {
+			log.Fatalln("Failed to create ROOT user:", err)
+		}
+
+		adapter := store.Store.GetAdapter()
+		if err := adapter.AuthUpdRecord(user.Uid(), "basic", "", auth.LevelRoot, nil, time.Time{}); err != nil {
+			store.Users.Delete(user.Uid(), true)
+			log.Fatalln("Failed to create ROOT user:", err)
+		}
+		log.Printf("ROOT user created: '%s:%s'", uname, password)
+	}
 
 	log.Println("All done.")
 

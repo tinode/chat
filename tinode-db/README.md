@@ -26,7 +26,8 @@ Command line parameters:
  - `--no_init`: check that database exists but don't create it if missing.
  - `--data=FILENAME`: fill `tinode` database with data from the provided file. See [data.json](data.json).
  - `--config=FILENAME`: load configuration from FILENAME. Example config is included as [tinode.conf](tinode.conf).
-
+ - `--make_root=USER_ID`: promote an existing user to root user, `USER_ID` of the form `usrAbCDef123`.
+ - `--add_root=USERNAME[:PASSWORD]`: create a new user account and make it root; if password is missing, a strong password will be generated.
 
 Configuration file options:
  - `uid_key` is a base64-encoded 16 byte XTEA encryption key to (weakly) encrypt object IDs so they don't appear sequential. You probably want to use your own key in production.
