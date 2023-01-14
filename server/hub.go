@@ -200,6 +200,14 @@ func (h *Hub) run() {
 				go topicInit(t, join, h)
 			} else {
 				// Topic found.
+				if t.isInactive() {
+					// Topic is either not ready or being deleted.
+					if join.sess.inflightReqs != nil {
+						join.sess.inflightReqs.Done()
+					}
+					join.sess.queueOut(ErrLockedReply(join, join.Timestamp))
+					continue
+				}
 				// Topic will check access rights and send appropriate {ctrl}
 				select {
 				case t.reg <- join:
@@ -383,7 +391,6 @@ func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 
 // 2. Topic is just being unregistered (topic is going offline)
 // 2.1 Unregister it with no further action
-//
 func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, reason int) error {
 	now := types.TimeNow()
 
