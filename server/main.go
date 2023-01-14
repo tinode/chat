@@ -60,9 +60,9 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.20"
+	currentVersion = "0.21"
 	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.17"
+	minSupportedVersion = "0.18"
 
 	// idleSessionTimeout defines duration of being idle before terminating a session.
 	idleSessionTimeout = time.Second * 55
@@ -110,13 +110,18 @@ const (
 )
 
 // Build version number defined by the compiler:
-// 		-ldflags "-X main.buildstamp=value_to_assign_to_buildstamp"
+//
+//	-ldflags "-X main.buildstamp=value_to_assign_to_buildstamp"
+//
 // Reported to clients in response to {hi} message.
 // For instance, to define the buildstamp as a timestamp of when the server was built add a
 // flag to compiler command line:
-// 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+//
+//	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+//
 // or to set it to git tag:
-// 		-ldflags "-X main.buildstamp=`git describe --tags`"
+//
+//	-ldflags "-X main.buildstamp=`git describe --tags`"
 var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
