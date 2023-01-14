@@ -202,6 +202,9 @@ func (h *Hub) run() {
 				// Topic found.
 				if t.isInactive() {
 					// Topic is either not ready or being deleted.
+					if join.sess.inflightReqs != nil {
+						join.sess.inflightReqs.Done()
+					}
 					join.sess.queueOut(ErrLockedReply(join, join.Timestamp))
 					continue
 				}
