@@ -151,6 +151,8 @@ var globals struct {
 
 	// Credential validators.
 	validators map[string]credValidator
+	// Credential validator config to pass to clients.
+	validatorClientConfig string
 	// Validators required for each auth level.
 	authValidators map[auth.Level][]string
 
@@ -458,22 +460,13 @@ func main() {
 		for _, req := range vconf.Required {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
-				if req != "" {
-					logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
-				}
-				// Skip empty string
-				continue
+				logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
 			}
 			reqLevels = append(reqLevels, lvl)
 			if globals.authValidators == nil {
 				globals.authValidators = make(map[auth.Level][]string)
 			}
 			globals.authValidators[lvl] = append(globals.authValidators[lvl], name)
-		}
-
-		if len(reqLevels) == 0 {
-			// Ignore validator with empty levels.
-			continue
 		}
 
 		if val := store.Store.GetValidator(name); val == nil {
@@ -490,7 +483,14 @@ func main() {
 		}
 	}
 
-	// Partially restricted tag namespaces
+	// Create a validator config string for clients, like 'auth:tel;anon:email,tel'.
+	var validatorClientConfig []string
+	for lvl, names := range globals.authValidators {
+		validatorClientConfig = append(validatorClientConfig, lvl.String()+":"+strings.Join(names, ","))
+	}
+	globals.validatorClientConfig = strings.Join(validatorClientConfig, ";")
+
+	// Partially restricted tag namespaces.
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
 		if strings.Contains(tag, ":") {
