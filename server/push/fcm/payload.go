@@ -253,8 +253,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		}
 	}
 
-	_, videoCall := data["webrtc"]
-	if videoCall {
+	if _, videoCall := data["webrtc"]; videoCall {
 		timeToLive = "0s"
 	}
 

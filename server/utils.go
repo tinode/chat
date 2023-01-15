@@ -228,9 +228,8 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id, topic string, ts time.Time,
-	params map[string]interface{}) *ServerComMessage {
-	return decodeStoreErrorExplicitTs(err, id, topic, ts, ts, params)
+func decodeStoreError(err error, id string, ts time.Time, params map[string]interface{}) *ServerComMessage {
+	return decodeStoreErrorExplicitTs(err, id, "", ts, ts, params)
 }
 
 func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingReqTs time.Time,
@@ -837,7 +836,7 @@ func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
 }
 
 // netListener creates net.Listener for tcp and unix domains:
-// if addr is is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
+// if addr is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
 func netListener(addr string) (net.Listener, error) {
 	addrParts := strings.SplitN(addr, ":", 2)
 	if len(addrParts) == 2 && addrParts[0] == "unix" {

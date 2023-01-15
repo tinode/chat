@@ -133,26 +133,28 @@ func initVideoCalls(jsconfig json.RawMessage) error {
 		globals.iceServers = config.ICEServers
 	} else if config.ICEServersFile != "" {
 		var iceConfig []iceServer
-		if file, err := os.Open(config.ICEServersFile); err != nil {
+		file, err := os.Open(config.ICEServersFile)
+		if err != nil {
 			return fmt.Errorf("failed to read ICE config: %w", err)
-		} else {
-			jr := jcr.New(file)
-			if err = json.NewDecoder(jr).Decode(&iceConfig); err != nil {
-				switch jerr := err.(type) {
-				case *json.UnmarshalTypeError:
-					lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-					return fmt.Errorf("unmarshall error in ICE config in %s at %d:%d (offset %d bytes): %w",
-						jerr.Field, lnum, cnum, jerr.Offset, jerr)
-				case *json.SyntaxError:
-					lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-					return fmt.Errorf("syntax error in config file at %d:%d (offset %d bytes): %w",
-						lnum, cnum, jerr.Offset, jerr)
-				default:
-					return fmt.Errorf("failed to parse config file: %w", err)
-				}
-			}
-			file.Close()
 		}
+
+		jr := jcr.New(file)
+		if err = json.NewDecoder(jr).Decode(&iceConfig); err != nil {
+			switch jerr := err.(type) {
+			case *json.UnmarshalTypeError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				return fmt.Errorf("unmarshall error in ICE config in %s at %d:%d (offset %d bytes): %w",
+					jerr.Field, lnum, cnum, jerr.Offset, jerr)
+			case *json.SyntaxError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				return fmt.Errorf("syntax error in config file at %d:%d (offset %d bytes): %w",
+					lnum, cnum, jerr.Offset, jerr)
+			default:
+				return fmt.Errorf("failed to parse config file: %w", err)
+			}
+		}
+		file.Close()
+
 		globals.iceServers = iceConfig
 	}
 
@@ -249,8 +251,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 
 	asUid := types.ParseUserId(msg.AsUser)
 
-	_, userFound := t.perUser[asUid]
-	if !userFound {
+	if _, userFound := t.perUser[asUid]; !userFound {
 		// User not found in topic.
 		logs.Warn.Printf("topic[%s]: could not find user %s", t.name, asUid.UserId())
 		return
@@ -373,7 +374,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	if from != "" && len(t.currentCall.parties) == 2 {
 		// This is a call in progress.
 		replaceWith = constCallMsgFinished
-		callDuration = time.Now().Sub(t.currentCall.acceptedAt).Milliseconds()
+		callDuration = time.Since(t.currentCall.acceptedAt).Milliseconds()
 	} else {
 		if from != "" {
 			// User originated hang-up.

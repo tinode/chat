@@ -169,7 +169,7 @@ func executeTemplate(template *textt.Template, params map[string]interface{}) (*
 				return "", err
 			}
 		}
-		return string(buffer.Bytes()), nil
+		return buffer.String(), nil
 	}
 
 	if content.subject, err = execComponent(emailSubject); err != nil {

@@ -276,7 +276,6 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 	if stopic != nil && len(subs) == 2 {
 		// Case 4.
 		for i := 0; i < 2; i++ {
-
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
 				// Adapter has already swapped the state, public, defaultAccess, lastSeen values.
@@ -373,7 +372,6 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 		// a. requester is starting a new topic
 		// b. requester's subscription is missing: deleted or creation failed
 		if sub1 == nil {
-
 			// Set user1's ModeGiven from user2's default values
 			userData.modeGiven = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,

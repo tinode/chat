@@ -1280,17 +1280,15 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 					continue
 				}
 			}
-		} else {
+		} else if pssd.isChanSub && types.IsChannel(sess.sid) {
 			// If it's a chnX multiplexing session, check if there's a corresponding
 			// grpX multiplexing session as we don't want to send the message to both.
-			if pssd.isChanSub && types.IsChannel(sess.sid) {
-				grpSid := types.ChnToGrp(sess.sid)
-				if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
-					// If grpX multiplexing session's attached to topic, skip this chnX session
-					// (message will be routed to the topic proxy via the grpX session).
-					if _, attached := t.sessions[grpSess]; attached {
-						continue
-					}
+			grpSid := types.ChnToGrp(sess.sid)
+			if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
+				// If grpX multiplexing session's attached to topic, skip this chnX session
+				// (message will be routed to the topic proxy via the grpX session).
+				if _, attached := t.sessions[grpSess]; attached {
+					continue
 				}
 			}
 		}

@@ -524,7 +524,7 @@ type User struct {
 // AccessMode is a definition of access mode bits.
 type AccessMode uint
 
-// Various access mode constants
+// Various access mode constants.
 const (
 	ModeJoin    AccessMode = 1 << iota // user can join, i.e. {sub} (J:1)
 	ModeRead                           // user can receive broadcasts ({data}, {info}) (R:2)
@@ -534,39 +534,38 @@ const (
 	ModeShare                          // user can invite new members (S:0x20, 32)
 	ModeDelete                         // user can hard-delete messages (D:0x40, 64)
 	ModeOwner                          // user is the owner (O:0x80, 128) - full access
-	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100, 256),
-	// to make it different from ModeNone
+	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100, 256), to make it different from ModeNone.
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N:0)
 
-	// Normal user's access to a topic ("JRWPS", 47, 0x2F)
+	// Normal user's access to a topic ("JRWPS", 47, 0x2F).
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
-	// User's subscription to 'me' and 'fnd' ("JPS", 41, 0x29)
+	// User's subscription to 'me' and 'fnd' ("JPS", 41, 0x29).
 	ModeCSelf AccessMode = ModeJoin | ModePres | ModeShare
-	// Owner's subscription to a generic topic ("JRWPASDO", 255, 0xFF)
+	// Owner's subscription to a generic topic ("JRWPASDO", 255, 0xFF).
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
-	// Default P2P access mode ("JRWPA", 31, 0x1F)
+	// Default P2P access mode ("JRWPA", 31, 0x1F).
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
 	// Default Auth access mode for a user ("JRWPAS", 63, 0x3F).
 	ModeCAuth AccessMode = ModeCP2P | ModeCPublic
-	// Read-only access to topic ("JR", 3)
+	// Read-only access to topic ("JR", 3).
 	ModeCReadOnly = ModeJoin | ModeRead
-	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F)
+	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F).
 	ModeCSys = ModeJoin | ModeRead | ModeWrite | ModePres | ModeDelete
-	// Channel publisher: person authorized to publish content; no J: by invitation only ("RWPD", 78, 0x4E)
+	// Channel publisher: person authorized to publish content; no J: by invitation only ("RWPD", 78, 0x4E).
 	ModeCChnWriter = ModeRead | ModeWrite | ModePres | ModeShare
 	// Reader's access mode to a channel (JRP, 11, 0xB).
 	ModeCChnReader = ModeJoin | ModeRead | ModePres
 
-	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90)
+	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90).
 	ModeCAdmin = ModeOwner | ModeApprove
-	// Sharer: flags which define user who can be notified of access mode changes ("OAS", dec: 176, hex: 0xB0)
+	// Sharer: flags which define user who can be notified of access mode changes ("OAS", dec: 176, hex: 0xB0).
 	ModeCSharer = ModeCAdmin | ModeShare
 
-	// Invalid mode to indicate an error
+	// Invalid mode to indicate an error.
 	ModeInvalid AccessMode = 0x100000
 
-	// All possible valid bits (excluding ModeInvalid and ModeUnset) = 0xFF, 255
+	// All possible valid bits (excluding ModeInvalid and ModeUnset) = 0xFF, 255.
 	ModeBitmask AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 )
 
@@ -1269,9 +1268,9 @@ const (
 	TopicCatMe TopicCat = iota
 	// TopicCatFnd is a value denoting 'fnd' topic.
 	TopicCatFnd
-	// TopicCatP2P is a a value denoting 'p2p topic.
+	// TopicCatP2P is a value denoting 'p2p topic.
 	TopicCatP2P
-	// TopicCatGrp is a a value denoting group topic.
+	// TopicCatGrp is a value denoting group topic.
 	TopicCatGrp
 	// TopicCatSys is a constant indicating a system topic.
 	TopicCatSys

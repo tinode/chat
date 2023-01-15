@@ -235,7 +235,7 @@ type Plugin struct {
 
 func pluginsInit(configString json.RawMessage) {
 	// Check if any plugins are defined
-	if configString == nil || len(configString) == 0 {
+	if len(configString) == 0 {
 		return
 	}
 

@@ -36,7 +36,9 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 	httpdone := make(chan bool)
 
 	server := &http.Server{
-		Handler: mux,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    1 << 14,
 	}
 
 	server.TLSConfig = tlfConf

@@ -861,7 +861,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var err error
 		rec, _, err = store.Store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token, s.remoteAddr)
 		if err != nil {
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.Timestamp,
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.Timestamp,
 				map[string]interface{}{"what": "auth"}))
 			logs.Warn.Println("s.acc: invalid token", err, s.sid)
 			return
@@ -883,7 +883,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	if msg.Login.Scheme == "reset" {
 		if err := s.authSecretReset(msg.Login.Secret); err != nil {
-			s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		} else {
 			s.queueOut(InfoAuthReset(msg.Id, msg.Timestamp))
 		}
@@ -906,7 +906,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	rec, challenge, err := handler.Authenticate(msg.Login.Secret, s.remoteAddr)
 	if err != nil {
-		resp := decodeStoreError(err, msg.Id, "", msg.Timestamp, nil)
+		resp := decodeStoreError(err, msg.Id, msg.Timestamp, nil)
 		if resp.Ctrl.Code >= 500 {
 			// Log internal errors
 			logs.Warn.Println("s.login: internal", err, s.sid)
@@ -925,7 +925,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	if err != nil {
 		logs.Warn.Println("s.login: user state check failed", rec.Uid, err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		return
 	}
 
@@ -946,7 +946,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	if err != nil {
 		logs.Warn.Println("s.login: failed to validate credentials:", err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 	} else {
 		s.queueOut(s.onLogin(msg.Id, msg.Timestamp, rec, missing))
 	}

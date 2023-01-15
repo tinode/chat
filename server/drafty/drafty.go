@@ -103,7 +103,7 @@ type plainTextState struct {
 }
 
 // PlainText converts drafty document to plain text with some basic markdown-like formatting.
-// Deprecated. Use Preview for new development.
+// Deprecated: use Preview for new development.
 func PlainText(content interface{}) (string, error) {
 	doc, err := decodeAsDrafty(content)
 	if err != nil {

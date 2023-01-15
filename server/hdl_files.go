@@ -48,7 +48,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	// Check if media handler redirects or adds headers.
 	headers, statusCode, err := mh.Headers(req, true)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 
 	fd, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
 	}
 
@@ -159,7 +159,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, msgID, now, nil), err)
 		return
 	}
 	if challenge != nil {
@@ -176,7 +176,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	headers, statusCode, err := mh.Headers(req, false)
 	if err != nil {
 		logs.Info.Println("Headers check failed", err)
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
 	}
 
@@ -242,7 +242,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
-		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, msgID, now, nil), err)
 		return
 	}
 
@@ -251,7 +251,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		logs.Info.Println("Failed to finalize upload", file, "key", fdef.Location, err)
 		// Best effort cleanup.
 		mh.Delete([]string{fdef.Location})
-		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+		writeHttpResponse(decodeStoreError(err, msgID, now, nil), err)
 		return
 	}
 
