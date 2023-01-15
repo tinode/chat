@@ -19,9 +19,10 @@ import (
 
 // A simple implementation of histogram expvar.Var.
 // `Bounds` specifies the histogram buckets as follows (length = len(bounds)):
-//     (-inf, Bounds[i]) for i = 0
-//     [Bounds[i-1], Bounds[i]) for 0 < i < length
-//     [Bounds[i-1], +inf) for i = length
+//
+//	(-inf, Bounds[i]) for i = 0
+//	[Bounds[i-1], Bounds[i]) for 0 < i < length
+//	[Bounds[i-1], +inf) for i = length
 type histogram struct {
 	Count          int64     `json:"count"`
 	Sum            float64   `json:"sum"`
