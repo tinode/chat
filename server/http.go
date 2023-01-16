@@ -39,6 +39,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       30 * time.Second,
+		WriteTimeout:      90 * time.Second,
 		MaxHeaderBytes:    1 << 14,
 	}
 
