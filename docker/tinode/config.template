@@ -98,11 +98,18 @@
 		"tel": {
 			"add_to_tags": true,
 			"config": {
-				"template": "./templ/sms-validation.templ",
+				"validation_templ": "./templ/sms-validation-{{.Language}}.templ",
+				"reset_secret_templ": "./templ/sms-password-reset-{{.Language}}.templ",
 				"max_retries": 4,
 				"debug_response": "$DEBUG_TEL_VERIFICATION_CODE"
 			}
 		}
+	},
+
+	"acc_gc_config": {
+		"gc_period": 3600,
+		"gc_block_size": 10,
+		"gc_min_account_age": 48
 	},
 
 	"push": [

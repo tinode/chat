@@ -42,6 +42,7 @@ x-tinode-env-vars: &tinode-env-vars
   "FCM_PROJECT_ID": "tinode-1000"
   "FCM_SENDER_ID": 114126160546
   "FCM_VAPID_KEY": "BOgQVPOMzIMXUpsYGpbVkZoEBc0ifKY_f2kSU5DNDGYI6i6CoKqqxDd7w7PJ3FaGRBgVGJffldETumOx831jl58"
+  "FCM_MEASUREMENT_ID": "G-WNJDQR34L3"
   # iOS app universal links configuration.
   # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
   # Video calls

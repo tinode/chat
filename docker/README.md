@@ -184,6 +184,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `FCM_SENDER_ID` | string |  | Firebase FCM sender ID; required for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
+| `FCM_MEASUREMENT_ID` | string |  | Google Analytics ID of the form `G-123ABCD789`. |
 | `ICE_SERVERS_FILE` | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
