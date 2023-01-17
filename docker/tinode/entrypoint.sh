@@ -76,7 +76,8 @@ const FIREBASE_INIT = {
   appId: "$FCM_APP_ID",
   messagingSenderId: "$FCM_SENDER_ID",
   projectId: "$FCM_PROJECT_ID",
-  messagingVapidKey: "$FCM_VAPID_KEY"
+  messagingVapidKey: "$FCM_VAPID_KEY",
+  measurementId: "$FCM_MEASUREMENT_ID"
 };
 EOM
 else

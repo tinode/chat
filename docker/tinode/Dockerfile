@@ -9,9 +9,9 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM alpine:3.14
+FROM alpine:3.17
 
-ARG VERSION=0.19
+ARG VERSION=0.21
 ENV VERSION=$VERSION
 ARG BINVERS=$VERSION
 
@@ -89,6 +89,7 @@ ENV FCM_APP_ID=
 ENV FCM_SENDER_ID=
 ENV FCM_PROJECT_ID=
 ENV FCM_VAPID_KEY=
+ENV FCM_MEASUREMENT_ID=
 
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true

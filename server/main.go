@@ -152,7 +152,7 @@ var globals struct {
 	// Credential validators.
 	validators map[string]credValidator
 	// Credential validator config to pass to clients.
-	validatorClientConfig string
+	validatorClientConfig map[string][]string
 	// Validators required for each auth level.
 	authValidators map[auth.Level][]string
 
@@ -483,12 +483,13 @@ func main() {
 		}
 	}
 
-	// Create a validator config string for clients, like 'auth:tel;anon:email,tel'.
-	var validatorClientConfig []string
-	for lvl, names := range globals.authValidators {
-		validatorClientConfig = append(validatorClientConfig, lvl.String()+":"+strings.Join(names, ","))
+	// Create credential validator config for clients.
+	if len(globals.authValidators) > 0 {
+		globals.validatorClientConfig = make(map[string][]string)
+		for key, val := range globals.authValidators {
+			globals.validatorClientConfig[key.String()] = val
+		}
 	}
-	globals.validatorClientConfig = strings.Join(validatorClientConfig, ";")
 
 	// Partially restricted tag namespaces.
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
