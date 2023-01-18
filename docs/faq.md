@@ -60,7 +60,7 @@ See more info at https://github.com/tinode/ios/#push_notifications
 ### Q: How to create a `root` user?<br/>
 **A**: Starting with Tinode version 0.18 the `root` access can be granted to a user by running the following command:
 ```sh
-./tinode-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
+./init-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
 ```
 Where `usrAbcDef123` is the ID of the user to update.
 
