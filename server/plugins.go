@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

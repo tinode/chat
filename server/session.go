@@ -581,6 +581,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.Id = msg.Acc.Id
 
 	case msg.Note != nil:
+		// If user is not authenticated or version not set the {note} is silently ignored.
 		handler = s.note
 		msg.Original = msg.Note.Topic
 		uaRefresh = true
