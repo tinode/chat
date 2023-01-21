@@ -16,9 +16,11 @@ USE tinode;
 
 
 CREATE TABLE kvmeta(
-	`key` CHAR(32), 
+	`key` CHAR(64),
+	createdat DATETIME(3),
 	`value` TEXT,
-	PRIMARY KEY(`key`)
+	PRIMARY KEY(`key`),
+	INDEX kvmeta_createdat_key(createdat, `key`)
 );
 
 INSERT INTO kvmeta(`key`, `value`) VALUES("version", "100");
@@ -34,7 +36,7 @@ CREATE TABLE users(
 	useragent 	VARCHAR(255) DEFAULT '',
 	public 		JSON,
 	tags		JSON, -- Denormalized array of tags
-	
+
 	PRIMARY KEY(id),
 	INDEX users_state_stateat(state, stateat)
 );
@@ -44,7 +46,7 @@ CREATE TABLE usertags(
 	id 		INT NOT NULL AUTO_INCREMENT,
 	userid 	BIGINT NOT NULL,
 	tag 	VARCHAR(96) NOT NULL,
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
 	INDEX usertags_tag(tag),
@@ -60,7 +62,7 @@ CREATE TABLE devices(
 	platform	VARCHAR(32),
 	lastseen 	DATETIME NOT NULL,
 	lang 		VARCHAR(8),
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX devices_hash(hash)
@@ -75,7 +77,7 @@ CREATE TABLE auth(
 	authlvl	SMALLINT NOT NULL,
 	secret 	VARCHAR(255) NOT NULL,
 	expires DATETIME,
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX auth_userid_scheme(userid, scheme),
@@ -99,7 +101,7 @@ CREATE TABLE topics(
 	delid		INT DEFAULT 0,
 	public		JSON,
 	tags		JSON, -- Denormalized array of tags
-	
+
 	PRIMARY KEY(id),
 	UNIQUE INDEX topics_name (name),
 	INDEX topics_owner(owner),
@@ -111,7 +113,7 @@ CREATE TABLE topictags(
 	id 		INT NOT NULL AUTO_INCREMENT,
 	topic 	CHAR(25) NOT NULL,
 	tag 	VARCHAR(96) NOT NULL,
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	INDEX topictags_tag (tag),
@@ -132,7 +134,7 @@ CREATE TABLE subscriptions(
 	modewant	CHAR(8),
 	modegiven	CHAR(8),
 	private		JSON,
-	
+
 	PRIMARY KEY(id)	,
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX subscriptions_topic_userid(topic, userid),
@@ -152,7 +154,7 @@ CREATE TABLE messages(
 	`from` 		BIGINT NOT NULL,
 	head 		JSON,
 	content 	JSON,
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	UNIQUE INDEX messages_topic_seqid (topic, seqid)
@@ -166,13 +168,13 @@ CREATE TABLE dellog(
 	delid		INT NOT NULL,
 	low			INT NOT NULL,
 	hi			INT NOT NULL,
-	
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	# For getting the list of deleted message ranges
 	INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
 	# Used when getting not-yet-deleted messages(messages LEFT JOIN dellog)
-	INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi), 
+	INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi),
 	# Used when deleting a user
 	INDEX dellog_deletedfor(deletedfor)
 );
@@ -190,7 +192,7 @@ CREATE TABLE credentials(
 	resp		VARCHAR(255) NOT NULL,
 	done		TINYINT NOT NULL DEFAULT 0,
 	retries		INT NOT NULL DEFAULT 0,
-		
+
 	PRIMARY KEY(id),
 	UNIQUE credentials_uniqueness(synthetic),
 	FOREIGN KEY(userid) REFERENCES users(id),
@@ -206,7 +208,7 @@ CREATE TABLE fileuploads(
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
-	
+
 	PRIMARY KEY(id),
 	INDEX fileuploads_status(status)
 );

@@ -112,8 +112,9 @@ var Store PersistentStorageInterface
 type storeObj struct{}
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
-// 	 name - name of the adapter rquested in the config file
-//   jsonconf - configuration string
+//
+//		 name - name of the adapter rquested in the config file
+//	  jsonconf - configuration string
 func (storeObj) Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
@@ -1052,6 +1053,43 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 	return nil
 }
 
+// FilePersistenceInterface is an interface wchich defines methods used for file handling (records or uploaded files).
+type PersistentCacheInterface interface {
+	// Get reads a persistent cache entry.
+	Get(key string) (string, error)
+	// Upsert creates or updates a persistent cache entry.
+	Upsert(key string, value string, failOnDuplicate bool) error
+	// Delete deletes a single persistent cache entry.
+	Delete(key string) error
+	// Expire expires older entries with the specified key prefix.
+	Expire(keyPrefix string, olderThan time.Time) error
+}
+
+// pcacheMapper is concrete type which implements FilePersistenceInterface.
+type pcacheMapper struct{}
+
+var PCache PersistentCacheInterface
+
+// Get reads a persistent cache entry.
+func (pcacheMapper) Get(key string) (string, error) {
+	return adp.PCacheGet(key)
+}
+
+// Upsert creates or updates a persistent cache entry.
+func (pcacheMapper) Upsert(key string, value string, failOnDuplicate bool) error {
+	return adp.PCacheUpsert(key, value, failOnDuplicate)
+}
+
+// Delete deletes a single persistent cache entry.
+func (pcacheMapper) Delete(key string) error {
+	return adp.PCacheDelete(key)
+}
+
+// Expire expires older entries with the specified key prefix.
+func (pcacheMapper) Expire(keyPrefix string, olderThan time.Time) error {
+	return adp.PCacheExpire(keyPrefix, olderThan)
+}
+
 func init() {
 	Store = storeObj{}
 	Users = usersMapper{}
@@ -1060,4 +1098,5 @@ func init() {
 	Messages = messagesMapper{}
 	Devices = deviceMapper{}
 	Files = fileMapper{}
+	PCache = pcacheMapper{}
 }

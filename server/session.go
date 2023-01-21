@@ -987,17 +987,16 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	token, _, err := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+	code, _, err := store.Store.GetLogicalAuthHandler("code").GenSecret(&auth.Rec{
 		Uid:       uid,
 		AuthLevel: auth.LevelAuth,
-		Lifetime:  auth.Duration(time.Hour * 24),
 		Features:  auth.FeatureNoLogin,
 	})
 	if err != nil {
 		return err
 	}
 
-	return validator.ResetSecret(credValue, authScheme, s.lang, token, resetParams)
+	return validator.ResetSecret(credValue, authScheme, s.lang, code, resetParams)
 }
 
 // onLogin performs steps after successful authentication.
