@@ -123,6 +123,9 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 		return nil, nil, types.ErrFailed
 	}
 
+	// Remove no longer needed entry. The error is ignored here.
+	store.PCache.Delete(key)
+
 	return &auth.Rec{
 		Uid:        types.ParseUid(parts[2]),
 		AuthLevel:  auth.LevelNone,
