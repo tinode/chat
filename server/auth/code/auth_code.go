@@ -73,7 +73,7 @@ func (ca *authenticator) IsInitialized() bool {
 	return ca.name != ""
 }
 
-// AddRecord is not supprted, will produce an error.
+// AddRecord is not supported, will produce an error.
 func (authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return nil, types.ErrUnsupported
 }
@@ -84,23 +84,27 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr strin
 }
 
 // Authenticate checks validity of provided short code.
-// The secret is structured as <userId>:<code>.
+// The secret is structured as <code>:<cred_method>:<cred_value>, "123456:email:alice@example.com".
 func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Rec, []byte, error) {
-	parts := strings.Split(string(secret), ":")
+	parts := strings.SplitN(string(secret), ":", 2)
 	if len(parts) != 2 {
 		return nil, nil, types.ErrMalformed
 	}
 
-	uid := types.ParseUserId(parts[0])
-	code := parts[1]
+	code, cred := parts[0], parts[1]
+	key := sanitizeKey(realName + "_" + cred)
 
-	value, err := store.PCache.Get(realName + "_" + uid.String())
+	value, err := store.PCache.Get(key)
 	if err != nil {
+		if err == types.ErrNotFound {
+			err = types.ErrFailed
+		}
 		return nil, nil, err
 	}
 
+	// code:count:uid
 	parts = strings.Split(value, ":")
-	if len(parts) != 2 {
+	if len(parts) != 3 {
 		return nil, nil, types.ErrInternal
 	}
 
@@ -109,21 +113,23 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 		return nil, nil, types.ErrInternal
 	}
 
-	if count > ca.maxRetries {
+	if count >= ca.maxRetries {
 		return nil, nil, types.ErrFailed
 	}
 
 	if parts[0] != code {
-		store.PCache.Upsert(realName+"_"+uid.String(), code+":"+strconv.Itoa(count+1), false)
+		// Update count of attempts.
+		store.PCache.Upsert(key, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2], false)
 		return nil, nil, types.ErrFailed
 	}
 
 	return &auth.Rec{
-		Uid:       types.Uid(uid),
-		AuthLevel: auth.LevelNone,
-		Lifetime:  auth.Duration(ca.lifetime),
-		Features:  auth.FeatureNoLogin,
-		State:     types.StateUndefined}, nil, nil
+		Uid:        types.ParseUid(parts[2]),
+		AuthLevel:  auth.LevelNone,
+		Lifetime:   auth.Duration(ca.lifetime),
+		Features:   auth.FeatureNoLogin,
+		State:      types.StateUndefined,
+		Credential: cred}, nil, nil
 }
 
 // GenSecret generates a new code.
@@ -147,8 +153,8 @@ func (ca *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 		return nil, time.Time{}, types.ErrExpired
 	}
 
-	// Save "code:counter" to the database. The key is code_<UserId>.
-	if err = store.PCache.Upsert(realName+"_"+rec.Uid.String(), resp+":0", true); err != nil {
+	// Save "code:counter:uid" to the database. The key is code_<credential>.
+	if err = store.PCache.Upsert(sanitizeKey(realName+"_"+rec.Credential), resp+":0:"+rec.Uid.String(), true); err != nil {
 		return nil, time.Time{}, err
 	}
 
@@ -181,6 +187,11 @@ func (authenticator) RestrictedTags() ([]string, error) {
 // (none for short code).
 func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
 	return nil, nil
+}
+
+// Replace all occurences of % with / to ensure SQL LIKE query works correctly.
+func sanitizeKey(key string) string {
+	return strings.ReplaceAll(key, "%", "/")
 }
 
 const realName = "code"

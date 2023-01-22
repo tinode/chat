@@ -218,6 +218,8 @@ type Rec struct {
 	Tags []string `json:"tags,omitempty"`
 	// User account state received or read by the authenticator.
 	State types.ObjState
+	// Credential 'method:value' associated with this record.
+	Credential string `json:"cred,omitempty"`
 
 	// Authenticator may request the server to create a new account.
 	// These are the account parameters which can be used for creating the account.

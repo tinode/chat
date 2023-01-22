@@ -550,10 +550,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err = tx.Exec(
 		`CREATE TABLE kvmeta(` +
 			"`key`       VARCHAR(64) NOT NULL," +
-			"createdat   DATETIME(3),"
+			"createdat   DATETIME(3)," +
 			"`value`     TEXT," +
 			"PRIMARY KEY(`key`)," +
-			"INDEX kvmeta_createdat_key(createdat, `key`)"
+			"INDEX kvmeta_createdat_key(createdat, `key`)" +
 			`)`); err != nil {
 		return err
 	}
@@ -3387,7 +3387,10 @@ func (a *adapter) PCacheGet(key string) (string, error) {
 	}
 
 	var value string
-	if err := a.db.GetContext(ctx, &vers, "SELECT `value` FROM kvmeta WHERE `key`=? LIMIT 1"); err != nil {
+	if err := a.db.GetContext(ctx, &value, "SELECT `value` FROM kvmeta WHERE `key`=? LIMIT 1"); err != nil {
+		if err == sql.ErrNoRows {
+			return "", t.ErrNotFound
+		}
 		return "", err
 	}
 	return value, nil
@@ -3412,7 +3415,7 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 		action = "REPLACE"
 	}
 
-	_, err := a.db.ExecContext(ctx, action + " INTO kvmeta(`key`,createdat,`value`) VALUES(?,?,?)", key, t.TimeNow(), value)
+	_, err := a.db.ExecContext(ctx, action+" INTO kvmeta(`key`,createdat,`value`) VALUES(?,?,?)", key, t.TimeNow(), value)
 	return err
 }
 
@@ -3438,7 +3441,7 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 		defer cancel()
 	}
 
-	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key` LIKE ? AND createdat<?", keyPrefix + "%", olderThan)
+	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key` LIKE ? AND createdat<?", keyPrefix+"%", olderThan)
 	return err
 }
 

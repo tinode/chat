@@ -246,18 +246,32 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			},
 		}
 	case msg.Acc != nil:
+		var authLevel pbx.AuthLevel
+		switch msg.Acc.AuthLevel {
+		case "NONE", "none", "":
+			authLevel = pbx.AuthLevel_NONE
+		case "ANON", "anon":
+			authLevel = pbx.AuthLevel_ANON
+		case "AUTH", "auth":
+			authLevel = pbx.AuthLevel_AUTH
+		case "ROOT", "root":
+			// No support for ROOT here.
+			authLevel = pbx.AuthLevel_NONE
+		}
 		pkt.Message = &pbx.ClientMsg_Acc{
 			Acc: &pbx.ClientAcc{
-				Id:     msg.Acc.Id,
-				UserId: msg.Acc.User,
-				State:  msg.Acc.State,
-				Token:  msg.Acc.Token,
-				Scheme: msg.Acc.Scheme,
-				Secret: msg.Acc.Secret,
-				Login:  msg.Acc.Login,
-				Tags:   msg.Acc.Tags,
-				Cred:   pbClientCredsSerialize(msg.Acc.Cred),
-				Desc:   pbSetDescSerialize(msg.Acc.Desc),
+				Id:        msg.Acc.Id,
+				UserId:    msg.Acc.User,
+				State:     msg.Acc.State,
+				TmpScheme: msg.Acc.TmpScheme,
+				TmpSecret: msg.Acc.TmpSecret,
+				AuthLevel: authLevel,
+				Scheme:    msg.Acc.Scheme,
+				Secret:    msg.Acc.Secret,
+				Login:     msg.Acc.Login,
+				Tags:      msg.Acc.Tags,
+				Cred:      pbClientCredsSerialize(msg.Acc.Cred),
+				Desc:      pbSetDescSerialize(msg.Acc.Desc),
 			},
 		}
 	case msg.Login != nil:
@@ -380,15 +394,18 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if acc := pkt.GetAcc(); acc != nil {
 		msg.Acc = &MsgClientAcc{
-			Id:     acc.GetId(),
-			User:   acc.GetUserId(),
-			State:  acc.GetState(),
-			Scheme: acc.GetScheme(),
-			Secret: acc.GetSecret(),
-			Login:  acc.GetLogin(),
-			Tags:   acc.GetTags(),
-			Desc:   pbSetDescDeserialize(acc.GetDesc()),
-			Cred:   pbClientCredsDeserialize(acc.GetCred()),
+			Id:        acc.GetId(),
+			User:      acc.GetUserId(),
+			State:     acc.GetState(),
+			TmpScheme: acc.GetTmpScheme(),
+			TmpSecret: acc.GetTmpSecret(),
+			AuthLevel: acc.GetAuthLevel().String(),
+			Scheme:    acc.GetScheme(),
+			Secret:    acc.GetSecret(),
+			Login:     acc.GetLogin(),
+			Tags:      acc.GetTags(),
+			Desc:      pbSetDescDeserialize(acc.GetDesc()),
+			Cred:      pbClientCredsDeserialize(acc.GetCred()),
 		}
 	} else if login := pkt.GetLogin(); login != nil {
 		msg.Login = &MsgClientLogin{
