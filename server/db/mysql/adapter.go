@@ -3387,7 +3387,7 @@ func (a *adapter) PCacheGet(key string) (string, error) {
 	}
 
 	var value string
-	if err := a.db.GetContext(ctx, &value, "SELECT `value` FROM kvmeta WHERE `key`=? LIMIT 1"); err != nil {
+	if err := a.db.GetContext(ctx, &value, "SELECT `value` FROM kvmeta WHERE `key`=? LIMIT 1", key); err != nil {
 		if err == sql.ErrNoRows {
 			return "", t.ErrNotFound
 		}
