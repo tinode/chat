@@ -1053,7 +1053,7 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 	return nil
 }
 
-// FilePersistenceInterface is an interface wchich defines methods used for file handling (records or uploaded files).
+// PersistentCacheInterface is an interface which defines methods used for accessing persistent key-value cache.
 type PersistentCacheInterface interface {
 	// Get reads a persistent cache entry.
 	Get(key string) (string, error)
@@ -1065,7 +1065,7 @@ type PersistentCacheInterface interface {
 	Expire(keyPrefix string, olderThan time.Time) error
 }
 
-// pcacheMapper is concrete type which implements FilePersistenceInterface.
+// pcacheMapper is concrete type which implements PersistentCacheInterface.
 type pcacheMapper struct{}
 
 var PCache PersistentCacheInterface
