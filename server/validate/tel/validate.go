@@ -23,10 +23,8 @@ type validator struct {
 	HostUrl string `json:"host_url"`
 	// List of languages supported by templates.
 	Languages []string `json:"languages"`
-	// Path to email validation templates, either a template itself or a literal string.
-	ValidationTemplFile string `json:"validation_templ"`
-	// Path to templates for resetting the authentication secret.
-	ResetTemplFile string `json:"reset_secret_templ"`
+	// Path to email validation and password reset templates, either a template itself or a literal string.
+	UniversalTemplFile string `json:"universal_templ"`
 	// Sender address.
 	Sender string `json:"sender"`
 	// Debug response to accept during testing.
@@ -66,7 +64,7 @@ func (v *validator) Init(jsonconf string) error {
 	}
 
 	var universalPathTempl *textt.Template
-	universalPathTempl, err = textt.New("universal").Parse(v.ValidationTemplFile)
+	universalPathTempl, err = textt.New("universal").Parse(v.UniversalTemplFile)
 	if err != nil {
 		return err
 	}
