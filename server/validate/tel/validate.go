@@ -44,7 +44,7 @@ type validator struct {
 const (
 	validatorName = "tel"
 
-	defaultMaxRetries = 4
+	defaultMaxRetries = 3
 
 	// Default code length when one is not provided in the config
 	defaultCodeLength = 6
