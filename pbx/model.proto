@@ -169,6 +169,11 @@ message ClientAcc {
 	bytes token = 9;
 	// Account state: normal ("ok"), suspended
 	string state = 10;
+	// AuthLevel
+	AuthLevel auth_level = 11;
+	// Temporary auth params for one-off actions like password reset.
+	string tmp_scheme = 12;
+	bytes tmp_secret = 13;
 }
 
 // Login {login} message

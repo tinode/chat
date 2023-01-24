@@ -81,7 +81,7 @@ func (ta *authenticator) IsInitialized() bool {
 	return ta.name != ""
 }
 
-// AddRecord is not supprted, will produce an error.
+// AddRecord is not supported, will produce an error.
 func (authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return nil, types.ErrUnsupported
 }

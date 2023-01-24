@@ -215,12 +215,12 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 // * Credentials update
 func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if s.uid.IsZero() && rec == nil {
-		// Session is not authenticated and no token provided.
+		// Session is not authenticated and no temporary auth is provided.
 		logs.Warn.Println("replyUpdateUser: not a new account and not authenticated", s.sid)
 		s.queueOut(ErrPermissionDenied(msg.Id, "", msg.Timestamp))
 		return
 	} else if msg.AsUser != "" && rec != nil {
-		// Two UIDs: one from msg.from, one from token. Ambigous, reject.
+		// Two UIDs: one from msg.from, one from temporary auth. Ambigous, reject.
 		logs.Warn.Println("replyUpdateUser: got both authenticated session and token", s.sid)
 		s.queueOut(ErrMalformed(msg.Id, "", msg.Timestamp))
 		return

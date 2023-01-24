@@ -43,7 +43,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 112
+	adpVersion = 113
 
 	adapterName = "mysql"
 
@@ -549,13 +549,15 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	if _, err = tx.Exec(
 		`CREATE TABLE kvmeta(` +
-			"`key`   CHAR(32)," +
-			"`value` TEXT," +
-			"PRIMARY KEY(`key`)" +
+			"`key`       VARCHAR(64) NOT NULL," +
+			"createdat   DATETIME(3)," +
+			"`value`     TEXT," +
+			"PRIMARY KEY(`key`)," +
+			"INDEX kvmeta_createdat_key(createdat, `key`)" +
 			`)`); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", adpVersion); err != nil {
+	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version',?)", adpVersion); err != nil {
 		return err
 	}
 
@@ -733,6 +735,29 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 112); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 112 {
+		// Perform database upgrade from version 112 to version 113.
+
+		// Add timestamp to kvmeta.
+		if _, err := a.db.Exec("ALTER TABLE kvmeta MODIFY `key` VARCHAR(64) NOT NULL"); err != nil {
+			return err
+		}
+
+		// Add timestamp to kvmeta.
+		if _, err := a.db.Exec("ALTER TABLE kvmeta ADD createdat DATETIME(3) AFTER `key`"); err != nil {
+			return err
+		}
+
+		// Add compound index on the new field and key (could be searched by key prefix).
+		if _, err := a.db.Exec("ALTER TABLE kvmeta ADD INDEX kvmeta_createdat_key(createdat, `key`)"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 113); err != nil {
 			return err
 		}
 	}
@@ -2629,7 +2654,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		if dellog.Hi <= dellog.Low+1 {
 			dellog.Hi = 0
 		}
-		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
+		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{Low: dellog.Low, Hi: dellog.Hi})
 	}
 	if err == nil {
 		err = rows.Err()
@@ -3352,6 +3377,72 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	}
 
 	return tx.Commit()
+}
+
+// PCacheGet reads a persistet cache entry.
+func (a *adapter) PCacheGet(key string) (string, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	var value string
+	if err := a.db.GetContext(ctx, &value, "SELECT `value` FROM kvmeta WHERE `key`=? LIMIT 1", key); err != nil {
+		if err == sql.ErrNoRows {
+			return "", t.ErrNotFound
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+// PCacheUpsert creates or updates a persistent cache entry.
+func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) error {
+	if strings.Contains(key, "%") {
+		// Do not allow % in keys: it interferes with LIKE query.
+		return t.ErrMalformed
+	}
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	var action string
+	if failOnDuplicate {
+		action = "INSERT"
+	} else {
+		action = "REPLACE"
+	}
+
+	_, err := a.db.ExecContext(ctx, action+" INTO kvmeta(`key`,createdat,`value`) VALUES(?,?,?)", key, t.TimeNow(), value)
+	return err
+}
+
+// PCacheDelete deletes one persistent cache entry.
+func (a *adapter) PCacheDelete(key string) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key`=?")
+	return err
+}
+
+// PCacheExpire expires old entries with the given key prefix.
+func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
+	if keyPrefix == "" {
+		return t.ErrMalformed
+	}
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key` LIKE ? AND createdat<?", keyPrefix+"%", olderThan)
+	return err
 }
 
 // Helper functions

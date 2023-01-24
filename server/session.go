@@ -850,26 +850,34 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
-	// If token is provided, get the user ID from it.
+	newAcc := strings.HasPrefix(msg.Acc.User, "new")
+
+	// If temporary auth parameters are provided, get the user ID from them.
 	var rec *auth.Rec
-	if msg.Acc.Token != nil {
+	if !newAcc && msg.Acc.TmpScheme != "" {
 		if !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.Timestamp))
 			logs.Warn.Println("s.acc: got token while already authenticated", s.sid)
 			return
 		}
 
+		authHdl := store.Store.GetLogicalAuthHandler(msg.Acc.TmpScheme)
+		if authHdl == nil {
+			logs.Warn.Println("s.acc: unknown authentication scheme", msg.Acc.TmpScheme, s.sid)
+			s.queueOut(ErrAuthUnknownScheme(msg.Id, "", msg.Timestamp))
+		}
+
 		var err error
-		rec, _, err = store.Store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token, s.remoteAddr)
+		rec, _, err = authHdl.Authenticate(msg.Acc.TmpSecret, s.remoteAddr)
 		if err != nil {
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.Timestamp,
 				map[string]interface{}{"what": "auth"}))
-			logs.Warn.Println("s.acc: invalid token", err, s.sid)
+			logs.Warn.Println("s.acc: invalid temp auth", err, s.sid)
 			return
 		}
 	}
 
-	if strings.HasPrefix(msg.Acc.User, "new") {
+	if newAcc {
 		// New account
 		replyCreateUser(s, msg, rec)
 	} else {
@@ -979,7 +987,8 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 	if uid.IsZero() {
-		return types.ErrNotFound
+		// Prevent discovery of existing contacts: report "no error" if contact is not found.
+		return nil
 	}
 
 	resetParams, err := hdl.GetResetParams(uid)
@@ -987,17 +996,17 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	token, _, err := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
-		Uid:       uid,
-		AuthLevel: auth.LevelAuth,
-		Lifetime:  auth.Duration(time.Hour * 24),
-		Features:  auth.FeatureNoLogin,
+	code, _, err := store.Store.GetLogicalAuthHandler("code").GenSecret(&auth.Rec{
+		Uid:        uid,
+		AuthLevel:  auth.LevelAuth,
+		Features:   auth.FeatureNoLogin,
+		Credential: credMethod + ":" + credValue,
 	})
 	if err != nil {
 		return err
 	}
 
-	return validator.ResetSecret(credValue, authScheme, s.lang, token, resetParams)
+	return validator.ResetSecret(credValue, authScheme, s.lang, code, resetParams)
 }
 
 // onLogin performs steps after successful authentication.
