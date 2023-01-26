@@ -16,7 +16,7 @@ USE tinode;
 
 
 CREATE TABLE kvmeta(
-	`key` CHAR(64),
+	`key` VARCHAR(64),
 	createdat DATETIME(3),
 	`value` TEXT,
 	PRIMARY KEY(`key`),

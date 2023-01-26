@@ -852,7 +852,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 func (s *Session) acc(msg *ClientComMessage) {
 	newAcc := strings.HasPrefix(msg.Acc.User, "new")
 
-	// If token is provided, get the user ID from it.
+	// If temporary auth parameters are provided, get the user ID from them.
 	var rec *auth.Rec
 	if !newAcc && msg.Acc.TmpScheme != "" {
 		if !s.uid.IsZero() {

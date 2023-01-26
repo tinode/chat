@@ -1,5 +1,5 @@
 // Package code implements temporary no-login authentication by short numeric code.
-package token
+package code
 
 import (
 	"crypto/rand"
@@ -37,7 +37,7 @@ func (ca *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	type configType struct {
 		// Length of the security code.
 		CodeLength int `json:"code_length"`
-		// Token expiration time.
+		// Code expiration time in seconds.
 		ExpireIn int `json:"expire_in"`
 		// Maximum number of verification attempts per code.
 		MaxRetries int `json:"max_retries"`

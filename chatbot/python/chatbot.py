@@ -32,7 +32,7 @@ if sys.version_info[0] >= 3:
     unicode = str
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Maximum length of string to log. Shorten longer strings.
@@ -215,7 +215,7 @@ def note_read(topic, seq):
     return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=pb.READ, seq_id=seq))
 
 def init_server(listen):
-    # Launch plugin server: acception connection(s) from the Tinode server.
+    # Launch plugin server: accept connection(s) from the Tinode server.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
     pbx.add_PluginServicer_to_server(Plugin(), server)
     server.add_insecure_port(listen)
@@ -242,7 +242,6 @@ def init_client(addr, schema, secret, cookie_file_name, secure, ssl_host):
     # Session initialization sequence: {hi}, {login}, {sub topic='me'}
     client_post(hello())
     client_post(login(cookie_file_name, schema, secret))
-    client_post(subscribe('me'))
 
     return stream
 
@@ -302,6 +301,8 @@ def read_auth_cookie(cookie_file_name):
     return schema, secret
 
 def on_login(cookie_file_name, params):
+    client_post(subscribe('me'))
+
     """Save authentication token to file"""
     if params == None or cookie_file_name == None:
         return
