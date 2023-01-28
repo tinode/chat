@@ -132,7 +132,7 @@ func (*validator) PreCheck(cred string, params map[string]interface{}) (string, 
 	return validatorName + ":" + phonenumbers.Format(number, phonenumbers.E164), nil
 }
 
-// Request sends a request for confirmation to the user: makes a record in DB  and nothing else.
+// Request sends a request for confirmation to the user: makes a record in DB and nothing else.
 func (v *validator) Request(user t.Uid, phone, lang, resp string, tmpToken []byte) (bool, error) {
 	// Phone validator cannot accept an immediate response.
 	if resp != "" {
@@ -189,6 +189,7 @@ func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params 
 	}
 
 	content, err := validate.ExecuteTemplate(template, nil, map[string]interface{}{
+		"Code":    string(code),
 		"HostUrl": v.HostUrl})
 	if err != nil {
 		return err
