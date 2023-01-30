@@ -952,9 +952,9 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	return counts, nil
 }
 
-// UserGetUnvalidated returns a list of uids which have unvalidated credentials
-// and haven't been updated since lastUpdatedBefore.
-func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []auth.Level, []string, error) {
+// UserGetUnvalidated returns a list of uids which have never logged in, have no
+// validated credentials and haven't been updated since lastUpdatedBefore.
+func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]t.Uid, error) {
 	/*
 		Query:
 			db.users.aggregate([
@@ -1013,7 +1013,7 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []au
 	for cur.Next(a.ctx) {
 		var oneUser struct {
 			Id     map[string]interface{} `bson:"_id"`
-			Method []string `bson:"meth"`
+			Method []string               `bson:"meth"`
 		}
 		cur.Decode(&oneUser)
 		var uid t.Uid

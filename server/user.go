@@ -3,7 +3,6 @@ package main
 import (
 	"container/heap"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -1159,28 +1158,17 @@ func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeHours int
 		// 0.75 * period + rand(0, 0.5) * period.
 		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
 		gcTicker := time.Tick(period)
-		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d hours", period, blockSize, minAccountAgeHours)
+		logs.Info.Printf("Starting account GC with period %s, block size %d and minimum account age %d hours",
+			period, blockSize, minAccountAgeHours)
 		staleAge := time.Hour * time.Duration(minAccountAgeHours)
 		for {
 			select {
 			case <-gcTicker:
-				if uids, authLvls, creds, err := store.Users.GetUnvalidated(time.Now().Add(-staleAge)); err == nil {
-					numUsers := len(uids)
-					if numUsers > blockSize {
-						numUsers = blockSize
-					}
-					var uidsToDelete []types.Uid
-					for i := 0; i < numUsers; i++ {
-						cred := strings.Split(creds[i], ",")
-						_, _, unvalidated := stringSliceDelta(globals.authValidators[authLvls[i]], cred)
-						if len(unvalidated) > 0 {
-							uidsToDelete = append(uidsToDelete, uids[i])
-						}
-					}
-					if len(uidsToDelete) > 0 {
-						logs.Info.Println("Stale account GC will delete the following uids:", uidsToDelete)
-						for _, uid := range uidsToDelete {
-							if err := store.Users.Delete(uid, true); err != nil {
+				if uids, err := store.Users.GetUnvalidated(time.Now().Add(-staleAge), blockSize); err == nil {
+					if len(uids) > 0 {
+						logs.Info.Println("Stale account GC will delete the following uids:", uids)
+						for _, uid := range uids {
+							if err = store.Users.Delete(uid, true); err != nil {
 								logs.Warn.Printf("Could not delete user %s: %+v", uid.UserId(), err)
 							}
 						}
