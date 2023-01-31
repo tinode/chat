@@ -3416,6 +3416,9 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	}
 
 	_, err := a.db.ExecContext(ctx, action+" INTO kvmeta(`key`,createdat,`value`) VALUES(?,?,?)", key, t.TimeNow(), value)
+	if isDupe(err) {
+		return t.ErrDuplicate
+	}
 	return err
 }
 
