@@ -957,94 +957,84 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]t.Uid, error) {
 	/*
 		Query:
-			db.users.aggregate([
-				{ $match: { updatedat: { $lt: ISODate("2022-12-09T01:26:15.819Z") } } },
-				{ $lookup: { from: "auth", localField: "_id", foreignField: "userid", as: "fauth"} },
-				{ $replaceRoot: { newRoot: { $mergeObjects: [ {$arrayElemAt: [ "$fauth", 0 ]} , "$$ROOT" ] } } },
-				{ $lookup: { from: "credentials", localField: "_id", foreignField: "user", as: "fcred"} },
-				{ $unwind: "$fcred" },
-				{ $replaceRoot: { newRoot: { $mergeObjects: [ "$fcred", "$$ROOT" ] } } },
-				{ $match: { done: { $eq: false } } },
-				{ $project: { _id: 0, userid: 1, authlvl: 1, method: 1 } },
-				{ $group: { _id: {userid:"$userid", authlvl:"$authlvl"}, meth: { $push: { $concat: ["$method"] } } } }
-			])
-		Result: [{ _id: { userid: 'Q_aVB7uiWvQ', authlvl: 30 }, meth: [ 'email', 'tel' ] },
-						{  _id: { userid: 'mbyUHrLQcjw', authlvl: 20 }, meth: [ 'email', 'tel' ] }]
+		[
+			// .. WHERE lastseen IS NULL AND updatedat<?
+			{$match: {
+				$and: [
+					{ lastseen: null },
+					{ updatedat: {$lt: new ISODate("2022-12-09T01:26:15.819Z")} },
+				],
+			}},
+			// JOIN credentials ON id=user
+			{$lookup: {
+				from: "credentials",
+				localField: "_id",
+				foreignField: "user",
+				as: "fcred",
+			}},
+			// {x: 1, y: [{a: 1}, {a: 2}]} -> [{x: 1, a: 1}, {x: 1, a: 2}]
+		  {$unwind: {path: "$fcred"}},
+			// SELECT _id, CASE WHEN done THEN 1 ELSE 0 END
+		  {$project: {
+				_id: 1,
+		    completed: { $cond: { if: "$fcred.done", then: 1, else: 0 } },
+		  }},
+			// GROUP BY _id
+		  {$group: { _id: "$_id", completed: { $sum: "$completed" } } },
+			// HAVING completed=0
+		  {$match: { completed: 0 }},
+			// SELECT _id
+		  {$project: { _id: "$_id" }},
+			{$limit: 10}
+		]
 	*/
 	pipeline := b.A{
-		b.M{"$match": b.M{"updatedat": b.M{"$lt": lastUpdatedBefore}}},
-		// Join with auth collection
-		b.M{"$lookup": b.M{
-			"from":         "auth",
-			"localField":   "_id",
-			"foreignField": "userid",
-			"as":           "fauth"},
+		b.M{"$match": b.M{
+			"$and": b.A{
+				b.M{"lastseen": primitive.Null{}},
+				b.M{"updatedat": b.M{"$lt": lastUpdatedBefore}},
+			},
+		}},
+		b.M{"$lookup": b.D{
+			{"from", "credentials"},
+			{"localField", "_id"},
+			{"foreignField", "user"},
+			{"as", "fcred"}},
 		},
-		// Merge two documents into one
-		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fauth", 0}}, "$$ROOT"}}}},
-
-		// Join with credentials collection
-		b.M{"$lookup": b.M{
-			"from":         "credentials",
-			"localField":   "_id",
-			"foreignField": "user",
-			"as":           "fcred"},
-		},
-		// Unwind credentials
-		b.M{"$unwind": "$fcred"},
-		// Merge documents into one
-		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{"$fcred", "$$ROOT"}}}},
-		b.M{"$match": b.M{"done": b.M{"$eq": false}}},
-
-		// Remove unused fields.
-		b.M{"$project": b.M{"_id": 0, "userid": 1, "authlvl": 1, "method": 1}},
-		// GROUP BY userid and authlvl.
-		b.M{"$group": b.M{"_id": b.M{"userid": "$userid", "authlvl": "$authlvl"}, "meth": b.M{"$push": b.M{"$concat": b.A{"$method"}}}}},
+		b.M{"$unwind": b.M{"path": "$fcred"}},
+		b.M{"$project": b.D{
+			{"_id", 1},
+			{"completed", b.M{
+				"$cond": b.D{{"if", "$fcred.done"}, {"then", 1}, {"else", 0}}},
+			}}},
+		b.M{"$group": b.D{{"_id", "$_id"}, {"completed", b.M{"$sum": "$completed"}}}},
+		b.M{"$match": b.M{"completed": 0}},
+		b.M{"$project": b.M{"_id": "$_id"}},
+		b.M{"$limit": limit},
 	}
+
 	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	defer cur.Close(a.ctx)
 
 	var uids []t.Uid
-	var authLvls []auth.Level
-	var unvalidatedCreds []string
 	for cur.Next(a.ctx) {
 		var oneUser struct {
-			Id     map[string]interface{} `bson:"_id"`
-			Method []string               `bson:"meth"`
+			Id string `bson:"_id"`
 		}
-		cur.Decode(&oneUser)
-		var uid t.Uid
-		if uidInt, found := oneUser.Id["userid"]; found {
-			if uidStr, ok := uidInt.(string); ok {
-				uid = t.ParseUid(uidStr)
-			} else {
-				return nil, nil, nil, errors.New("Could not deserialize uid field")
-			}
-		} else {
-			return nil, nil, nil, errors.New("userid field not found in result")
+		if err := cur.Decode(&oneUser); err != nil {
+			return nil, err
 		}
-
-		var authLvl int
-		if authInt, found := oneUser.Id["authlvl"]; found {
-			if authNum, ok := authInt.(int32); ok {
-				authLvl = int(authNum)
-			} else {
-				return nil, nil, nil, errors.New("Could not deserialize authLvl field")
-			}
-		} else {
-			return nil, nil, nil, errors.New("authlvl field not found in result")
+		uid := t.ParseUid(oneUser.Id)
+		if uid.IsZero() {
+			return nil, errors.New("failed to decode user id")
 		}
-
-		creds := strings.Join(oneUser.Method, ",")
 		uids = append(uids, uid)
-		authLvls = append(authLvls, auth.Level(authLvl))
-		unvalidatedCreds = append(unvalidatedCreds, creds)
 	}
 
-	return uids, authLvls, unvalidatedCreds, err
+	return uids, err
 }
 
 // Credential management

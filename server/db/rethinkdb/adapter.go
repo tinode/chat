@@ -1083,10 +1083,10 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 				.eqJoin('Id', r.db('tinode').table('credentials'), {index: 'User'}).zip()
 				.pluck('User', 'Done')
 				.group('User')
-				.sum(function(row) {return row('Done') ? 1 : 0})
+				.sum(function(row) {return r.branch(row('Done'), 1, 0)})
 				.ungroup()
 				.filter({reduction: 0})
-				.pluck('group')
+				.pluck('group').limit(10)
 
 		Result: [{"group": "3W1hPuHjobg"}, {"group": "Fh_skXNRhVg"}, {"group": "NqMZzq0ajWk"}]
 	*/
@@ -1095,10 +1095,11 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 		EqJoin("Id", rdb.DB(a.dbName).Table("credentials"), rdb.EqJoinOpts{Index: "User"}).Zip().
 		Pluck("User", "Done").
 		Group("User").
-		Sum(func(row rdb.Term) rdb.Term { if row.Field("Done") {return 1} return 0 }).
+		Sum(func(row rdb.Term) rdb.Term { return rdb.Branch(row.Field("Done"), 1, 0) }).
 		Ungroup().
-		Filter(rdb.Row.Field("requction").Eq(0))
+		Filter(rdb.Row.Field("reduction").Eq(0)).
 		Pluck("group").
+		Limit(limit).
 		Run(a.conn)
 
 	if err != nil {
@@ -1107,17 +1108,19 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 	defer cursor.Close()
 
 	var rec struct {
-		Group     string
+		Group string
 	}
 
 	var uids []t.Uid
 	for cursor.Next(&rec) {
-		if uidStr, ok := rec.Group[0].(string); ok {
-			uids = append(uids, t.ParseUid(uidStr))
+		uid := t.ParseUid(rec.Group)
+		if !uid.IsZero() {
+			uids = append(uids, uid)
 		} else {
-			return nil, errors.New("Bad uid field")
+			return nil, errors.New("bad uid field")
 		}
 	}
+
 	err = cursor.Err()
 
 	return uids, err
