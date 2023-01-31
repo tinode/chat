@@ -328,7 +328,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			trusted   JSON,
 			tags      JSON,
 			PRIMARY KEY(id),
-			INDEX users_state_stateat(state, stateat)
+			INDEX users_state_stateat(state, stateat),
+			INDEX users_lastseen_updatedat(lastseen, updatedat)
 		)`); err != nil {
 		return err
 	}
@@ -741,6 +742,11 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 112 {
 		// Perform database upgrade from version 112 to version 113.
+
+		// Index for deleting unvalidated accounts.
+		if _, err := a.db.Exec("ALTER TABLE users ADD INDEX users_lastseen_updatedat(lastseen,updatedat)"); err != nil {
+			return err
+		}
 
 		// Add timestamp to kvmeta.
 		if _, err := a.db.Exec("ALTER TABLE kvmeta MODIFY `key` VARCHAR(64) NOT NULL"); err != nil {
