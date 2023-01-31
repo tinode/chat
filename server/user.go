@@ -1164,7 +1164,6 @@ func garbageCollectUsers(period time.Duration, blockSize, minAccountAgeHours int
 		for {
 			select {
 			case <-gcTicker:
-				logs.Info.Println("Stale account GC ticker")
 				if uids, err := store.Users.GetUnvalidated(time.Now().Add(-staleAge), blockSize); err == nil {
 					if len(uids) > 0 {
 						logs.Info.Println("Stale account GC will delete uids:", uids)
