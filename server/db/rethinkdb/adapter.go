@@ -2627,7 +2627,8 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 
 		// Find the old attachment.
 		var cursor *rdb.Cursor
-		cursor, err = rdb.DB(a.dbName).Table(table).Get(linkId).Field("Attachments").Run(a.conn)
+		cursor, err = rdb.DB(a.dbName).Table(table).Get(linkId).
+			Field("Attachments").Default([]string{}).Run(a.conn)
 		if err != nil {
 			return err
 		}
@@ -2636,7 +2637,10 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		if !cursor.IsNil() {
 			var attachments []string
 			if err = cursor.One(&attachments); err != nil {
-				return err
+				if err != rdb.ErrEmptyResult {
+					return err
+				}
+				err = nil
 			}
 
 			if len(attachments) > 0 {
