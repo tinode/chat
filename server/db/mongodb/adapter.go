@@ -2663,6 +2663,68 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	return err
 }
 
+// PCacheGet reads a persistet cache entry.
+func (a *adapter) PCacheGet(key string) (string, error) {
+	var value map[string]string
+	findOpts := mdbopts.FindOneOptions{Projection: b.M{"value": 1, "_id": 0}}
+	if err := a.db.Collection("kvmeta").FindOne(a.ctx, b.M{"_id": key}, &findOpts).Decode(&value); err != nil {
+		if err == mdb.ErrNoDocuments {
+			err = types.ErrNotFound
+		}
+		return "", err
+	}
+	return result["value"], nil
+}
+
+// PCacheUpsert creates or updates a persistent cache entry.
+func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) error {
+	if strings.Contains(key, "^") {
+		// Do not allow ^ in keys: it interferes with Match() query.
+		return t.ErrMalformed
+	}
+
+	doc := map[string]interface{}{
+		"key":   key,
+		"value": value,
+	}
+
+	var action string
+	if failOnDuplicate {
+		action = "error"
+		doc["CreatedAt"] = t.TimeNow()
+	} else {
+		action = "update"
+	}
+
+	_, err := rdb.DB(a.dbName).Table("kvmeta").Insert(doc, InsertOpts{Conflict: action}).RunWrite(session)
+	if rdb.IsConflictErr(err) {
+		return t.ErrDuplicate
+	}
+
+	return err
+}
+
+// PCacheDelete deletes one persistent cache entry.
+func (a *adapter) PCacheDelete(key string) error {
+	_, err := a.db.Collection("kvmeta").DeleteOne(a.ctx, b.M{"key": key})
+	return err
+}
+
+// PCacheExpire expires old entries with the given key prefix.
+func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
+	if keyPrefix == "" {
+		return t.ErrMalformed
+	}
+
+	_, err = a.db.Collection("kvmeta").
+		Filter(rdb.Row.Field("CreatedAt").Lt(olderThan).And(rdb.Row.Field("key").Match("^"+keyPrefix)))).
+		Delete().
+		RunWrite(a.conn)
+
+	return err
+}
+
+
 func (a *adapter) isDbInitialized() bool {
 	var result map[string]int
 
