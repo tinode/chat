@@ -207,6 +207,7 @@ type validatorConfig struct {
 
 // Stale unvalidated user account GC config.
 type accountGcConfig struct {
+	Enabled bool `json:"enabled"`
 	// How often to run GC (seconds).
 	GcPeriod int `json:"gc_period"`
 	// Number of accounts to delete in one pass.
@@ -564,17 +565,18 @@ func main() {
 	}
 
 	// Stale unvalidated user account garbage collection.
-	if config.AccountGC != nil {
-		if config.AccountGC.GcPeriod > 0 && config.AccountGC.GcBlockSize > 0 &&
-			config.AccountGC.GcMinAccountAge > 0 {
-			gcPeriod := time.Second * time.Duration(config.AccountGC.GcPeriod)
-			stopAccountGc := garbageCollectUsers(gcPeriod, config.AccountGC.GcBlockSize, config.AccountGC.GcMinAccountAge)
-
-			defer func() {
-				stopAccountGc <- true
-				logs.Info.Println("Stopped account garbage collector")
-			}()
+	if config.AccountGC != nil && config.AccountGC.Enabled {
+		if config.AccountGC.GcPeriod <= 0 || config.AccountGC.GcBlockSize <= 0 ||
+			config.AccountGC.GcMinAccountAge <= 0 {
+			logs.Err.Fatalln("Invalid account GC config")
 		}
+		gcPeriod := time.Second * time.Duration(config.AccountGC.GcPeriod)
+		stopAccountGc := garbageCollectUsers(gcPeriod, config.AccountGC.GcBlockSize, config.AccountGC.GcMinAccountAge)
+
+		defer func() {
+			stopAccountGc <- true
+			logs.Info.Println("Stopped account garbage collector")
+		}()
 	}
 
 	pushHandlers, err := push.Init(config.Push)

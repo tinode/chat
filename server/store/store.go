@@ -278,7 +278,7 @@ type UsersPersistenceInterface interface {
 	GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error)
 	DelCred(id types.Uid, method, value string) error
 	GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error)
-	GetUnvalidated(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error)
+	GetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]types.Uid, error)
 }
 
 // usersMapper is a concrete type which implements UsersPersistenceInterface.
@@ -503,8 +503,8 @@ func (usersMapper) GetUnreadCount(ids ...types.Uid) (map[types.Uid]int, error) {
 
 // GetUnvalidated returns a list of stale user ids which have unvalidated credentials,
 // their auth levels and a comma-separated list of these credential names.
-func (usersMapper) GetUnvalidated(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error) {
-	return adp.UserGetUnvalidated(lastUpdatedBefore)
+func (usersMapper) GetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]types.Uid, error) {
+	return adp.UserGetUnvalidated(lastUpdatedBefore, limit)
 }
 
 // TopicsPersistenceInterface is an interface which defines methods for persistent storage of topics.
