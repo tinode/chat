@@ -1377,12 +1377,10 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	return counts, err
 }
 
-// UserGetUnvalidated returns a list of uids which have unvalidated credentials
-// and haven't been updated since lastUpdatedBefore.
-func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []auth.Level, []string, error) {
+// UserGetUnvalidated returns a list of uids which have never logged in, have no
+// validated credentials and haven't been updated since lastUpdatedBefore.
+func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]t.Uid, error) {
 	var uids []t.Uid
-	var authLvls []auth.Level
-	var unvalidatedCreds []string
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -1390,31 +1388,27 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time) ([]t.Uid, []au
 	}
 
 	rows, err := a.db.QueryxContext(ctx,
-		"SELECT u.id, a.authlvl, GROUP_CONCAT(c.method ORDER BY c.method SEPARATOR ',') "+
-			"FROM users u JOIN credentials c ON u.id = c.userid JOIN auth a ON u.id = a.userid "+
-			"WHERE u.updatedat<? AND c.done = 0 GROUP BY u.id, a.authlvl", lastUpdatedBefore)
+		"SELECT u.id, IFNULL(SUM(c.done),0) AS total FROM users AS u "+
+			"LEFT JOIN credentials AS c ON u.id=c.userid WHERE u.lastseen IS NULL AND u.updatedat<? "+
+			"GROUP BY u.id, u.updatedat HAVING total=0 ORDER BY u.updatedat ASC LIMIT ?", lastUpdatedBefore, limit)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	var userId int64
-	var authLvl int
-	var creds string
 	for rows.Next() {
-		if err = rows.Scan(&userId, &authLvl, &creds); err != nil {
+		var userId int64
+		var unused int
+		if err = rows.Scan(&userId, &unused); err != nil {
 			break
 		}
-		uid := store.EncodeUid(userId)
-		uids = append(uids, uid)
-		authLvls = append(authLvls, auth.Level(authLvl))
-		unvalidatedCreds = append(unvalidatedCreds, creds)
+		uids = append(uids, store.EncodeUid(userId))
 	}
 	if err == nil {
 		err = rows.Err()
 	}
 	rows.Close()
 
-	return uids, authLvls, unvalidatedCreds, err
+	return uids, err
 }
 
 // *****************************
