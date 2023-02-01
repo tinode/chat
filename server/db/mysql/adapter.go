@@ -1389,7 +1389,7 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 
 	rows, err := a.db.QueryxContext(ctx,
 		"SELECT u.id, IFNULL(SUM(c.done),0) AS total FROM users AS u "+
-			"LEFT JOIN credentials AS c ON u.id=c.userid WHERE u.lastseen IS NULL AND u.updatedat<?"+
+			"LEFT JOIN credentials AS c ON u.id=c.userid WHERE u.lastseen IS NULL AND u.updatedat<? "+
 			"GROUP BY u.id, u.updatedat HAVING total=0 ORDER BY u.updatedat ASC LIMIT ?", lastUpdatedBefore, limit)
 	if err != nil {
 		return nil, err
