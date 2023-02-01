@@ -639,20 +639,18 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnreadCount(ids ...inter
 }
 
 // GetUnvalidated mocks base method.
-func (m *MockUsersPersistenceInterface) GetUnvalidated(lastUpdatedBefore time.Time) ([]types.Uid, []auth.Level, []string, error) {
+func (m *MockUsersPersistenceInterface) GetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]types.Uid, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetUnvalidated", lastUpdatedBefore)
+	ret := m.ctrl.Call(m, "GetUnvalidated", lastUpdatedBefore, limit)
 	ret0, _ := ret[0].([]types.Uid)
-	ret1, _ := ret[1].([]auth.Level)
-	ret2, _ := ret[2].([]string)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetUnvalidated indicates an expected call of GetUnvalidated.
-func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnvalidated(lastUpdatedBefore interface{}) *gomock.Call {
+func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnvalidated(lastUpdatedBefore, limit interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnvalidated", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).GetUnvalidated), lastUpdatedBefore)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnvalidated", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).GetUnvalidated), lastUpdatedBefore, limit)
 }
 
 // Update mocks base method.
