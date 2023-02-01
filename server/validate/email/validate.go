@@ -193,6 +193,10 @@ func (v *validator) Init(jsonconf string) error {
 		hostUrl, _ := url.Parse(v.HostUrl)
 		v.SMTPHeloHost = hostUrl.Hostname()
 	}
+	if v.SMTPHeloHost == "" {
+		return errors.New("missing SMTP host")
+	}
+
 	if v.MaxRetries == 0 {
 		v.MaxRetries = defaultMaxRetries
 	}
@@ -206,6 +210,11 @@ func (v *validator) Init(jsonconf string) error {
 	}
 
 	return nil
+}
+
+// IsInitialized returns true if the validator is initialized.
+func (v *validator) IsInitialized() bool {
+	return v.SMTPHeloHost != ""
 }
 
 // PreCheck validates the credential and parameters without sending an email.

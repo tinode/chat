@@ -107,6 +107,11 @@ func (v *validator) Init(jsonconf string) error {
 	return nil
 }
 
+// IsInitialized returns true if the validator is initialized.
+func (v *validator) IsInitialized() bool {
+	return v.CodeLength > 0
+}
+
 // PreCheck validates the credential and parameters without sending an SMS or making the call.
 // If credential is valid, it's formatted and prefixed with a tag namespace.
 func (*validator) PreCheck(cred string, params map[string]interface{}) (string, error) {

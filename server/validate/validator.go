@@ -18,6 +18,9 @@ type Validator interface {
 	// Init initializes the validator.
 	Init(jsonconf string) error
 
+	// IsInitialized returns true if the validator is initialized.
+	IsInitialized() bool
+
 	// PreCheck pre-validates the credential without sending an actual request for validation:
 	// check uniqueness (if appropriate), format, etc
 	// Returns normalized credential prefixed with an appropriate namespace prefix.

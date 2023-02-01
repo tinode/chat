@@ -356,8 +356,8 @@ func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string,
 	for i := range creds {
 		cr := &creds[i]
 		vld := store.Store.GetValidator(cr.Method)
-		if vld == nil {
-			// Ignore unknown validator.
+		if vld == nil || !vld.IsInitialized() {
+			// Ignore unknown or un-initialized validator.
 			continue
 		}
 
