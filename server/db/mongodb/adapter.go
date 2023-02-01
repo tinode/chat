@@ -41,7 +41,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 112
+	adpVersion  = 113
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -323,6 +323,11 @@ func (a *adapter) CreateDb(reset bool) error {
 					SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
 			},
 		},
+		// Index on lastSeen and updatedat for deleting stale user accounts.
+		{
+			Collection: "users",
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"lastseen", 1}, {"updatedat", 1}}},
+		},
 
 		// User authentication records {_id, userid, secret}
 		// Should be able to access user's auth records by user id
@@ -510,6 +515,18 @@ func (a *adapter) UpgradeDb() error {
 	if a.version == 111 {
 		// Just bump the version to keep in line with MySQL.
 		if err := bumpVersion(a, 112); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 112 {
+		// Create secondary index on Users(lastseen,updatedat) for deleting stale user accounts.
+		if _, err = a.db.Collection("users").Indexes().CreateOne(a.ctx,
+			mdb.IndexModel{Keys: b.D{{"lastseen", 1}, {"updatedat", 1}}}); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 113); err != nil {
 			return err
 		}
 	}
@@ -2705,7 +2722,7 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 		return t.ErrMalformed
 	}
 
-	_, err := a.db.Collection("dellog").DeleteMany(a.ctx, b.M{"createdat": b.M{"$lt": olderThan},
+	_, err := a.db.Collection("kvmeta").DeleteMany(a.ctx, b.M{"createdat": b.M{"$lt": olderThan},
 		"_id": primitive.Regex{Pattern: "^" + keyPrefix}})
 	return err
 }

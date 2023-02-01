@@ -34,7 +34,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 112
+	adpVersion = 113
 
 	adapterName = "rethinkdb"
 
@@ -550,7 +550,8 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 112 {
-		// No useful indexes can be created, just bump the version.
+		// Secondary indexes cannot store NULLs, consequently no useful indexes can be created.
+		// Just bump the version.
 		if err := bumpVersion(a, 113); err != nil {
 			return err
 		}
