@@ -41,7 +41,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 112
+	adpVersion  = 113
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -323,6 +323,11 @@ func (a *adapter) CreateDb(reset bool) error {
 					SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
 			},
 		},
+		// Index on lastSeen and updatedat for deleting stale user accounts.
+		{
+			Collection: "users",
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"lastseen", 1}, {"updatedat", 1}}},
+		},
 
 		// User authentication records {_id, userid, secret}
 		// Should be able to access user's auth records by user id
@@ -510,6 +515,18 @@ func (a *adapter) UpgradeDb() error {
 	if a.version == 111 {
 		// Just bump the version to keep in line with MySQL.
 		if err := bumpVersion(a, 112); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 112 {
+		// Create secondary index on Users(lastseen,updatedat) for deleting stale user accounts.
+		if _, err = a.db.Collection("users").Indexes().CreateOne(a.ctx,
+			mdb.IndexModel{Keys: b.D{{"lastseen", 1}, {"updatedat", 1}}}); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 113); err != nil {
 			return err
 		}
 	}
@@ -2650,6 +2667,63 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		},
 	)
 
+	return err
+}
+
+// PCacheGet reads a persistet cache entry.
+func (a *adapter) PCacheGet(key string) (string, error) {
+	var value map[string]string
+	findOpts := mdbopts.FindOneOptions{Projection: b.M{"value": 1, "_id": 0}}
+	if err := a.db.Collection("kvmeta").FindOne(a.ctx, b.M{"_id": key}, &findOpts).Decode(&value); err != nil {
+		if err == mdb.ErrNoDocuments {
+			err = t.ErrNotFound
+		}
+		return "", err
+	}
+	return value["value"], nil
+}
+
+// PCacheUpsert creates or updates a persistent cache entry.
+func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) error {
+	if strings.Contains(key, "^") {
+		// Do not allow ^ in keys: it interferes with $match query.
+		return t.ErrMalformed
+	}
+
+	collection := a.db.Collection("kvmeta")
+	doc := b.M{
+		"value": value,
+	}
+
+	if failOnDuplicate {
+		doc["_id"] = key
+		doc["createdat"] = t.TimeNow()
+		_, err := collection.InsertOne(a.ctx, doc)
+		if mdb.IsDuplicateKeyError(err) {
+			err = t.ErrDuplicate
+		}
+		return err
+	}
+
+	res := collection.FindOneAndUpdate(a.ctx, b.M{"_id": key}, b.M{"$set": doc},
+		mdbopts.FindOneAndUpdate().SetUpsert(true))
+	return res.Err()
+}
+
+// PCacheDelete deletes one persistent cache entry.
+func (a *adapter) PCacheDelete(key string) error {
+	_, err := a.db.Collection("kvmeta").DeleteOne(a.ctx, b.M{"_id": key})
+	return err
+}
+
+// PCacheExpire expires old entries with the given key prefix.
+func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
+	if keyPrefix == "" {
+		return t.ErrMalformed
+	}
+
+	_, err := a.db.Collection("kvmeta").DeleteMany(a.ctx, b.M{"createdat": b.M{"$lt": olderThan},
+		"_id": primitive.Regex{Pattern: "^" + keyPrefix}})
 	return err
 }
 

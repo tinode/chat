@@ -118,12 +118,12 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 	}
 
 	if parts[0] != code {
-		// Update count of attempts.
+		// Update count of attempts. If the update fails, the error is ignored.
 		store.PCache.Upsert(key, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2], false)
 		return nil, nil, types.ErrFailed
 	}
 
-	// Remove no longer needed entry. The error is ignored here.
+	// Success. Remove no longer needed entry. The error is ignored here.
 	store.PCache.Delete(key)
 
 	return &auth.Rec{

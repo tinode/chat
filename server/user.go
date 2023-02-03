@@ -25,7 +25,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// The session cannot authenticate with the new account because  it's already authenticated.
 	if msg.Acc.Login && (!s.uid.IsZero() || rec != nil) {
 		s.queueOut(ErrAlreadyAuthenticated(msg.Id, "", msg.Timestamp))
-		logs.Warn.Println("create user: login requested while authenticated", s.sid)
+		logs.Warn.Println("create user: login requested while authenticated, sid=", s.sid)
 		return
 	}
 
@@ -34,13 +34,13 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if authhdl == nil {
 		// New accounts must have an authentication scheme
 		s.queueOut(ErrMalformed(msg.Id, "", msg.Timestamp))
-		logs.Warn.Println("create user: unknown auth handler", s.sid)
+		logs.Warn.Println("create user: unknown auth handler, sid=", s.sid)
 		return
 	}
 
 	// Check if login is unique.
 	if ok, err := authhdl.IsUnique(msg.Acc.Secret, s.remoteAddr); !ok {
-		logs.Warn.Println("create user: auth secret is not unique", err, s.sid)
+		logs.Warn.Println("create user: auth secret is not unique", err, "sid=", s.sid)
 		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp,
 			map[string]interface{}{"what": "auth"}))
 		return
@@ -52,7 +52,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// If account state is being assigned, make sure the sender is a root user.
 	if msg.Acc.State != "" {
 		if auth.Level(msg.AuthLvl) != auth.LevelRoot {
-			logs.Warn.Println("create user: attempt to set account state by non-root", s.sid)
+			logs.Warn.Println("create user: attempt to set account state by non-root, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)
 			msg.Ctrl.Params = map[string]interface{}{"what": "state"}
 			s.queueOut(msg)
@@ -61,7 +61,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 		state, err := types.NewObjState(msg.Acc.State)
 		if err != nil || state == types.StateUndefined || state == types.StateDeleted {
-			logs.Warn.Println("create user: invalid account state", err, s.sid)
+			logs.Warn.Println("create user: invalid account state", err, "sid=", s.sid)
 			s.queueOut(ErrMalformed(msg.Id, "", msg.Timestamp))
 			return
 		}
@@ -71,7 +71,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// Ensure tags are unique and not restricted.
 	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
-			logs.Warn.Println("create user: attempt to directly assign restricted tags", s.sid)
+			logs.Warn.Println("create user: attempt to directly assign restricted tags, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)
 			msg.Ctrl.Params = map[string]interface{}{"what": "tags"}
 			s.queueOut(msg)
@@ -87,7 +87,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		cr := &creds[i]
 		vld := store.Store.GetValidator(cr.Method)
 		if _, err := vld.PreCheck(cr.Value, cr.Params); err != nil {
-			logs.Warn.Println("create user: failed credential pre-check", cr, err, s.sid)
+			logs.Warn.Println("create user: failed credential pre-check", cr, err, "sid=", s.sid)
 			s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp,
 				map[string]interface{}{"what": cr.Method}))
 			return
@@ -128,7 +128,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	// Create user record in the database.
 	if _, err := store.Users.Create(&user, private); err != nil {
-		logs.Warn.Println("create user: failed to create user", err, s.sid)
+		logs.Warn.Println("create user: failed to create user", err, "sid=", s.sid)
 		s.queueOut(ErrUnknown(msg.Id, "", msg.Timestamp))
 		return
 	}
@@ -136,7 +136,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// Add authentication record. The authhdl.AddRecord may change tags.
 	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret, s.remoteAddr)
 	if err != nil {
-		logs.Warn.Println("create user: add auth record failed", err, s.sid)
+		logs.Warn.Println("create user: add auth record failed", err, "sid=", s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
 		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
@@ -166,14 +166,14 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if err != nil {
 		// Delete incomplete user record.
 		store.Users.Delete(user.Uid(), false)
-		logs.Warn.Println("create user: failed to save or validate credential", err, s.sid)
+		logs.Warn.Println("create user: failed to save or validate credential", err, "sid=", s.sid)
 		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		return
 	}
 
 	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
 		if err := store.Files.LinkAttachments(user.Uid().UserId(), types.ZeroUid, msg.Extra.Attachments); err != nil {
-			logs.Warn.Println("create user: failed to link avatar attachment", err, s.sid)
+			logs.Warn.Println("create user: failed to link avatar attachment", err, "sid=", s.sid)
 			// This is not a critical error, continue execution.
 		}
 	}
@@ -356,8 +356,8 @@ func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string,
 	for i := range creds {
 		cr := &creds[i]
 		vld := store.Store.GetValidator(cr.Method)
-		if vld == nil {
-			// Ignore unknown validator.
+		if vld == nil || !vld.IsInitialized() {
+			// Ignore unknown or un-initialized validator.
 			continue
 		}
 

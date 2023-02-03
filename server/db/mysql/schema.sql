@@ -38,7 +38,8 @@ CREATE TABLE users(
 	tags		JSON, -- Denormalized array of tags
 
 	PRIMARY KEY(id),
-	INDEX users_state_stateat(state, stateat)
+	INDEX users_state_stateat(state, stateat),
+	INDEX users_lastseen_updatedat(lastseen, updatedat)
 );
 
 # Indexed user tags.
