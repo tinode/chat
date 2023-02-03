@@ -2799,7 +2799,7 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 		action = "update"
 	}
 
-	_, err := rdb.DB(a.dbName).Table("kvmeta").Insert(doc, InsertOpts{Conflict: action}).RunWrite(session)
+	_, err := rdb.DB(a.dbName).Table("kvmeta").Insert(doc, rdb.InsertOpts{Conflict: action}).RunWrite(a.conn)
 	if rdb.IsConflictErr(err) {
 		return t.ErrDuplicate
 	}
@@ -2819,8 +2819,8 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 		return t.ErrMalformed
 	}
 
-	_, err = rdb.DB(a.dbName).Table("kvmeta").
-		Filter(rdb.Row.Field("CreatedAt").Lt(olderThan).And(rdb.Row.Field("key").Match("^"+keyPrefix)))).
+	_, err := rdb.DB(a.dbName).Table("kvmeta").
+		Filter(rdb.Row.Field("CreatedAt").Lt(olderThan).And(rdb.Row.Field("key").Match("^" + keyPrefix))).
 		Delete().
 		RunWrite(a.conn)
 
