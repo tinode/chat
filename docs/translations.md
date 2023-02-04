@@ -4,12 +4,13 @@
 
 ## Server
 
-The server sends emails to users upon creation of a new account and when the user requests to reset the password:
+The server sends emails or SMS to users upon creation of a new account and when the user requests to reset the password:
 
 * [/server/templ/email-validation-en.templ](../server/templ/email-validation-en.templ)
 * [/server/templ/email-password-reset-en.templ](../server/templ/email-password-reset-en.templ)
+* [/server/templ/sms-validation-en.templ](../server/templ/sms-validation-en.templ)
 
-Create a copy of the files naming them `email-password-reset-XX.teml` and `email-validation-XX.templ` where `XX` is the [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) code of the new language. Translate the content and send a pull request with the new files. If you don't know how to create a pull request then just sent the translated files in any way you can.
+Create a copy of the files naming them `email-password-reset-XX.teml`, `email-validation-XX.templ`, `sms-validation-XX.templ` where `XX` is the [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) code of the new language. Translate the content and send a pull request with the new files. If you don't know how to create a pull request then just sent the translated files in any way you can.
 
 
 ## Webapp
