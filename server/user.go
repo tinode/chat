@@ -909,10 +909,12 @@ func usersRequestFromCluster(req *UserCacheReq) {
 	}
 }
 
+var usersCache map[types.Uid]userCacheEntry
+
 // The go routine for processing updates to users cache.
 func userUpdater() {
 	// Caches unread counters and numbers of topics the user's subscribed to.
-	usersCache := make(map[types.Uid]userCacheEntry)
+	usersCache = make(map[types.Uid]userCacheEntry)
 
 	// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
 	perUserBuffers := make(map[types.Uid][]bufferedUpdate)
@@ -927,10 +929,10 @@ func userUpdater() {
 	// IO callback queue.
 	ioDone := make(chan *ioResult, 1024)
 
-	unreadUpdater := func(uids []types.Uid, val int, inc bool) map[types.Uid]int {
+	unreadUpdater := func(uids []types.Uid, vals []int, inc bool) map[types.Uid]int {
 		var dbPending []types.Uid
 		counts := make(map[types.Uid]int, len(uids))
-		for _, uid := range uids {
+		for i, uid := range uids {
 			counts[uid] = 0
 			uce, ok := usersCache[uid]
 			if !ok {
@@ -939,6 +941,7 @@ func userUpdater() {
 				continue
 			}
 
+			val := vals[i]
 			if uce.unread < 0 {
 				// Unread counter not initialized yet. Maybe start a DB read?
 				if updateBuf, ioInProgress := perUserBuffers[uid]; ioInProgress {
@@ -1057,19 +1060,19 @@ func userUpdater() {
 			if upd.PushRcpt != nil {
 				// List of uids for which the unread count is being read from the DB.
 				pendingUsers := []types.Uid{}
+
 				allUids := make([]types.Uid, 0, len(upd.PushRcpt.To))
-				for uid := range upd.PushRcpt.To {
+				allDeltas := make([]int, 0, len(upd.PushRcpt.To))
+				for uid, r := range upd.PushRcpt.To {
 					allUids = append(allUids, uid)
+					delta := 0
+					if r.ShouldIncrementUnreadCountInCache {
+						delta = 1
+					}
+					allDeltas = append(allDeltas, delta)
 				}
 
-				var delta int
-				// Increment unread counter only on msg event.
-				if upd.PushRcpt.Payload.What == "msg" {
-					delta = 1
-				} else {
-					delta = 0
-				}
-				allUnread := unreadUpdater(allUids, delta, true)
+				allUnread := unreadUpdater(allUids, allDeltas, true)
 				for uid, unread := range allUnread {
 					rcptTo := upd.PushRcpt.To[uid]
 					// Handle update
@@ -1138,7 +1141,7 @@ func userUpdater() {
 			}
 
 			// Request to update unread count for one user.
-			unreadUpdater([]types.Uid{upd.UserId}, upd.Unread, upd.Inc)
+			unreadUpdater([]types.Uid{upd.UserId}, []int{upd.Unread}, upd.Inc)
 		}
 	}
 

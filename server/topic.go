@@ -964,7 +964,8 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		}
 	}
 
-	if err := store.Messages.Save(
+	markedReadBySender := false
+	if err, unreadUpdated := store.Messages.Save(
 		&types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
 			SeqId:     t.lastID + 1,
@@ -977,6 +978,8 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
 		return err
+	} else {
+		markedReadBySender = unreadUpdated
 	}
 
 	t.lastID++
@@ -1023,7 +1026,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 	t.broadcastToSessions(data)
 
 	// sendPush will update unread message count and send push notification.
-	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
+	if pushRcpt := t.pushForData(asUid, data.Data, markedReadBySender); pushRcpt != nil {
 		sendPush(pushRcpt)
 	}
 	return nil

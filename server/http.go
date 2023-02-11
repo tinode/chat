@@ -402,13 +402,21 @@ type debugTopic struct {
 	Sessions []string `json:"sessions,omitempty"`
 }
 
+// debugCachedUser is a user cache entry debug info.
+type debugCachedUser struct {
+	Uid    string `json:"uid,omitempty"`
+	Unread int    `json:"unread,omitempty"`
+	Topics int    `json:"topics,omitempty"`
+}
+
 // debugDump is server internal state dump for debugging.
 type debugDump struct {
-	Version   string         `json:"server_version,omitempty"`
-	Build     string         `json:"build_id,omitempty"`
-	Timestamp time.Time      `json:"ts,omitempty"`
-	Sessions  []debugSession `json:"sessions,omitempty"`
-	Topics    []debugTopic   `json:"topics,omitempty"`
+	Version   string            `json:"server_version,omitempty"`
+	Build     string            `json:"build_id,omitempty"`
+	Timestamp time.Time         `json:"ts,omitempty"`
+	Sessions  []debugSession    `json:"sessions,omitempty"`
+	Topics    []debugTopic      `json:"topics,omitempty"`
+	UserCache []debugCachedUser `json:"user_cache,omitempty"`
 }
 
 func serveStatus(wrt http.ResponseWriter, req *http.Request) {
@@ -420,6 +428,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		Timestamp: types.TimeNow(),
 		Sessions:  make([]debugSession, 0, len(globals.sessionStore.sessCache)),
 		Topics:    make([]debugTopic, 0, 10),
+		UserCache: make([]debugCachedUser, 0, 10),
 	}
 	// Sessions.
 	globals.sessionStore.Range(func(sid string, s *Session) bool {
@@ -467,6 +476,13 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		})
 		return true
 	})
+	for k, v := range usersCache {
+		result.UserCache = append(result.UserCache, debugCachedUser{
+			Uid:    k.UserId(),
+			Unread: v.unread,
+			Topics: v.topics,
+		})
+	}
 
 	json.NewEncoder(wrt).Encode(result)
 }

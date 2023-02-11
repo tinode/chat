@@ -24,7 +24,7 @@ func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 }
 
 // Prepares a payload to be delivered to a mobile device as a push notification in response to a {data} message.
-func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receipt {
+func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData, msgMarkedAsReadBySender bool) *push.Receipt {
 	// Passing `Topic` as `t.name` for group topics and P2P topics. The p2p topic name is later rewritten for
 	// each recipient then the payload is created: p2p recipient sees the topic as the ID of the other user.
 
@@ -71,6 +71,9 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 				// Number of attached sessions the data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
 				Delivered: online,
+				// Unread counts are incremented for all recipients,
+				// and for sender only if the message wasnt't marked 'read' by the sender
+				ShouldIncrementUnreadCountInCache: uid != fromUid || !msgMarkedAsReadBySender,
 			}
 		}
 	}
