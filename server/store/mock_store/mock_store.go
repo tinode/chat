@@ -1060,11 +1060,12 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetDeleted(topic, forUse
 }
 
 // Save mocks base method.
-func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentURLs []string, readBySender bool) error {
+func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Save", msg, attachmentURLs, readBySender)
 	ret0, _ := ret[0].(error)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Save indicates an expected call of Save.
