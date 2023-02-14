@@ -203,8 +203,8 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 }
 
 // NodeRestarted removes stale sessions from a restarted cluster node.
-//  - nodeName is the name of affected node
-//  - fingerprint is the new fingerprint of the node.
+//   - nodeName is the name of affected node
+//   - fingerprint is the new fingerprint of the node.
 func (ss *SessionStore) NodeRestarted(nodeName string, fingerprint int64) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()

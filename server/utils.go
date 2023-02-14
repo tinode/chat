@@ -104,9 +104,10 @@ func normalizeTags(src []string) types.StringSlice {
 }
 
 // stringDelta extracts the slices of added and removed strings from two slices:
-//   added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
-//   removed := oldSlice - (oldSlice & newSlice) -- present in old but missing in new
-//   intersection := oldSlice & newSlice -- present in both old and new
+//
+//	added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
+//	removed := oldSlice - (oldSlice & newSlice) -- present in old but missing in new
+//	intersection := oldSlice & newSlice -- present in both old and new
 func stringSliceDelta(rold, rnew []string) (added, removed, intersection []string) {
 	if len(rold) == 0 && len(rnew) == 0 {
 		return nil, nil, nil

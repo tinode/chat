@@ -1267,9 +1267,10 @@ func (s *Session) note(msg *ClientComMessage) {
 
 // expandTopicName expands session specific topic name to global name
 // Returns
-//   topic: session-specific topic name the message recipient should see
-//   routeTo: routable global topic name
-//   err: *ServerComMessage with an error to return to the sender
+//
+//	topic: session-specific topic name the message recipient should see
+//	routeTo: routable global topic name
+//	err: *ServerComMessage with an error to return to the sender
 func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMessage) {
 	if msg.Original == "" {
 		logs.Warn.Println("s.etn: empty topic name", s.sid)

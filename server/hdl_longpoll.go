@@ -116,11 +116,11 @@ func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, 
 
 // serveLongPoll handles long poll connections when WebSocket is not available
 // Connection could be without sid or with sid:
-//  - if sid is empty, create session, expect a login in the same request, respond and close
-//  - if sid is not empty and there is an initialized session, payload is optional
+//   - if sid is empty, create session, expect a login in the same request, respond and close
+//   - if sid is not empty and there is an initialized session, payload is optional
 //   - if no payload, perform long poll
 //   - if payload exists, process it and close
-//  - if sid is not empty but there is no session, report an error
+//   - if sid is not empty but there is no session, report an error
 func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
 
