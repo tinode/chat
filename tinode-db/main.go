@@ -240,7 +240,9 @@ func main() {
 	err := store.Store.Open(1, config.StoreConfig)
 	defer store.Store.Close()
 
-	log.Printf("Database adapter: '%s'; version: %d", store.Store.GetAdapterName(), store.Store.GetAdapterVersion())
+	adapterVersion := store.Store.GetAdapterVersion()
+	databaseVersion := store.Store.GetDbVersion()
+	log.Printf("Database adapter: '%s'; version: %d", store.Store.GetAdapterName(), adapterVersion)
 
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
@@ -249,11 +251,14 @@ func main() {
 			}
 			log.Println("Database not found. Creating.")
 		} else if strings.Contains(err.Error(), "Invalid database version") {
-			msg := "Wrong DB version: expected " + strconv.Itoa(store.Store.GetAdapterVersion()) + ", got " +
-				strconv.Itoa(store.Store.GetDbVersion()) + "."
+			msg := "Wrong DB version: expected " + strconv.Itoa(adapterVersion) + ", got " +
+				strconv.Itoa(databaseVersion) + "."
 			if *reset {
 				log.Println(msg, "Dropping and recreating the database.")
 			} else if *upgrade {
+				if databaseVersion > adapterVersion {
+					log.Fatalln(msg, "Unable to upgrade: database has greater version than the adapter.")
+				}
 				log.Println(msg, "Upgrading the database.")
 			} else {
 				log.Fatalln(msg, "Use --reset to reset, --upgrade to upgrade.")
