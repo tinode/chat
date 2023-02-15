@@ -1274,7 +1274,7 @@ Tinode uses `{pres}` message to inform clients of important events. A separate [
 pres: {
   topic: "me", // string, topic which receives the notification, always present
   src: "grp1XUtEhjv6HND", // string, topic or user affected by the change, always present
-  what: "on", // string, what's changed, always present
+  what: "on", // string, action type, what's changed, always present
   seq: 123, // integer, "what" is "msg", a server-issued ID of the message,
             // optional
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
@@ -1288,6 +1288,22 @@ pres: {
                           // optional
 }
 ```
+
+The following action types are currently defined:
+
+ * on: topic or user came online
+ * off: topic or user went offline
+ * ua: user agent changed, for example user was logged in with one client, then logged in with another
+ * upd: topic description has changed
+ * tags: topic tags have changed
+ * acs: access permissions have changed
+ * gone: topic is no longer available, for example, it was deleted or you were unsubscribed from it
+ * term: subscription to topic has been terminated, you may try to resubscribe
+ * msg: a new message is available
+ * read: one or more messages have been read by the recipient
+ * recv: one or more messages have been received by the recipient
+ * del: messages were deleted
+
 
 The `{pres}` messages are purely transient: they are not stored and no attempt is made to deliver them later if the destination is temporarily unavailable.
 
