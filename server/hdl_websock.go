@@ -157,8 +157,9 @@ func wsWrite(ws *websocket.Conn, mt int, msg interface{}) error {
 
 // Handles websocket requests from peers.
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:    1024,
+	WriteBufferSize:   1024,
+	EnableCompression: true,
 	// Allow connections from any Origin
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
