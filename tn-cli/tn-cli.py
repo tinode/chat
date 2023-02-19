@@ -202,7 +202,7 @@ def encode_to_bytes(src):
     if src == None:
         return None
     if isinstance(src, str):
-        return src.encode('utf-8')
+        return ('"' + src + '"').encode()
     return json.dumps(src).encode('utf-8')
 
 # Parse credentials
