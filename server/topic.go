@@ -2368,7 +2368,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Users.GetTopicsAny(asUid, msgOpts2storeOpts(req))
 
-			// Returned subscriptions does not load topics which are online now but otherwise unchanged.
+			// Returned subscriptions do not contain topics which are online now but otherwise unchanged.
 			// We need to add these topic to the list otherwise the user would see them as offline.
 			selected := map[string]struct{}{}
 			for i := range subs {
