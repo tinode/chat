@@ -2367,6 +2367,30 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		} else {
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Users.GetTopicsAny(asUid, msgOpts2storeOpts(req))
+
+			// Returned subscriptions does not load topics which are online now but otherwise unchanged.
+			// We need to add these topic to the list otherwise the user would see them as offline.
+			selected := map[string]struct{}{}
+			for i := range subs {
+				sub := &subs[i]
+				with := sub.GetWith()
+				if with != "" {
+					selected[with] = struct{}{}
+				} else {
+					selected[sub.Topic] = struct{}{}
+				}
+			}
+
+			// Add dummy subscriptions for missing online topics.
+			for topic, psd := range t.perSubs {
+				_, present := selected[topic]
+				if !present && psd.online {
+					sub := types.Subscription{Topic: topic}
+					sub.SetWith(topic)
+					sub.SetDummy(true)
+					subs = append(subs, sub)
+				}
+			}
 		}
 	case types.TopicCatFnd:
 		// Select public or private query. Public has priority.
@@ -2499,15 +2523,15 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				if !deleted && !banned {
 					if isReader {
-						if sub.GetTouchedAt().IsZero() {
+						touchedAt := sub.GetTouchedAt()
+						if touchedAt.IsZero() {
 							mts.TouchedAt = nil
 						} else {
-							touchedAt := sub.GetTouchedAt()
 							mts.TouchedAt = &touchedAt
 						}
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
-					} else {
+					} else if !sub.UpdatedAt.IsZero() {
 						mts.TouchedAt = &sub.UpdatedAt
 					}
 
@@ -2545,7 +2569,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 
 			if !deleted {
-				mts.UpdatedAt = &sub.UpdatedAt
+				if !sub.UpdatedAt.IsZero() {
+					mts.UpdatedAt = &sub.UpdatedAt
+				}
 				if isReader && !banned {
 					mts.ReadSeqId = sub.ReadSeqId
 					mts.RecvSeqId = sub.RecvSeqId
@@ -2553,7 +2579,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				if t.cat != types.TopicCatFnd {
 					// p2p and grp
-					if sharer || uid == asUid || subMode.IsAdmin() {
+					if !sub.IsDummy() && (sharer || uid == asUid || subMode.IsAdmin()) {
 						// If user is not a sharer, the access mode of other ordinary users if not accessible.
 						// Own and admin permissions only are visible to non-sharers.
 						mts.Acs.Mode = subMode.String()
