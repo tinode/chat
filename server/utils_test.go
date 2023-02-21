@@ -28,23 +28,23 @@ func TestStringSliceDelta(t *testing.T) {
 	// - expected outputs: added, removed, intersection
 	cases := [][5][]string{
 		{
-			[]string{"abc", "def", "fff"}, []string{},
-			[]string{}, []string{"abc", "def", "fff"}, []string{},
+			{"abc", "def", "fff"}, {},
+			{}, {"abc", "def", "fff"}, {},
 		},
 		{
 			{}, {}, {}, {}, {},
 		},
 		{
 			{"aa", "xx", "bb", "aa", "bb"}, {"yy", "aa"},
-			{"yy"}, []string{"aa", "bb", "bb", "xx"}, []string{"aa"},
+			{"yy"}, {"aa", "bb", "bb", "xx"}, {"aa"},
 		},
 		{
-			[]string{"bb", "aa", "bb"}, []string{"yy", "aa", "bb", "zzz", "zzz", "cc"},
-			[]string{"cc", "yy", "zzz", "zzz"}, []string{"bb"}, []string{"aa", "bb"},
+			{"bb", "aa", "bb"}, {"yy", "aa", "bb", "zzz", "zzz", "cc"},
+			{"cc", "yy", "zzz", "zzz"}, {"bb"}, {"aa", "bb"},
 		},
 		{
-			[]string{"aa", "aa", "aa"}, []string{"aa", "aa", "aa"},
-			[]string{}, []string{}, []string{"aa", "aa", "aa"},
+			{"aa", "aa", "aa"}, {"aa", "aa", "aa"},
+			{}, {}, {"aa", "aa", "aa"},
 		},
 	}
 

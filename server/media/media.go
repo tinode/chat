@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/tinode/chat/server/store/types"
@@ -40,6 +41,8 @@ type Handler interface {
 	GetIdFromUrl(url string) types.Uid
 }
 
+var fileNamePattern = regexp.MustCompile(`^[-_A-Za-z0-9]+`)
+
 // GetIdFromUrl is a helper method for extracting file ID from a URL.
 func GetIdFromUrl(url, serveUrl string) types.Uid {
 	dir, fname := path.Split(path.Clean(url))
@@ -48,7 +51,7 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 		return types.ZeroUid
 	}
 
-	return types.ParseUid(strings.Split(fname, ".")[0])
+	return types.ParseUid(fileNamePattern.FindString(fname))
 }
 
 // matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.

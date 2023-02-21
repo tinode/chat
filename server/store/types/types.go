@@ -922,6 +922,9 @@ type Subscription struct {
 
 	// Topic's or user's state.
 	state ObjState
+
+	// This is not a fully initialized subscription object
+	dummy bool
 }
 
 // SetPublic assigns a value to `public`, otherwise not accessible from outside the package.
@@ -1030,6 +1033,16 @@ func (s *Subscription) GetState() ObjState {
 // SetState assigns topic's or user's state.
 func (s *Subscription) SetState(state ObjState) {
 	s.state = state
+}
+
+// SetDummy marks this subscription object as only partially intialized.
+func (s *Subscription) SetDummy(dummy bool) {
+	s.dummy = dummy
+}
+
+// IsDummy is true if this subscription object as only partially intialized.
+func (s *Subscription) IsDummy() bool {
+	return s.dummy
 }
 
 // Contact is a result of a search for connections

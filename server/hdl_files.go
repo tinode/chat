@@ -262,7 +262,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
-	logs.Info.Println("media upload: ok", fdef.Location)
+	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location)
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
