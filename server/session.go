@@ -483,12 +483,12 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set alternative user ID and auth level values.
-		s.queueOut(ErrPermissionDenied("", "", now))
+		s.queueOut(ErrPermissionDenied(msg.Id, "", now))
 		logs.Warn.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
 	} else if fromUid := types.ParseUserId(msg.Extra.AsUser); fromUid.IsZero() {
 		// Invalid msg.Extra.AsUser.
-		s.queueOut(ErrMalformed("", "", now))
+		s.queueOut(ErrMalformed(msg.Id, "", now))
 		logs.Warn.Println("s.dispatch: malformed msg.from: ", msg.Extra.AsUser, s.sid)
 		return
 	} else {
