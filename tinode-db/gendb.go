@@ -403,7 +403,7 @@ func genDb(data *Data) {
 		}
 	}
 
-	log.Println("All done.")
+	log.Println("Sample data processing completed.")
 }
 
 // Go json cannot unmarshal Duration from a string, thus this hack.
