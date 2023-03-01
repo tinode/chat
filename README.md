@@ -139,6 +139,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Chinese (traditional) |   | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
+| Hindi |   |   | &check; |   |
 | Korean |   | &check; | &check; |   |
 | Portugese | &check; |   | &check; |   |
 | Romanian |   | &check; |   |   |
