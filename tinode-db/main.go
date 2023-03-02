@@ -244,6 +244,8 @@ func main() {
 	databaseVersion := store.Store.GetDbVersion()
 	log.Printf("Database adapter: '%s'; version: %d", store.Store.GetAdapterName(), adapterVersion)
 
+	var created bool
+
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
 			if *noInit {
@@ -253,6 +255,7 @@ func main() {
 			err = store.Store.InitDb(config.StoreConfig, false)
 			if err == nil {
 				log.Println("Database successfully created.")
+				created = true
 			}
 		} else if strings.Contains(err.Error(), "Invalid database version") {
 			msg := "Wrong DB version: expected " + strconv.Itoa(adapterVersion) + ", got " +
@@ -293,7 +296,7 @@ func main() {
 		log.Fatalln("Failure:", err)
 	}
 
-	if !*upgrade {
+	if *reset || created {
 		genDb(&data)
 	} else if len(data.Users) > 0 {
 		log.Println("Sample data ignored.")
