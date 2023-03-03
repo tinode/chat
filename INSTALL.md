@@ -202,6 +202,8 @@ Tinode does not provide ICE servers out of the box. You must install and configu
 
 Once you obtain the ICE TURN/STUN configuration from your service provider, add it to `tinode.conf` section `"webrtc"` - `"ice_servers"` (or `"ice_servers_file"`). Also change `"webrtc"` - `"enabled"` to `true`. An example configuration is provided in the `tinode.conf` for illustration only. IT WILL NOT FUNCTION because it uses dummy values instead of actual server addresses.
 
+You may find this information useful for choosing the servers: https://gist.github.com/yetithefoot/7592580
+
 
 ### Note on Running the Server in Background
 

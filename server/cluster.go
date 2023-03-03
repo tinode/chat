@@ -28,8 +28,6 @@ const (
 	clusterHashReplicas = 20
 	// Buffer size for sending requests from proxy to master.
 	clusterProxyToMasterBuffer = 64
-	// Buffer size for master to proxy answers, per node.
-	clusterMasterToProxyBuffer = 64
 	// Buffer size for receiving responses from other nodes, per node.
 	clusterRpcCompletionBuffer = 64
 )

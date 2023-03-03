@@ -964,7 +964,8 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		}
 	}
 
-	if err := store.Messages.Save(
+	markedReadBySender := false
+	if err, unreadUpdated := store.Messages.Save(
 		&types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
 			SeqId:     t.lastID + 1,
@@ -977,6 +978,8 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
 		return err
+	} else {
+		markedReadBySender = unreadUpdated
 	}
 
 	t.lastID++
@@ -1023,7 +1026,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 	t.broadcastToSessions(data)
 
 	// sendPush will update unread message count and send push notification.
-	if pushRcpt := t.pushForData(asUid, data.Data); pushRcpt != nil {
+	if pushRcpt := t.pushForData(asUid, data.Data, markedReadBySender); pushRcpt != nil {
 		sendPush(pushRcpt)
 	}
 	return nil
@@ -1280,17 +1283,15 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 					continue
 				}
 			}
-		} else {
+		} else if pssd.isChanSub && types.IsChannel(sess.sid) {
 			// If it's a chnX multiplexing session, check if there's a corresponding
 			// grpX multiplexing session as we don't want to send the message to both.
-			if pssd.isChanSub && types.IsChannel(sess.sid) {
-				grpSid := types.ChnToGrp(sess.sid)
-				if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
-					// If grpX multiplexing session's attached to topic, skip this chnX session
-					// (message will be routed to the topic proxy via the grpX session).
-					if _, attached := t.sessions[grpSess]; attached {
-						continue
-					}
+			grpSid := types.ChnToGrp(sess.sid)
+			if grpSess := globals.sessionStore.Get(grpSid); grpSess != nil && grpSess.isMultiplex() {
+				// If grpX multiplexing session's attached to topic, skip this chnX session
+				// (message will be routed to the topic proxy via the grpX session).
+				if _, attached := t.sessions[grpSess]; attached {
+					continue
 				}
 			}
 		}

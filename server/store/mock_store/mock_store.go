@@ -1060,11 +1060,12 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetDeleted(topic, forUse
 }
 
 // Save mocks base method.
-func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentURLs []string, readBySender bool) error {
+func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Save", msg, attachmentURLs, readBySender)
 	ret0, _ := ret[0].(error)
-	return ret0
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
 }
 
 // Save indicates an expected call of Save.
@@ -1237,4 +1238,84 @@ func (m *MockFilePersistenceInterface) StartUpload(fd *types.FileDef) error {
 func (mr *MockFilePersistenceInterfaceMockRecorder) StartUpload(fd interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartUpload", reflect.TypeOf((*MockFilePersistenceInterface)(nil).StartUpload), fd)
+}
+
+// MockPersistentCacheInterface is a mock of PersistentCacheInterface interface.
+type MockPersistentCacheInterface struct {
+	ctrl     *gomock.Controller
+	recorder *MockPersistentCacheInterfaceMockRecorder
+}
+
+// MockPersistentCacheInterfaceMockRecorder is the mock recorder for MockPersistentCacheInterface.
+type MockPersistentCacheInterfaceMockRecorder struct {
+	mock *MockPersistentCacheInterface
+}
+
+// NewMockPersistentCacheInterface creates a new mock instance.
+func NewMockPersistentCacheInterface(ctrl *gomock.Controller) *MockPersistentCacheInterface {
+	mock := &MockPersistentCacheInterface{ctrl: ctrl}
+	mock.recorder = &MockPersistentCacheInterfaceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPersistentCacheInterface) EXPECT() *MockPersistentCacheInterfaceMockRecorder {
+	return m.recorder
+}
+
+// Delete mocks base method.
+func (m *MockPersistentCacheInterface) Delete(key string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", key)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockPersistentCacheInterfaceMockRecorder) Delete(key interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockPersistentCacheInterface)(nil).Delete), key)
+}
+
+// Expire mocks base method.
+func (m *MockPersistentCacheInterface) Expire(keyPrefix string, olderThan time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Expire", keyPrefix, olderThan)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Expire indicates an expected call of Expire.
+func (mr *MockPersistentCacheInterfaceMockRecorder) Expire(keyPrefix, olderThan interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Expire", reflect.TypeOf((*MockPersistentCacheInterface)(nil).Expire), keyPrefix, olderThan)
+}
+
+// Get mocks base method.
+func (m *MockPersistentCacheInterface) Get(key string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", key)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockPersistentCacheInterfaceMockRecorder) Get(key interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockPersistentCacheInterface)(nil).Get), key)
+}
+
+// Upsert mocks base method.
+func (m *MockPersistentCacheInterface) Upsert(key, value string, failOnDuplicate bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Upsert", key, value, failOnDuplicate)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Upsert indicates an expected call of Upsert.
+func (mr *MockPersistentCacheInterfaceMockRecorder) Upsert(key, value, failOnDuplicate interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upsert", reflect.TypeOf((*MockPersistentCacheInterface)(nil).Upsert), key, value, failOnDuplicate)
 }

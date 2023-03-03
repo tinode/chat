@@ -650,7 +650,7 @@ func (subsMapper) Delete(topic string, user types.Uid) error {
 
 // MessagesPersistenceInterface is an interface which defines methods for persistent storage of messages.
 type MessagesPersistenceInterface interface {
-	Save(msg *types.Message, attachmentURLs []string, readBySender bool) error
+	Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool)
 	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
@@ -663,30 +663,35 @@ type messagesMapper struct{}
 var Messages MessagesPersistenceInterface
 
 // Save message
-func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySender bool) error {
+func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
-		return err
+		return err, false
 	}
 
 	err = adp.MessageSave(msg)
 	if err != nil {
-		return err
+		return err, false
 	}
 
+	markedReadBySender := false
 	// Mark message as read by the sender.
 	if readBySender {
 		// Make sure From is valid, otherwise we will reset values for all subscribers.
 		fromUid := types.ParseUid(msg.From)
 		if !fromUid.IsZero() {
 			// Ignore the error here. It's not a big deal if it fails.
-			adp.SubsUpdate(msg.Topic, fromUid,
+			if subErr := adp.SubsUpdate(msg.Topic, fromUid,
 				map[string]interface{}{
 					"RecvSeqId": msg.SeqId,
-					"ReadSeqId": msg.SeqId})
+					"ReadSeqId": msg.SeqId}); subErr != nil {
+				logs.Warn.Printf("topic[%s]: failed to mark message (seq: %d) read by sender - err: %+v", msg.Topic, msg.SeqId, subErr)
+			} else {
+				markedReadBySender = true
+			}
 		}
 	}
 
@@ -699,11 +704,11 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 			}
 		}
 		if len(attachments) > 0 {
-			return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments)
+			return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments), markedReadBySender
 		}
 	}
 
-	return nil
+	return nil, markedReadBySender
 }
 
 // DeleteList deletes multiple messages defined by a list of ranges.
@@ -1053,6 +1058,43 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 	return nil
 }
 
+// PersistentCacheInterface is an interface which defines methods used for accessing persistent key-value cache.
+type PersistentCacheInterface interface {
+	// Get reads a persistent cache entry.
+	Get(key string) (string, error)
+	// Upsert creates or updates a persistent cache entry.
+	Upsert(key string, value string, failOnDuplicate bool) error
+	// Delete deletes a single persistent cache entry.
+	Delete(key string) error
+	// Expire expires older entries with the specified key prefix.
+	Expire(keyPrefix string, olderThan time.Time) error
+}
+
+// pcacheMapper is concrete type which implements PersistentCacheInterface.
+type pcacheMapper struct{}
+
+var PCache PersistentCacheInterface
+
+// Get reads a persistent cache entry.
+func (pcacheMapper) Get(key string) (string, error) {
+	return adp.PCacheGet(key)
+}
+
+// Upsert creates or updates a persistent cache entry.
+func (pcacheMapper) Upsert(key string, value string, failOnDuplicate bool) error {
+	return adp.PCacheUpsert(key, value, failOnDuplicate)
+}
+
+// Delete deletes a single persistent cache entry.
+func (pcacheMapper) Delete(key string) error {
+	return adp.PCacheDelete(key)
+}
+
+// Expire expires older entries with the specified key prefix.
+func (pcacheMapper) Expire(keyPrefix string, olderThan time.Time) error {
+	return adp.PCacheExpire(keyPrefix, olderThan)
+}
+
 func init() {
 	Store = storeObj{}
 	Users = usersMapper{}
@@ -1061,4 +1103,5 @@ func init() {
 	Messages = messagesMapper{}
 	Devices = deviceMapper{}
 	Files = fileMapper{}
+	PCache = pcacheMapper{}
 }

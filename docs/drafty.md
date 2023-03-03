@@ -312,8 +312,9 @@ Video call `data` contains current state of the call and its duration:
 * `duration`: call duration in milliseconds.
 * `state`: surrent call state; supported states:
 	* `accepted`: a call is established (ongoing).
+	* `busy`: a call cannot be established because the callee is already in another call.
 	* `finished`: a previously establied call has successfully finished.
-	* `disconnected`: the call is dropped for example because of an error.
+	* `disconnected`: the call is dropped, for example because of an error.
 	* `missed`: the call is missed, i.e. the callee didn't pick up the phone.
 	* `declined`: the call is declined, i.e. the callee hung up before picking up.
 * `incoming`: true if the call is incoming, otherwise the call is outgoing.

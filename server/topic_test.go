@@ -190,7 +190,7 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	helper := TopicTestHelper{}
 	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
 	defer helper.tearDown()
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
 
 	from := helper.uids[0].UserId()
 	msg := &ClientComMessage{
@@ -270,7 +270,7 @@ func TestHandleBroadcastCall(t *testing.T) {
 	globals.iceServers = []iceServer{{Username: "dummy"}}
 	helper.topic.lastID = 5
 	defer helper.tearDown()
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
 
 	from := helper.uids[0].UserId()
 	msg := &ClientComMessage{
@@ -376,7 +376,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 		store.Messages = nil
 		helper.tearDown()
 	}()
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
 
 	// User 3 isn't allowed to read.
 	pu3 := helper.topic.perUser[helper.uids[3]]
@@ -526,7 +526,7 @@ func TestHandleBroadcastDataDbError(t *testing.T) {
 	defer helper.tearDown()
 
 	// DB returns an error.
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(types.ErrInternal)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(types.ErrInternal, false)
 
 	// Make test message.
 	from := helper.uids[0].UserId()

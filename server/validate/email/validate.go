@@ -16,8 +16,6 @@ import (
 	"net/mail"
 	"net/smtp"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	textt "text/template"
@@ -25,6 +23,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/validate"
 	i18n "golang.org/x/text/language"
 )
 
@@ -61,6 +60,8 @@ type validator struct {
 	TLSInsecureSkipVerify bool `json:"insecure_skip_verify"`
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
+	// Length of secret numeric code to sent for validation.
+	CodeLength int `json:"code_length"`
 
 	// Must use index into language array instead of language tags because language.Matcher is brain damaged:
 	// https://github.com/golang/go/issues/24211
@@ -69,121 +70,24 @@ type validator struct {
 	auth            smtp.Auth
 	senderEmail     string
 	langMatcher     i18n.Matcher
+	maxCodeValue    *big.Int
 }
 
 const (
 	validatorName = "email"
 
-	maxRetries  = 4
-	defaultPort = "25"
+	defaultMaxRetries = 3
+	defaultPort       = "25"
 
 	// Technically email could be up to 255 bytes long but practically 128 is enough.
 	maxEmailLength = 128
 
-	// codeLength = log10(maxCodeValue)
-	codeLength   = 6
-	maxCodeValue = 1000000
-
-	// Email template parts
-	emailSubject   = "subject"
-	emailBodyPlain = "body_plain"
-	emailBodyHTML  = "body_html"
+	// Default code length when one is not provided in the config
+	defaultCodeLength = 6
 )
 
-func resolveTemplatePath(path string) (string, error) {
-	if filepath.IsAbs(path) {
-		return path, nil
-	}
-
-	curwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Clean(filepath.Join(curwd, path)), nil
-}
-
-func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, string, error) {
-	buffer := bytes.Buffer{}
-	err := pathTempl.Execute(&buffer, map[string]interface{}{"Language": lang})
-	path := buffer.String()
-	if err != nil {
-		return nil, path, fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	templ, err := textt.ParseFiles(path)
-	return templ, path, err
-}
-
-// Check if the template contains all required parts.
-func isTemplateValid(templ *textt.Template) error {
-	if templ.Lookup(emailSubject) == nil {
-		return fmt.Errorf("template invalid: '%s' not found", emailSubject)
-	}
-	if templ.Lookup(emailBodyPlain) == nil && templ.Lookup(emailBodyHTML) == nil {
-		return fmt.Errorf("template invalid: neither of '%s', '%s' is found", emailBodyPlain, emailBodyHTML)
-	}
-	return nil
-}
-
-type loginAuth struct {
-	username, password []byte
-}
-
-// Start begins an authentication with a server. Exported only to satisfy the interface definition.
-func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
-	return "LOGIN", []byte(a.username), nil
-}
-
-// Next continues the authentication. Exported only to satisfy the interface definition.
-func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
-	if more {
-		switch strings.ToLower(string(fromServer)) {
-		case "username:":
-			return a.username, nil
-		case "password:":
-			return a.password, nil
-		default:
-			return nil, fmt.Errorf("LOGIN AUTH unknown server response '%s'", string(fromServer))
-		}
-	}
-	return nil, nil
-}
-
-type emailContent struct {
-	subject string
-	html    string
-	plain   string
-}
-
-func executeTemplate(template *textt.Template, params map[string]interface{}) (*emailContent, error) {
-	var content emailContent
-	var err error
-
-	buffer := new(bytes.Buffer)
-
-	execComponent := func(name string) (string, error) {
-		buffer.Reset()
-		if templBody := template.Lookup(name); templBody != nil {
-			if err := templBody.Execute(buffer, params); err != nil {
-				return "", err
-			}
-		}
-		return string(buffer.Bytes()), nil
-	}
-
-	if content.subject, err = execComponent(emailSubject); err != nil {
-		return nil, err
-	}
-	if content.plain, err = execComponent(emailBodyPlain); err != nil {
-		return nil, err
-	}
-	if content.html, err = execComponent(emailBodyHTML); err != nil {
-		return nil, err
-	}
-
-	return &content, nil
-}
+// Email template parts
+var templateParts = []string{"subject", "body_plain", "body_html"}
 
 // Init: initialize validator.
 func (v *validator) Init(jsonconf string) error {
@@ -213,11 +117,11 @@ func (v *validator) Init(jsonconf string) error {
 	}
 
 	// Optionally resolve paths.
-	v.ValidationTemplFile, err = resolveTemplatePath(v.ValidationTemplFile)
+	v.ValidationTemplFile, err = validate.ResolveTemplatePath(v.ValidationTemplFile)
 	if err != nil {
 		return err
 	}
-	v.ResetTemplFile, err = resolveTemplatePath(v.ResetTemplFile)
+	v.ResetTemplFile, err = validate.ResolveTemplatePath(v.ResetTemplFile)
 	if err != nil {
 		return err
 	}
@@ -245,14 +149,14 @@ func (v *validator) Init(jsonconf string) error {
 				return err
 			}
 			langTags = append(langTags, tag)
-			if v.validationTempl[idx], path, err = readTemplateFile(validationPathTempl, lang); err != nil {
+			if v.validationTempl[idx], path, err = validate.ReadTemplateFile(validationPathTempl, lang); err != nil {
 				return err
 			}
 			if err = isTemplateValid(v.validationTempl[idx]); err != nil {
 				return fmt.Errorf("parsing %s: %w", path, err)
 			}
 
-			if v.resetTempl[idx], path, err = readTemplateFile(resetPathTempl, lang); err != nil {
+			if v.resetTempl[idx], path, err = validate.ReadTemplateFile(resetPathTempl, lang); err != nil {
 				return err
 			}
 			if err = isTemplateValid(v.resetTempl[idx]); err != nil {
@@ -264,7 +168,7 @@ func (v *validator) Init(jsonconf string) error {
 		v.validationTempl = make([]*textt.Template, 1)
 		v.resetTempl = make([]*textt.Template, 1)
 		// No i18n support. Use defaults.
-		v.validationTempl[0], path, err = readTemplateFile(validationPathTempl, "")
+		v.validationTempl[0], path, err = validate.ReadTemplateFile(validationPathTempl, "")
 		if err != nil {
 			return err
 		}
@@ -272,7 +176,7 @@ func (v *validator) Init(jsonconf string) error {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 
-		v.resetTempl[0], path, err = readTemplateFile(resetPathTempl, "")
+		v.resetTempl[0], path, err = validate.ReadTemplateFile(resetPathTempl, "")
 		if err != nil {
 			return err
 		}
@@ -281,34 +185,36 @@ func (v *validator) Init(jsonconf string) error {
 		}
 	}
 
-	hostUrl, err := url.Parse(v.HostUrl)
-	if err != nil {
+	if v.HostUrl, err = validate.ValidateHostURL(v.HostUrl); err != nil {
 		return err
 	}
-	if !hostUrl.IsAbs() {
-		return errors.New("host_url must be absolute")
-	}
-	if hostUrl.Hostname() == "" {
-		return errors.New("invalid host_url")
-	}
-	if hostUrl.Fragment != "" {
-		return errors.New("fragment is not allowed in host_url")
-	}
-	if hostUrl.Path == "" {
-		hostUrl.Path = "/"
-	}
-	v.HostUrl = hostUrl.String()
+
 	if v.SMTPHeloHost == "" {
+		hostUrl, _ := url.Parse(v.HostUrl)
 		v.SMTPHeloHost = hostUrl.Hostname()
 	}
-	if v.MaxRetries == 0 {
-		v.MaxRetries = maxRetries
+	if v.SMTPHeloHost == "" {
+		return errors.New("missing SMTP host")
 	}
+
+	if v.MaxRetries == 0 {
+		v.MaxRetries = defaultMaxRetries
+	}
+	if v.CodeLength == 0 {
+		v.CodeLength = defaultCodeLength
+	}
+	v.maxCodeValue = big.NewInt(0).Exp(big.NewInt(10), big.NewInt(int64(v.CodeLength)), nil)
+
 	if v.SMTPPort == "" {
 		v.SMTPPort = defaultPort
 	}
 
 	return nil
+}
+
+// IsInitialized returns true if the validator is initialized.
+func (v *validator) IsInitialized() bool {
+	return v.SMTPHeloHost != ""
 }
 
 // PreCheck validates the credential and parameters without sending an email.
@@ -365,12 +271,12 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	base64.StdEncoding.Encode(token, tmpToken)
 
 	// Generate expected response as a random numeric string between 0 and 999999.
-	code, err := crand.Int(crand.Reader, big.NewInt(maxCodeValue))
+	code, err := crand.Int(crand.Reader, v.maxCodeValue)
 	if err != nil {
 		return false, err
 	}
 	resp = strconv.FormatInt(code.Int64(), 10)
-	resp = strings.Repeat("0", codeLength-len(resp)) + resp
+	resp = strings.Repeat("0", v.CodeLength-len(resp)) + resp
 
 	var template *textt.Template
 	if v.langMatcher != nil {
@@ -380,7 +286,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 		template = v.validationTempl[0]
 	}
 
-	content, err := executeTemplate(template, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, templateParts, map[string]interface{}{
 		"Token":   url.QueryEscape(string(token)),
 		"Code":    resp,
 		"HostUrl": v.HostUrl})
@@ -426,7 +332,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 		login = params["login"].(string)
 	}
 
-	content, err := executeTemplate(template, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, templateParts, map[string]interface{}{
 		"Login":   login,
 		"Token":   url.QueryEscape(string(token)),
 		"Scheme":  scheme,
@@ -539,7 +445,7 @@ func (v *validator) sendMail(rcpt []string, msg []byte) error {
 // https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
 // -
 // Mailjet and SendGrid have some free email limits.
-func (v *validator) send(to string, content *emailContent) error {
+func (v *validator) send(to string, content map[string]string) error {
 	message := &bytes.Buffer{}
 
 	// Common headers.
@@ -548,23 +454,23 @@ func (v *validator) send(to string, content *emailContent) error {
 	message.WriteString("Subject: ")
 	// Old email clients may barf on UTF-8 strings.
 	// Encode as quoted printable with 75-char strings separated by spaces, split by spaces, reassemble.
-	message.WriteString(strings.Join(strings.Split(mime.QEncoding.Encode("utf-8", content.subject), " "), "\r\n    "))
+	message.WriteString(strings.Join(strings.Split(mime.QEncoding.Encode("utf-8", content["subject"]), " "), "\r\n    "))
 	message.WriteString("\r\n")
 	message.WriteString("MIME-version: 1.0;\r\n")
 
-	if content.html == "" {
+	if content["body_html"] == "" {
 		// Plain text message
 		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
 		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
 		b64w := base64.NewEncoder(base64.StdEncoding, message)
-		b64w.Write([]byte(content.plain))
+		b64w.Write([]byte(content["body_plain"]))
 		b64w.Close()
-	} else if content.plain == "" {
+	} else if content["body_plain"] == "" {
 		// HTML-formatted message
 		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 		message.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 		qpw := qp.NewWriter(message)
-		qpw.Write([]byte(content.html))
+		qpw.Write([]byte(content["body_html"]))
 		qpw.Close()
 	} else {
 		// Multipart-alternative message includes both HTML and plain text components.
@@ -575,7 +481,7 @@ func (v *validator) send(to string, content *emailContent) error {
 		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
 		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
 		b64w := base64.NewEncoder(base64.StdEncoding, message)
-		b64w.Write([]byte(content.plain))
+		b64w.Write([]byte(content["body_plain"]))
 		b64w.Close()
 
 		message.WriteString("\r\n")
@@ -584,7 +490,7 @@ func (v *validator) send(to string, content *emailContent) error {
 		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 		message.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 		qpw := qp.NewWriter(message)
-		qpw.Write([]byte(content.html))
+		qpw.Write([]byte(content["body_html"]))
 		qpw.Close()
 
 		message.WriteString("\r\n--" + boundary + "--")
@@ -598,6 +504,41 @@ func (v *validator) send(to string, content *emailContent) error {
 	}
 
 	return err
+}
+
+// Check if the template contains all required parts.
+func isTemplateValid(templ *textt.Template) error {
+	if templ.Lookup("subject") == nil {
+		return fmt.Errorf("template invalid: '%s' not found", "subject")
+	}
+	if templ.Lookup("body_plain") == nil && templ.Lookup("body_html") == nil {
+		return fmt.Errorf("template invalid: neither of '%s', '%s' is found", "body_plain", "body_html")
+	}
+	return nil
+}
+
+type loginAuth struct {
+	username, password []byte
+}
+
+// Start begins an authentication with a server. Exported only to satisfy the interface definition.
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	return "LOGIN", []byte(a.username), nil
+}
+
+// Next continues the authentication. Exported only to satisfy the interface definition.
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if more {
+		switch strings.ToLower(string(fromServer)) {
+		case "username:":
+			return a.username, nil
+		case "password:":
+			return a.password, nil
+		default:
+			return nil, fmt.Errorf("LOGIN AUTH unknown server response '%s'", string(fromServer))
+		}
+	}
+	return nil, nil
 }
 
 func randomBoundary() string {

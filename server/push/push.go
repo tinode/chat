@@ -30,6 +30,8 @@ type Recipient struct {
 	Devices []string `json:"devices,omitempty"`
 	// Unread count to include in the push
 	Unread int `json:"unread"`
+	// Indicates whether unread counter in the cache should be incremented before sending the push.
+	ShouldIncrementUnreadCountInCache bool `json:"-"`
 }
 
 // Receipt is the push payload with a list of recipients.

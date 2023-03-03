@@ -181,4 +181,15 @@ type Adapter interface {
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
 	// FileLinkAttachments connects given topic or message to the file record IDs from the list.
 	FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error
+
+	// Persistent cache management.
+
+	// PCacheGet reads a persistent cache entry.
+	PCacheGet(key string) (string, error)
+	// PCacheUpsert creates or updates a persistent cache entry.
+	PCacheUpsert(key string, value string, failOnDuplicate bool) error
+	// PCacheDelete deletes a single persistent cache entry.
+	PCacheDelete(key string) error
+	// PCacheExpire expires older entries with the specified key prefix.
+	PCacheExpire(keyPrefix string, olderThan time.Time) error
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
+	_ "github.com/tinode/chat/server/auth/code"
 	_ "github.com/tinode/chat/server/auth/rest"
 	_ "github.com/tinode/chat/server/auth/token"
 
@@ -461,22 +462,13 @@ func main() {
 		for _, req := range vconf.Required {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
-				if req != "" {
-					logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
-				}
-				// Skip empty string
-				continue
+				logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
 			}
 			reqLevels = append(reqLevels, lvl)
 			if globals.authValidators == nil {
 				globals.authValidators = make(map[auth.Level][]string)
 			}
 			globals.authValidators[lvl] = append(globals.authValidators[lvl], name)
-		}
-
-		if len(reqLevels) == 0 {
-			// Ignore validator with empty levels.
-			continue
 		}
 
 		if val := store.Store.GetValidator(name); val == nil {
