@@ -61,9 +61,9 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.21"
+	currentVersion = "0.22"
 	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.18"
+	minSupportedVersion = "0.19"
 
 	// idleSessionTimeout defines duration of being idle before terminating a session.
 	idleSessionTimeout = time.Second * 55
