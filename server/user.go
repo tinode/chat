@@ -589,6 +589,13 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	var uid types.Uid
 
 	if msg.Del.User == "" || msg.Del.User == s.uid.UserId() {
+		// Check if account deletion is disabled.
+		if globals.permanentAccounts && s.authLvl != auth.LevelRoot {
+			logs.Warn.Println("replyDelUser: account deletion disabled", s.sid)
+			s.queueOut(ErrPolicy(msg.Id, "", msg.Timestamp))
+			return
+		}
+
 		// Delete current user.
 		uid = s.uid
 	} else if s.authLvl == auth.LevelRoot {

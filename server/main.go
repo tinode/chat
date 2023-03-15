@@ -176,6 +176,8 @@ var globals struct {
 	maxSubscriberCount int
 	// Maximum number of indexable tags.
 	maxTagCount int
+	// If true, ordinary users cannot delete their accounts.
+	permanentAccounts bool
 
 	// Maximum allowed upload size.
 	maxFileUploadSize int64
@@ -262,8 +264,10 @@ type configType struct {
 	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Masked tags: tags immutable on User (mask), mutable on Topic only within the mask.
 	MaskedTagNamespaces []string `json:"masked_tags"`
-	// Maximum number of indexable tags
+	// Maximum number of indexable tags.
 	MaxTagCount int `json:"max_tag_count"`
+	// If true, ordinary users cannot delete their accounts.
+	PermanentAccounts bool `json:"permanent_accounts"`
 	// URL path for exposing runtime stats. Disabled if the path is blank.
 	ExpvarPath string `json:"expvar"`
 	// URL path for internal server status. Disabled if the path is blank.
@@ -532,6 +536,8 @@ func main() {
 	if globals.maxTagCount <= 0 {
 		globals.maxTagCount = defaultMaxTagCount
 	}
+	// If account deletion is disabled.
+	globals.permanentAccounts = config.PermanentAccounts
 
 	globals.useXForwardedFor = config.UseXForwardedFor
 	globals.defaultCountryCode = config.DefaultCountryCode
