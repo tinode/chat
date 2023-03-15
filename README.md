@@ -105,14 +105,14 @@ When you register a new account you are asked for an email address to send valid
   * Scriptable [command-line tool](tn-cli/) for server administration.
 * Performance, reliability and development:
   * Sharded clustering with failover.
-  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with plugins).
+  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with [media handlers](https://github.com/tinode/chat/blob/master/server/media/media.go#L21)).
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:
     * Javascript with no external dependencies.
     * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket). Suitable for Android but with no Android SDK dependencies.
     * Swift with no external dependencies.
     * C/C++, C#, Go, Python, PHP, Ruby and many other languages using [gRPC](https://grpc.io/docs/languages/).
-  * Choice of a database backend: MySQL, RethinkDB, MongoDB.
+  * Choice of a database backend: MySQL, RethinkDB, MongoDB. Other databases can be added with by writing [adapters](server/db/adapter.go).
 
 ### Planned
 
