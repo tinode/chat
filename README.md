@@ -120,9 +120,10 @@ When you register a new account you are asked for an email address to send valid
 * Location and contacts sharing.
 * Previews of attached documents, links.
 * Recording video messages.
-* Better emoji support.
+* Video/audio broadcasting.
+* Group video/audio calls.
 * Attaching music/audio other than voice messages.
-* Hot standby.
+* Better emoji support.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
