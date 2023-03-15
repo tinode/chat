@@ -70,8 +70,9 @@ func matchCORSOrigin(allowed []string, origin string) string {
 		return "*"
 	}
 
+	origin = strings.ToLower(origin)
 	for _, val := range allowed {
-		if val == origin {
+		if strings.ToLower(val) == origin {
 			return origin
 		}
 	}
@@ -87,7 +88,7 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 
 	method = strings.ToUpper(method)
 	for _, mm := range allowMethods {
-		if mm == method {
+		if strings.ToUpper(mm) == method {
 			return true
 		}
 	}
@@ -102,17 +103,6 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 		return nil, 0
 	}
 
-	headers := map[string][]string{
-		// Always add Vary because of possible intermediate caches.
-		"Vary": {"Origin", "Access-Control-Request-Method"},
-	}
-
-	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Header.Get("Origin"))
-	if allowedOrigin == "" {
-		// CORS policy does not match the origin.
-		return headers, http.StatusOK
-	}
-
 	var allowMethods []string
 	if serve {
 		allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
@@ -120,16 +110,27 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 		allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
 	}
 
+	headers := map[string][]string{
+		// Always add Vary because of possible intermediate caches.
+		"Vary":                             {"Origin", "Access-Control-Request-Method"},
+		"Access-Control-Allow-Headers":     {"*"},
+		"Access-Control-Max-Age":           {"86400"},
+		"Access-Control-Allow-Credentials": {"true"},
+		"Access-Control-Allow-Methods":     {strings.Join(allowMethods, ", ")},
+	}
+
 	if !matchCORSMethod(allowMethods, req.Header.Get("Access-Control-Request-Method")) {
 		// CORS policy does not allow this method.
-		return headers, http.StatusOK
+		return headers, http.StatusNoContent
+	}
+
+	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Header.Get("Origin"))
+	if allowedOrigin == "" {
+		// CORS policy does not match the origin.
+		return headers, http.StatusNoContent
 	}
 
 	headers["Access-Control-Allow-Origin"] = []string{allowedOrigin}
-	headers["Access-Control-Allow-Headers"] = []string{"*"}
-	headers["Access-Control-Allow-Methods"] = []string{strings.Join(allowMethods, ",")}
-	headers["Access-Control-Max-Age"] = []string{"86400"}
-	headers["Access-Control-Allow-Credentials"] = []string{"true"}
 
-	return headers, http.StatusOK
+	return headers, http.StatusNoContent
 }
