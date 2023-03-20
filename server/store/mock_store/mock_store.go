@@ -415,18 +415,18 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) FailCred(id, method interfa
 }
 
 // FindSubs mocks base method.
-func (m *MockUsersPersistenceInterface) FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error) {
+func (m *MockUsersPersistenceInterface) FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindSubs", id, required, optional)
+	ret := m.ctrl.Call(m, "FindSubs", id, required, optional, activeOnly)
 	ret0, _ := ret[0].([]types.Subscription)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindSubs indicates an expected call of FindSubs.
-func (mr *MockUsersPersistenceInterfaceMockRecorder) FindSubs(id, required, optional interface{}) *gomock.Call {
+func (mr *MockUsersPersistenceInterfaceMockRecorder) FindSubs(id, required, optional, activeOnly interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSubs", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FindSubs), id, required, optional)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSubs", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FindSubs), id, required, optional, activeOnly)
 }
 
 // Get mocks base method.

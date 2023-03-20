@@ -2054,7 +2054,7 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 }
 
 // Search
-func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]struct{}, b.A) {
+func (a *adapter) getFindPipeline(req [][]string, opt []string, activeOnly bool) (map[string]struct{}, b.A) {
 	allReq := t.FlattenDoubleSlice(req)
 	index := make(map[string]struct{})
 	var allTags []interface{}
@@ -2063,11 +2063,12 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]stru
 		index[tag] = struct{}{}
 	}
 
+	matchOn := b.M{"tags": b.M{"$in": allTags}}
+	if activeOnly {
+		matchOn["state"] = b.M{"$eq": t.StateOK}
+	}
 	pipeline := b.A{
-		b.M{"$match": b.M{
-			"tags":  b.M{"$in": allTags},
-			"state": b.M{"$ne": t.StateDeleted},
-		}},
+		b.M{"$match": matchOn},
 
 		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "trusted": 1, "tags": 1}},
 
@@ -2104,8 +2105,8 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]stru
 }
 
 // FindUsers searches for new contacts given a list of tags
-func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
-	index, pipeline := a.getFindPipeline(req, opt)
+func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+	index, pipeline := a.getFindPipeline(req, opt, activeOnly)
 	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
 	if err != nil {
 		return nil, err
@@ -2143,8 +2144,8 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 }
 
 // FindTopics searches for group topics given a list of tags
-func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
-	index, pipeline := a.getFindPipeline(req, opt)
+func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+	index, pipeline := a.getFindPipeline(req, opt, activeOnly)
 	cur, err := a.db.Collection("topics").Aggregate(a.ctx, pipeline)
 	if err != nil {
 		return nil, err

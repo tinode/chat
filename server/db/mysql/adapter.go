@@ -2341,10 +2341,14 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	args = append(args, t.StateOK)
+	stateConstraint := ""
+	if activeOnly {
+		args = append(args, t.StateOK)
+		stateConstraint = "u.state=? AND "
+	}
 	allReq := t.FlattenDoubleSlice(req)
 	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
@@ -2353,7 +2357,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
+		"WHERE " + stateConstraint + "t.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"
@@ -2429,10 +2433,14 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	args = append(args, t.StateOK)
+	stateConstraint := ""
+	if activeOnly {
+		args = append(args, t.StateOK)
+		stateConstraint = "u.state=? AND "
+	}
 	var allReq []string
 	for _, el := range req {
 		allReq = append(allReq, el...)
@@ -2444,7 +2452,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 
 	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
+		"WHERE " + stateConstraint + "tt.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"

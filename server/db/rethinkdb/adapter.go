@@ -1863,7 +1863,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 
 // FindUsers returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	allReq := t.FlattenDoubleSlice(req)
 	var allTags []interface{}
@@ -1888,9 +1888,11 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	// Get users matched by tags, sort by number of matches from high to low.
 	query := rdb.DB(a.dbName).
 		Table("users").
-		GetAllByIndex("Tags", allTags...).
-		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Trusted", "Tags").
+		GetAllByIndex("Tags", allTags...)
+	if activeOnly {
+		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
+	}
+	query = query.Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Trusted", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {
@@ -1948,7 +1950,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 // FindTopics returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var allReq []string
 	for _, el := range req {
@@ -1961,9 +1963,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	}
 	query := rdb.DB(a.dbName).
 		Table("topics").
-		GetAllByIndex("Tags", allTags...).
-		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Trusted", "Tags").
+		GetAllByIndex("Tags", allTags...)
+	if activeOnly {
+		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
+	}
+	query = query.Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Trusted", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {

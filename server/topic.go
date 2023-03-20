@@ -2419,8 +2419,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
-						// TODO: allow root to find suspended users and topics.
-						subs, err = store.Users.FindSubs(asUid, req, opt)
+						subs, err = store.Users.FindSubs(asUid, req, opt, sess.authLvl == auth.LevelRoot)
 						if err != nil {
 							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
 							return err
