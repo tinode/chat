@@ -964,6 +964,17 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		}
 	}
 
+	if msg.sess != nil && msg.sess.uid != asUid {
+		// Add 'sender' header indicating that message was sent on behalf of another user.
+		if head == nil {
+			head = map[string]interface{}{}
+		}
+		head["sender"] = msg.sess.uid.UserId()
+	} else if head != nil {
+		// Make sure the received Head does not include a fake "sender" header.
+		delete(head, "sender")
+	}
+
 	markedReadBySender := false
 	if err, unreadUpdated := store.Messages.Save(
 		&types.Message{
