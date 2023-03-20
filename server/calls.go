@@ -181,6 +181,8 @@ func (call *videoCall) messageHead(head map[string]interface{}, newState string,
 
 	if duration > 0 {
 		head["webrtc-duration"] = duration
+	} else {
+		delete(head, "webrtc-duration")
 	}
 	if call.contentMime != nil {
 		head["mime"] = call.contentMime
