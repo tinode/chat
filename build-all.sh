@@ -72,7 +72,7 @@ then
   cp ./server/static/manifest.json ./releases/tmp/static
   cp ./server/static/service-worker.js ./releases/tmp/static
   # Create empty FCM client-side config.
-  touch ./releases/tmp/static/firebase-init.js
+  echo 'const FIREBASE_INIT = {};' > ./releases/tmp/static/firebase-init.js
 else
   echo "TinodeWeb not found, skipping"
 fi
