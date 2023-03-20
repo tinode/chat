@@ -171,6 +171,8 @@ func initVideoCalls(jsconfig json.RawMessage) error {
 	return nil
 }
 
+// Add webRTC-related headers to message Head. The original Head may already contain some entries,
+// like 'sender', preserve them.
 func (call *videoCall) messageHead(head map[string]interface{}, newState string, duration int) map[string]interface{} {
 	if head == nil {
 		head = map[string]interface{}{}
