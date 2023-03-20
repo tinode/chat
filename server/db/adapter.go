@@ -141,10 +141,10 @@ type Adapter interface {
 
 	// Search
 
-	// FindUsers searches for new contacts given a list of tags
-	FindUsers(user t.Uid, req [][]string, opt []string) ([]t.Subscription, error)
-	// FindTopics searches for group topics given a list of tags
-	FindTopics(req [][]string, opt []string) ([]t.Subscription, error)
+	// FindUsers searches for new contacts given a list of tags.
+	FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
+	// FindTopics searches for group topics given a list of tags.
+	FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
 
 	// Messages
 

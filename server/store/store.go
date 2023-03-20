@@ -266,7 +266,7 @@ type UsersPersistenceInterface interface {
 	UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error)
 	UpdateState(uid types.Uid, state types.ObjState) error
 	GetSubs(id types.Uid) ([]types.Subscription, error)
-	FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error)
+	FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error)
 	GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetOwnTopics(id types.Uid) ([]string, error)
@@ -424,12 +424,12 @@ func (usersMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 // `required` specifies an AND of ORs for required terms:
 // at least one element of every sublist in `required` must be present in the object's tags list.
 // `optional` specifies a list of optional terms.
-func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error) {
-	usubs, err := adp.FindUsers(id, required, optional)
+func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
+	usubs, err := adp.FindUsers(id, required, optional, activeOnly)
 	if err != nil {
 		return nil, err
 	}
-	tsubs, err := adp.FindTopics(required, optional)
+	tsubs, err := adp.FindTopics(required, optional, activeOnly)
 	if err != nil {
 		return nil, err
 	}
