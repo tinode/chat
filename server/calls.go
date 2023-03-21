@@ -83,9 +83,9 @@ type videoCall struct {
 	// Call message seq ID.
 	seq int
 	// Call message content.
-	content interface{}
+	content any
 	// Call message content mime type.
-	contentMime interface{}
+	contentMime any
 	// Time when the call was accepted.
 	acceptedAt time.Time
 }
@@ -173,9 +173,9 @@ func initVideoCalls(jsconfig json.RawMessage) error {
 
 // Add webRTC-related headers to message Head. The original Head may already contain some entries,
 // like 'sender', preserve them.
-func (call *videoCall) messageHead(head map[string]interface{}, newState string, duration int) map[string]interface{} {
+func (call *videoCall) messageHead(head map[string]any, newState string, duration int) map[string]any {
 	if head == nil {
-		head = map[string]interface{}{}
+		head = map[string]any{}
 	}
 
 	head["replace"] = ":" + strconv.Itoa(call.seq)

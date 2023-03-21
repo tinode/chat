@@ -48,7 +48,7 @@ type varUpdate struct {
 	// Name of the variable to update
 	varname string
 	// Value to publish (int, float, etc.)
-	value interface{}
+	value any
 	// Treat the count as an increment as opposite to the final value.
 	inc bool
 }
@@ -63,10 +63,10 @@ func statsInit(mux *http.ServeMux, path string) {
 	globals.statsUpdate = make(chan *varUpdate, 1024)
 
 	start := time.Now()
-	expvar.Publish("Uptime", expvar.Func(func() interface{} {
+	expvar.Publish("Uptime", expvar.Func(func() any {
 		return time.Since(start).Seconds()
 	}))
-	expvar.Publish("NumGoroutines", expvar.Func(func() interface{} {
+	expvar.Publish("NumGoroutines", expvar.Func(func() any {
 		return runtime.NumGoroutine()
 	}))
 

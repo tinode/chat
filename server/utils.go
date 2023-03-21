@@ -221,19 +221,19 @@ func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
 }
 
 // Check if the interface contains a string with a single Unicode Del control character.
-func isNullValue(i interface{}) bool {
+func isNullValue(i any) bool {
 	if str, ok := i.(string); ok {
 		return str == nullValue
 	}
 	return false
 }
 
-func decodeStoreError(err error, id string, ts time.Time, params map[string]interface{}) *ServerComMessage {
+func decodeStoreError(err error, id string, ts time.Time, params map[string]any) *ServerComMessage {
 	return decodeStoreErrorExplicitTs(err, id, "", ts, ts, params)
 }
 
 func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingReqTs time.Time,
-	params map[string]interface{}) *ServerComMessage {
+	params map[string]any) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
@@ -435,7 +435,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 	}
 
 	// Check if token can be rewritten by any of the validators
-	param := map[string]interface{}{"countryCode": countryCode}
+	param := map[string]any{"countryCode": countryCode}
 	for name, conf := range globals.validators {
 		if conf.addToTags {
 			val := store.Store.GetValidator(name)
@@ -758,7 +758,7 @@ func parseTLSConfig(tlsEnabled bool, jsconfig json.RawMessage) (*tls.Config, err
 // Merge source interface{} into destination interface.
 // If values are maps,deep-merge them. Otherwise shallow-copy.
 // Returns dst, true if the dst value was changed.
-func mergeInterfaces(dst, src interface{}) (interface{}, bool) {
+func mergeInterfaces(dst, src any) (any, bool) {
 	var changed bool
 
 	if src == nil {
@@ -768,8 +768,8 @@ func mergeInterfaces(dst, src interface{}) (interface{}, bool) {
 	vsrc := reflect.ValueOf(src)
 	switch vsrc.Kind() {
 	case reflect.Map:
-		if xsrc, ok := src.(map[string]interface{}); ok {
-			xdst, _ := dst.(map[string]interface{})
+		if xsrc, ok := src.(map[string]any); ok {
+			xdst, _ := dst.(map[string]any)
 			dst, changed = mergeMaps(xdst, xsrc)
 		} else {
 			changed = true
@@ -791,7 +791,7 @@ func mergeInterfaces(dst, src interface{}) (interface{}, bool) {
 }
 
 // Deep copy maps.
-func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
+func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 	var changed bool
 
 	if len(src) == 0 {
@@ -799,16 +799,16 @@ func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
 	}
 
 	if dst == nil {
-		dst = make(map[string]interface{})
+		dst = make(map[string]any)
 	}
 
 	for key, val := range src {
 		xval := reflect.ValueOf(val)
 		switch xval.Kind() {
 		case reflect.Map:
-			if xsrc, _ := val.(map[string]interface{}); xsrc != nil {
+			if xsrc, _ := val.(map[string]any); xsrc != nil {
 				// Deep-copy map[string]interface{}
-				xdst, _ := dst[key].(map[string]interface{})
+				xdst, _ := dst[key].(map[string]any)
 				var lchange bool
 				dst[key], lchange = mergeMaps(xdst, xsrc)
 				changed = changed || lchange

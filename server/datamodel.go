@@ -60,9 +60,9 @@ type MsgSetSub struct {
 // MsgSetDesc is a C2S in set.what == "desc", acc, sub message.
 type MsgSetDesc struct {
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`  // default access mode
-	Public     interface{}        `json:"public,omitempty"`  // description of the user or topic
-	Trusted    interface{}        `json:"trusted,omitempty"` // trusted (system-provided) user or topic data
-	Private    interface{}        `json:"private,omitempty"` // per-subscription private data
+	Public     any                `json:"public,omitempty"`  // description of the user or topic
+	Trusted    any                `json:"trusted,omitempty"` // trusted (system-provided) user or topic data
+	Private    any                `json:"private,omitempty"` // per-subscription private data
 }
 
 // MsgCredClient is an account credential such as email or phone number.
@@ -74,7 +74,7 @@ type MsgCredClient struct {
 	// Verification response
 	Response string `json:"resp,omitempty"`
 	// Request parameters, such as preferences. Passed to valiator without interpretation.
-	Params map[string]interface{} `json:"params,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // MsgSetQuery is an update to topic or user metadata: description, subscriptions, tags, credentials.
@@ -253,11 +253,11 @@ type MsgClientLeave struct {
 
 // MsgClientPub is client's request to publish data to topic subscribers {pub}.
 type MsgClientPub struct {
-	Id      string                 `json:"id,omitempty"`
-	Topic   string                 `json:"topic"`
-	NoEcho  bool                   `json:"noecho,omitempty"`
-	Head    map[string]interface{} `json:"head,omitempty"`
-	Content interface{}            `json:"content"`
+	Id      string         `json:"id,omitempty"`
+	Topic   string         `json:"topic"`
+	NoEcho  bool           `json:"noecho,omitempty"`
+	Head    map[string]any `json:"head,omitempty"`
+	Content any            `json:"content"`
 }
 
 // MsgClientGet is a query of topic state {get}.
@@ -436,11 +436,11 @@ type MsgTopicDesc struct {
 	ReadSeqId int `json:"read,omitempty"`
 	RecvSeqId int `json:"recv,omitempty"`
 	// Id of the last delete operation as seen by the requesting user
-	DelId   int         `json:"clear,omitempty"`
-	Public  interface{} `json:"public,omitempty"`
-	Trusted interface{} `json:"trusted,omitempty"`
+	DelId   int `json:"clear,omitempty"`
+	Public  any `json:"public,omitempty"`
+	Trusted any `json:"trusted,omitempty"`
 	// Per-subscription private data
-	Private interface{} `json:"private,omitempty"`
+	Private any `json:"private,omitempty"`
 }
 
 func (src *MsgTopicDesc) describe() string {
@@ -496,11 +496,11 @@ type MsgTopicSub struct {
 	// ID of the message reported by the given user as received
 	RecvSeqId int `json:"recv,omitempty"`
 	// Topic's public data
-	Public interface{} `json:"public,omitempty"`
+	Public any `json:"public,omitempty"`
 	// Topic's trusted public data
-	Trusted interface{} `json:"trusted,omitempty"`
+	Trusted any `json:"trusted,omitempty"`
 	// User's own private data per topic
-	Private interface{} `json:"private,omitempty"`
+	Private any `json:"private,omitempty"`
 
 	// Response to non-'me' topic
 
@@ -563,9 +563,9 @@ type MsgDelValues struct {
 
 // MsgServerCtrl is a server control message {ctrl}.
 type MsgServerCtrl struct {
-	Id     string      `json:"id,omitempty"`
-	Topic  string      `json:"topic,omitempty"`
-	Params interface{} `json:"params,omitempty"`
+	Id     string `json:"id,omitempty"`
+	Topic  string `json:"topic,omitempty"`
+	Params any    `json:"params,omitempty"`
 
 	Code      int       `json:"code"`
 	Text      string    `json:"text,omitempty"`
@@ -589,12 +589,12 @@ func (src *MsgServerCtrl) describe() string {
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
-	From      string                 `json:"from,omitempty"`
-	Timestamp time.Time              `json:"ts"`
-	DeletedAt *time.Time             `json:"deleted,omitempty"`
-	SeqId     int                    `json:"seq"`
-	Head      map[string]interface{} `json:"head,omitempty"`
-	Content   interface{}            `json:"content"`
+	From      string         `json:"from,omitempty"`
+	Timestamp time.Time      `json:"ts"`
+	DeletedAt *time.Time     `json:"deleted,omitempty"`
+	SeqId     int            `json:"seq"`
+	Head      map[string]any `json:"head,omitempty"`
+	Content   any            `json:"content"`
 }
 
 // Deep-shallow copy.
@@ -894,13 +894,13 @@ func NoErrReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 }
 
 // NoErrParams indicates successful completion with additional parameters (200).
-func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
+func NoErrParams(id, topic string, ts time.Time, params any) *ServerComMessage {
 	return NoErrParamsExplicitTs(id, topic, ts, ts, params)
 }
 
 // NoErrParamsExplicitTs indicates successful completion with additional parameters
 // and explicit server and incoming request timestamps (200).
-func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, params interface{}) *ServerComMessage {
+func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, params any) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
@@ -917,7 +917,7 @@ func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, 
 
 // NoErrParamsReply indicates successful completion with additional parameters
 // and explicit server and incoming request timestamps (200).
-func NoErrParamsReply(msg *ClientComMessage, ts time.Time, params interface{}) *ServerComMessage {
+func NoErrParamsReply(msg *ClientComMessage, ts time.Time, params any) *ServerComMessage {
 	return NoErrParamsExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp, params)
 }
 
@@ -957,7 +957,7 @@ func NoErrAcceptedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time
 }
 
 // NoContentParams indicates request was processed but resulted in no content (204).
-func NoContentParams(id, topic string, serverTs, incomingReqTs time.Time, params interface{}) *ServerComMessage {
+func NoContentParams(id, topic string, serverTs, incomingReqTs time.Time, params any) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
@@ -974,7 +974,7 @@ func NoContentParams(id, topic string, serverTs, incomingReqTs time.Time, params
 
 // NoContentParamsReply indicates request was processed but resulted in no content
 // in response to a client request (204).
-func NoContentParamsReply(msg *ClientComMessage, ts time.Time, params interface{}) *ServerComMessage {
+func NoContentParamsReply(msg *ClientComMessage, ts time.Time, params any) *ServerComMessage {
 	return NoContentParams(msg.Id, msg.Original, ts, msg.Timestamp, params)
 }
 
@@ -1003,7 +1003,7 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 }
 
 // NoErrDeliveredParams means requested content has been delivered (208).
-func NoErrDeliveredParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
+func NoErrDeliveredParams(id, topic string, ts time.Time, params any) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
 			Id:        id,
@@ -1046,7 +1046,7 @@ func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage 
 			Id:        id,
 			Code:      http.StatusMultipleChoices, // 300
 			Text:      "challenge",
-			Params:    map[string]interface{}{"challenge": challenge},
+			Params:    map[string]any{"challenge": challenge},
 			Timestamp: ts,
 		},
 		Id:        id,

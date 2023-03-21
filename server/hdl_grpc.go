@@ -73,7 +73,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	return nil
 }
 
-func (sess *Session) sendMessageGrpc(msg interface{}) bool {
+func (sess *Session) sendMessageGrpc(msg any) bool {
 	if len(sess.send) > sendQueueLimit {
 		logs.Err.Println("grpc: outbound queue limit exceeded", sess.sid)
 		return false
@@ -136,7 +136,7 @@ func (sess *Session) writeGrpcLoop() {
 	}
 }
 
-func grpcWrite(sess *Session, msg interface{}) error {
+func grpcWrite(sess *Session, msg any) error {
 	if out := sess.grpcnode; out != nil {
 		// Will panic if msg is not of *pbx.ServerMsg type. This is an intentional panic.
 		return out.Send(msg.(*pbx.ServerMsg))

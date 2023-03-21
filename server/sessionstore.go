@@ -36,7 +36,7 @@ type SessionStore struct {
 }
 
 // NewSession creates a new session and saves it to the session store.
-func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int) {
+func (ss *SessionStore) NewSession(conn any, sid string) (*Session, int) {
 	var s Session
 
 	if sid == "" {
@@ -69,9 +69,9 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	}
 
 	s.subs = make(map[string]*Subscription)
-	s.send = make(chan interface{}, sendQueueLimit+32) // buffered
-	s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
-	s.detach = make(chan string, 64)                   // buffered
+	s.send = make(chan any, sendQueueLimit+32) // buffered
+	s.stop = make(chan any, 1)                 // Buffered by 1 just to make it non-blocking
+	s.detach = make(chan string, 64)           // buffered
 
 	s.bkgTimer = time.NewTimer(time.Hour)
 	s.bkgTimer.Stop()
