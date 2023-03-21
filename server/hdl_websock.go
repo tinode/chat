@@ -63,7 +63,7 @@ func (sess *Session) readLoop() {
 	}
 }
 
-func (sess *Session) sendMessage(msg interface{}) bool {
+func (sess *Session) sendMessage(msg any) bool {
 	if len(sess.send) > sendQueueLimit {
 		logs.Err.Println("ws: outbound queue limit exceeded", sess.sid)
 		return false
@@ -144,7 +144,7 @@ func (sess *Session) writeLoop() {
 }
 
 // Writes a message with the given message type (mt) and payload.
-func wsWrite(ws *websocket.Conn, mt int, msg interface{}) error {
+func wsWrite(ws *websocket.Conn, mt int, msg any) error {
 	var bits []byte
 	if msg != nil {
 		bits = msg.([]byte)

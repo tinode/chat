@@ -16,7 +16,7 @@ import (
 
 func TestDispatchHello(t *testing.T) {
 	s := &Session{
-		send:    make(chan interface{}, 10),
+		send:    make(chan any, 10),
 		uid:     types.Uid(1),
 		authLvl: auth.LevelAuth,
 	}
@@ -87,7 +87,7 @@ func verifyResponseCodes(r *responses, codes []int, t *testing.T) {
 
 func TestDispatchInvalidVersion(t *testing.T) {
 	s := &Session{
-		send:    make(chan interface{}, 10),
+		send:    make(chan any, 10),
 		uid:     types.Uid(1),
 		authLvl: auth.LevelAuth,
 	}
@@ -110,7 +110,7 @@ func TestDispatchInvalidVersion(t *testing.T) {
 
 func TestDispatchUnsupportedVersion(t *testing.T) {
 	s := &Session{
-		send:    make(chan interface{}, 10),
+		send:    make(chan any, 10),
 		uid:     types.Uid(1),
 		authLvl: auth.LevelAuth,
 	}
@@ -159,7 +159,7 @@ func TestDispatchLogin(t *testing.T) {
 	aa.EXPECT().GenSecret(authRec).Return([]byte(token), expires, nil)
 
 	s := &Session{
-		send:    make(chan interface{}, 10),
+		send:    make(chan any, 10),
 		authLvl: auth.LevelAuth,
 		ver:     16,
 	}
@@ -197,7 +197,7 @@ func TestDispatchLogin(t *testing.T) {
 		if resp.Ctrl.Params == nil {
 			t.Error("Response is expected to contain params dict.")
 		}
-		p := resp.Ctrl.Params.(map[string]interface{})
+		p := resp.Ctrl.Params.(map[string]any)
 		if authToken := string(p["token"].([]byte)); authToken != token {
 			t.Errorf("Auth token: expected '%s', found '%s'.", token, authToken)
 		}
@@ -212,7 +212,7 @@ func TestDispatchLogin(t *testing.T) {
 func TestDispatchSubscribe(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -267,7 +267,7 @@ func TestDispatchSubscribe(t *testing.T) {
 func TestDispatchAlreadySubscribed(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -301,7 +301,7 @@ func TestDispatchAlreadySubscribed(t *testing.T) {
 func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -342,7 +342,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 func TestDispatchLeave(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -396,7 +396,7 @@ func TestDispatchLeave(t *testing.T) {
 func TestDispatchLeaveUnsubMe(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -429,7 +429,7 @@ func TestDispatchLeaveUnsubMe(t *testing.T) {
 func TestDispatchLeaveUnknownTopic(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -461,7 +461,7 @@ func TestDispatchLeaveUnknownTopic(t *testing.T) {
 func TestDispatchLeaveUnsubFromUnknownTopic(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -494,7 +494,7 @@ func TestDispatchLeaveUnsubFromUnknownTopic(t *testing.T) {
 func TestDispatchPublish(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -550,7 +550,7 @@ func TestDispatchPublish(t *testing.T) {
 func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -591,7 +591,7 @@ func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 func TestDispatchPublishMissingSubcription(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -626,7 +626,7 @@ func TestDispatchPublishMissingSubcription(t *testing.T) {
 func TestDispatchGet(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -677,7 +677,7 @@ func TestDispatchGet(t *testing.T) {
 func TestDispatchGetMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -710,7 +710,7 @@ func TestDispatchGetMalformedWhat(t *testing.T) {
 func TestDispatchGetMetaChannelFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -751,7 +751,7 @@ func TestDispatchGetMetaChannelFull(t *testing.T) {
 func TestDispatchSet(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -809,7 +809,7 @@ func TestDispatchSet(t *testing.T) {
 func TestDispatchSetMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -841,7 +841,7 @@ func TestDispatchSetMalformedWhat(t *testing.T) {
 func TestDispatchSetMetaChannelFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -886,7 +886,7 @@ func TestDispatchSetMetaChannelFull(t *testing.T) {
 func TestDispatchDelMsg(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -937,7 +937,7 @@ func TestDispatchDelMsg(t *testing.T) {
 func TestDispatchDelMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -968,7 +968,7 @@ func TestDispatchDelMalformedWhat(t *testing.T) {
 func TestDispatchDelMetaChanFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -1009,7 +1009,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 func TestDispatchDelUnsubscribedSession(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -1043,7 +1043,7 @@ func TestDispatchDelUnsubscribedSession(t *testing.T) {
 func TestDispatchNote(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -1101,7 +1101,7 @@ func TestDispatchNote(t *testing.T) {
 func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -1140,7 +1140,7 @@ func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {
 	uid := types.Uid(1)
 	s := &Session{
-		send:         make(chan interface{}, 10),
+		send:         make(chan any, 10),
 		uid:          uid,
 		authLvl:      auth.LevelAuth,
 		inflightReqs: &sync.WaitGroup{},
@@ -1197,7 +1197,7 @@ func TestDispatchAccNew(t *testing.T) {
 	// This login is available.
 	aa.EXPECT().IsUnique([]byte(secret), remoteAddr).Return(true, nil)
 	uu.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(user *types.User, private interface{}) (*types.User, error) {
+		func(user *types.User, private any) (*types.User, error) {
 			user.SetUid(uid)
 			return user, nil
 		})
@@ -1210,7 +1210,7 @@ func TestDispatchAccNew(t *testing.T) {
 	uu.EXPECT().UpdateTags(uid, tags, nil, nil).Return(tags, nil)
 
 	s := &Session{
-		send:       make(chan interface{}, 10),
+		send:       make(chan any, 10),
 		authLvl:    auth.LevelAuth,
 		ver:        16,
 		remoteAddr: remoteAddr,
@@ -1253,7 +1253,7 @@ func TestDispatchAccNew(t *testing.T) {
 		if resp.Ctrl.Params == nil {
 			t.Error("Response is expected to contain params dict.")
 		}
-		p := resp.Ctrl.Params.(map[string]interface{})
+		p := resp.Ctrl.Params.(map[string]any)
 		if respUid := string(p["user"].(string)); respUid != uid.UserId() {
 			t.Errorf("Response uid: expected '%s', found '%s'.", uid.UserId(), respUid)
 		}
@@ -1271,7 +1271,7 @@ func TestDispatchAccNew(t *testing.T) {
 func TestDispatchNoMessage(t *testing.T) {
 	remoteAddr := "192.168.0.1"
 	s := &Session{
-		send:       make(chan interface{}, 10),
+		send:       make(chan any, 10),
 		authLvl:    auth.LevelAuth,
 		ver:        16,
 		remoteAddr: remoteAddr,

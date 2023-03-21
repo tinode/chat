@@ -19,7 +19,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 )
 
-func (sess *Session) sendMessageLp(wrt http.ResponseWriter, msg interface{}) bool {
+func (sess *Session) sendMessageLp(wrt http.ResponseWriter, msg any) bool {
 	if len(sess.send) > sendQueueLimit {
 		logs.Err.Println("longPoll: outbound queue limit exceeded", sess.sid)
 		return false
@@ -88,7 +88,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func lpWrite(wrt http.ResponseWriter, msg interface{}) error {
+func lpWrite(wrt http.ResponseWriter, msg any) error {
 	// This will panic if msg is not []byte. This is intentional.
 	wrt.Write(msg.([]byte))
 	return nil

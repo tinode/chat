@@ -42,19 +42,19 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if ok, err := authhdl.IsUnique(msg.Acc.Secret, s.remoteAddr); !ok {
 		logs.Warn.Println("create user: auth secret is not unique", err, "sid=", s.sid)
 		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp,
-			map[string]interface{}{"what": "auth"}))
+			map[string]any{"what": "auth"}))
 		return
 	}
 
 	var user types.User
-	var private interface{}
+	var private any
 
 	// If account state is being assigned, make sure the sender is a root user.
 	if msg.Acc.State != "" {
 		if auth.Level(msg.AuthLvl) != auth.LevelRoot {
 			logs.Warn.Println("create user: attempt to set account state by non-root, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)
-			msg.Ctrl.Params = map[string]interface{}{"what": "state"}
+			msg.Ctrl.Params = map[string]any{"what": "state"}
 			s.queueOut(msg)
 			return
 		}
@@ -73,7 +73,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 			logs.Warn.Println("create user: attempt to directly assign restricted tags, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)
-			msg.Ctrl.Params = map[string]interface{}{"what": "tags"}
+			msg.Ctrl.Params = map[string]any{"what": "tags"}
 			s.queueOut(msg)
 			return
 		}
@@ -89,7 +89,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		if _, err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 			logs.Warn.Println("create user: failed credential pre-check", cr, err, "sid=", s.sid)
 			s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp,
-				map[string]interface{}{"what": cr.Method}))
+				map[string]any{"what": cr.Method}))
 			return
 		}
 	}
@@ -156,7 +156,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
 		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, msg.Timestamp,
-			map[string]interface{}{"creds": missing}))
+			map[string]any{"creds": missing}))
 		return
 	}
 
@@ -192,13 +192,13 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	} else {
 		// Not using the new account for logging in.
 		reply = NoErrCreated(msg.Id, "", msg.Timestamp)
-		reply.Ctrl.Params = map[string]interface{}{
+		reply.Ctrl.Params = map[string]any{
 			"user":    user.Uid().UserId(),
 			"authlvl": rec.AuthLevel.String(),
 		}
 	}
 
-	params := reply.Ctrl.Params.(map[string]interface{})
+	params := reply.Ctrl.Params.(map[string]any)
 	params["desc"] = &MsgTopicDesc{
 		CreatedAt: &user.CreatedAt,
 		UpdatedAt: &user.UpdatedAt,
@@ -274,7 +274,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
-	var params map[string]interface{}
+	var params map[string]any
 	if msg.Acc.Scheme != "" {
 		err = updateUserAuth(msg, user, rec, s.remoteAddr)
 	} else if len(msg.Acc.Cred) > 0 {
@@ -300,7 +300,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 				}
 				_, missing, _ := stringSliceDelta(globals.authValidators[authLvl], validated)
 				if len(missing) > 0 {
-					params = map[string]interface{}{"cred": missing}
+					params = map[string]any{"cred": missing}
 				}
 			}
 		}
@@ -773,14 +773,14 @@ func (pq pendingReceiptsQueue) Swap(i, j int) {
 	pq[j].index = j
 }
 
-func (pq *pendingReceiptsQueue) Push(x interface{}) {
+func (pq *pendingReceiptsQueue) Push(x any) {
 	n := len(*pq)
 	item := x.(*pendingReceipt)
 	item.index = n
 	*pq = append(*pq, item)
 }
 
-func (pq *pendingReceiptsQueue) Pop() interface{} {
+func (pq *pendingReceiptsQueue) Pop() any {
 	old := *pq
 	n := len(old)
 	item := old[n-1]

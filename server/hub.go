@@ -298,7 +298,7 @@ func (h *Hub) run() {
 			// Cluster rehashing. Some previously local topics became remote,
 			// and the other way round.
 			// Such topics must be shut down at this node.
-			h.topics.Range(func(_, t interface{}) bool {
+			h.topics.Range(func(_, t any) bool {
 				topic := t.(*Topic)
 				// Handle two cases:
 				// 1. Master topic has moved out to another node.
@@ -323,7 +323,7 @@ func (h *Hub) run() {
 			// start cleanup process
 			topicsdone := make(chan bool)
 			topicCount := 0
-			h.topics.Range(func(_, topic interface{}) bool {
+			h.topics.Range(func(_, topic any) bool {
 				topic.(*Topic).exit <- &shutDown{done: topicsdone}
 				topicCount++
 				return true
@@ -350,7 +350,7 @@ func (h *Hub) run() {
 // * group topics where the given user is the owner.
 // 'me' and fnd' are ignored here because they are direcly tied to the user object.
 func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
-	h.topics.Range(func(name interface{}, t interface{}) bool {
+	h.topics.Range(func(name any, t any) bool {
 		topic := t.(*Topic)
 		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatFnd {
 			return true
@@ -573,7 +573,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 	}
 
 	count := 0
-	h.topics.Range(func(name interface{}, t interface{}) bool {
+	h.topics.Range(func(name any, t any) bool {
 		topic := t.(*Topic)
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
@@ -806,13 +806,13 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		return
 	}
 
-	update := make(map[string]interface{})
+	update := make(map[string]any)
 	if msg.Set.Desc != nil && msg.Set.Desc.Private != nil {
-		private, ok := msg.Set.Desc.Private.(map[string]interface{})
+		private, ok := msg.Set.Desc.Private.(map[string]any)
 		if !ok {
-			update = map[string]interface{}{"Private": msg.Set.Desc.Private}
+			update = map[string]any{"Private": msg.Set.Desc.Private}
 		} else if private, changed := mergeInterfaces(sub.Private, private); changed {
-			update = map[string]interface{}{"Private": private}
+			update = map[string]any{"Private": private}
 		}
 	}
 
@@ -849,9 +849,9 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 			logs.Warn.Println("replyOfflineTopicSetSub update:", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		} else {
-			var params interface{}
+			var params any
 			if update["ModeWant"] != nil {
-				params = map[string]interface{}{
+				params = map[string]any{
 					"acs": MsgAccessMode{
 						Given: sub.ModeGiven.String(),
 						Want:  sub.ModeWant.String(),

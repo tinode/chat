@@ -452,7 +452,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		return true
 	})
 	// Topics.
-	globals.hub.topics.Range(func(_, t interface{}) bool {
+	globals.hub.topics.Range(func(_, t any) bool {
 		topic := t.(*Topic)
 		psd := make([]string, 0, len(topic.sessions))
 		for s := range topic.sessions {

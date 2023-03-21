@@ -14,7 +14,7 @@ import (
 func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
 	var params map[string][]byte
 	if ctrl.Params != nil {
-		if in, ok := ctrl.Params.(map[string]interface{}); ok {
+		if in, ok := ctrl.Params.(map[string]any); ok {
 			params = interfaceMapToByteMap(in)
 		}
 	}
@@ -494,7 +494,7 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 	return &msg
 }
 
-func interfaceMapToByteMap(in map[string]interface{}) map[string][]byte {
+func interfaceMapToByteMap(in map[string]any) map[string][]byte {
 	out := make(map[string][]byte, len(in))
 	for key, val := range in {
 		if val != nil {
@@ -504,8 +504,8 @@ func interfaceMapToByteMap(in map[string]interface{}) map[string][]byte {
 	return out
 }
 
-func byteMapToInterfaceMap(in map[string][]byte) map[string]interface{} {
-	out := make(map[string]interface{}, len(in))
+func byteMapToInterfaceMap(in map[string][]byte) map[string]any {
+	out := make(map[string]any, len(in))
 	for key, raw := range in {
 		if val := bytesToInterface(raw); val != nil {
 			out[key] = val
@@ -514,7 +514,7 @@ func byteMapToInterfaceMap(in map[string][]byte) map[string]interface{} {
 	return out
 }
 
-func interfaceToBytes(in interface{}) []byte {
+func interfaceToBytes(in any) []byte {
 	if in != nil {
 		out, _ := json.Marshal(in)
 		return out
@@ -522,8 +522,8 @@ func interfaceToBytes(in interface{}) []byte {
 	return nil
 }
 
-func bytesToInterface(in []byte) interface{} {
-	var out interface{}
+func bytesToInterface(in []byte) any {
+	var out any
 	if len(in) > 0 {
 		err := json.Unmarshal(in, &out)
 		if err != nil {

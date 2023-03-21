@@ -302,7 +302,7 @@ func (n *ClusterNode) reconnect() {
 	}
 }
 
-func (n *ClusterNode) call(proc string, req, resp interface{}) error {
+func (n *ClusterNode) call(proc string, req, resp any) error {
 	if !n.connected {
 		return errors.New("cluster: node '" + n.name + "' not connected")
 	}
@@ -338,7 +338,7 @@ func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 	}
 }
 
-func (n *ClusterNode) callAsync(proc string, req, resp interface{}, done chan *rpc.Call) *rpc.Call {
+func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call) *rpc.Call {
 	if done != nil && cap(done) == 0 {
 		logs.Err.Panic("cluster: RPC done channel is unbuffered")
 	}
@@ -962,8 +962,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		return 1
 	}
 
-	gob.Register([]interface{}{})
-	gob.Register(map[string]interface{}{})
+	gob.Register([]any{})
+	gob.Register(map[string]any{})
 	gob.Register(map[string]int{})
 	gob.Register(map[string]string{})
 	gob.Register(MsgAccessMode{})
@@ -1111,7 +1111,7 @@ func (c *Cluster) rehash(nodes []string) []string {
 // TODO: consider resubscribing to topics instead of forcing sessions to resubscribe.
 func (c *Cluster) invalidateProxySubs(forNode string) {
 	sessions := make(map[*Session][]string)
-	globals.hub.topics.Range(func(_, v interface{}) bool {
+	globals.hub.topics.Range(func(_, v any) bool {
 		topic := v.(*Topic)
 		if !topic.isProxy {
 			// Topic isn't a proxy.

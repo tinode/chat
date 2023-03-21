@@ -134,11 +134,11 @@ type Session struct {
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
-	send chan interface{}
+	send chan any
 
 	// Channel for shutting down the session, buffer 1.
 	// Content in the same format as for 'send'
-	stop chan interface{}
+	stop chan any
 
 	// detach - channel for detaching session from topic, buffered.
 	// Content is topic name to detach from.
@@ -391,7 +391,7 @@ func (s *Session) detachSession(fromTopic string) {
 	}
 }
 
-func (s *Session) stopSession(data interface{}) {
+func (s *Session) stopSession(data any) {
 	s.stop <- data
 	s.maybeScheduleClusterWriteLoop()
 }
@@ -690,7 +690,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	// Add "sender" header if the message is sent on behalf of another user.
 	if msg.AsUser != s.uid.UserId() {
 		if msg.Pub.Head == nil {
-			msg.Pub.Head = make(map[string]interface{})
+			msg.Pub.Head = make(map[string]any)
 		}
 		msg.Pub.Head["sender"] = s.uid.UserId()
 	} else if msg.Pub.Head != nil {
@@ -728,7 +728,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
-	var params map[string]interface{}
+	var params map[string]any
 	var deviceIDUpdate bool
 
 	if s.ver == 0 {
@@ -746,7 +746,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			return
 		}
 
-		params = map[string]interface{}{
+		params = map[string]any{
 			"ver":                currentVersion,
 			"build":              store.Store.GetAdapterName() + ":" + buildstamp,
 			"maxMessageSize":     globals.maxMessageSize,
@@ -871,7 +871,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		rec, _, err = authHdl.Authenticate(msg.Acc.TmpSecret, s.remoteAddr)
 		if err != nil {
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.Timestamp,
-				map[string]interface{}{"what": "auth"}))
+				map[string]any{"what": "auth"}))
 			logs.Warn.Println("s.acc: invalid temp auth", err, s.sid)
 			return
 		}
@@ -1012,11 +1012,11 @@ func (s *Session) authSecretReset(params []byte) error {
 // onLogin performs steps after successful authentication.
 func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
 	var reply *ServerComMessage
-	var params map[string]interface{}
+	var params map[string]any
 
 	features := rec.Features
 
-	params = map[string]interface{}{
+	params = map[string]any{
 		"user":    rec.Uid.UserId(),
 		"authlvl": rec.AuthLevel.String(),
 	}
@@ -1316,7 +1316,7 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	return routeTo, nil
 }
 
-func (s *Session) serializeAndUpdateStats(msg *ServerComMessage) interface{} {
+func (s *Session) serializeAndUpdateStats(msg *ServerComMessage) any {
 	dataSize, data := s.serialize(msg)
 	if dataSize >= 0 {
 		statsAddHistSample("OutgoingMessageSize", float64(dataSize))
@@ -1324,7 +1324,7 @@ func (s *Session) serializeAndUpdateStats(msg *ServerComMessage) interface{} {
 	return data
 }
 
-func (s *Session) serialize(msg *ServerComMessage) (int, interface{}) {
+func (s *Session) serialize(msg *ServerComMessage) (int, any) {
 	if s.proto == GRPC {
 		msg := pbServSerialize(msg)
 		// TODO: calculate and return the size of `msg`.
