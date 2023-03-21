@@ -430,6 +430,14 @@ A `channel` topic is different from the non-channel group topic in the following
 
 The `sys` topic serves as an always available channel of communication with the system administrators. A normal non-root user cannot subscribe to `sys` but can publish to it without subscription. Existing clients use this channel to report abuse by sending a Drafty-formatted `{pub}` message with the report as JSON attachment. A root user can subscribe to `sys` topic. Once subscribed, the root user will receive messages sent to `sys` topic by other users.
 
+### Auxiliary data
+
+Topics have `aux` field which represents arbitrary auxiliary data stored as a set of key-value pairs. The `aux` is writable by topic admins and readable by all topic subscribers.
+
+The following fields are currently defined:
+
+* `pins`: array of integer message IDs to pin to the top of the message list.
+
 ## Using Server-Issued Message IDs
 
 Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
@@ -868,8 +876,7 @@ pub: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic to publish to, required
   noecho: false, // boolean, suppress echo (see below), optional
-  head: { key: "value", ... }, // set of string key-value pairs,
-               // passed to {data} unchanged, optional
+  head: { key: "value", ... }, // set of string key-value pairs, optional
   content: { ... }  // object, application-defined content to publish
                // to topic subscribers, required
 }
@@ -1099,6 +1106,8 @@ note: {
   seq: 123,   // integer, ID of the message being acknowledged, required for
               // 'recv' & 'read'.
   unread: 10, // integer, client-reported total count of unread messages, optional.
+  event: "ringing", // string, subaction; surrently used only by video/audio calls,
+                    // when what="call".
   payload: {  // object, required payload for 'call' and 'data'.
     ...
   }
@@ -1107,7 +1116,6 @@ note: {
 
 The following actions types are currently defined:
  * call: a video call status update.
- * cala: an audio call status update.
  * data: a generic packet of structured data, usually a form response.
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * kpa: audio message is in the process of recording.
