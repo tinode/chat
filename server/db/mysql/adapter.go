@@ -43,7 +43,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 113
+	adpVersion = 114
 
 	adapterName = "mysql"
 
@@ -401,6 +401,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			public    JSON,
 			trusted   JSON,
 			tags      JSON,
+			aux       JSON,
 			PRIMARY KEY(id),
 			UNIQUE INDEX topics_name(name),
 			INDEX topics_owner(owner),
@@ -764,6 +765,18 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 113); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 113 {
+		// Perform database upgrade from version 113 to version 114.
+
+		if _, err := a.db.Exec("ALTER TABLE topics ADD aux JSON"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 114); err != nil {
 			return err
 		}
 	}
@@ -1445,10 +1458,11 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,trusted,tags) "+
-		"VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,trusted,tags,aux) "+
+		"VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
 		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id, topic.UseBt,
-		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), toJSON(topic.Trusted), topic.Tags)
+		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), toJSON(topic.Trusted),
+		topic.Tags, toJSON(topic.Aux))
 	if err != nil {
 		return err
 	}
@@ -1556,7 +1570,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.GetContext(ctx, tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags,aux "+
 			"FROM topics WHERE name=?",
 		topic)
 
@@ -1680,7 +1694,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch grp topics and join to subscriptions.
 	if len(topq) > 0 {
-		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,trusted,tags " +
+		q = "SELECT updatedat,state,touchedat,name AS id,usebt,access,seqid,delid,public,trusted " +
 			"FROM topics WHERE name IN (?)"
 
 		q, args, _ = sqlx.In(q, topq)
@@ -1744,7 +1758,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p subscriptions.
 	if len(usrq) > 0 {
-		q = "SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,trusted,tags " +
+		q = "SELECT id,updatedat,state,access,lastseen,useragent,public,trusted " +
 			"FROM users WHERE id IN (?)"
 		q, args, _ = sqlx.In(q, usrq)
 		if !keepDeleted {
@@ -3497,12 +3511,12 @@ func toJSON(src interface{}) []byte {
 }
 
 // Deserialize JSON data from DB.
-func fromJSON(src interface{}) interface{} {
+func fromJSON(src any) any {
 	if src == nil {
 		return nil
 	}
 	if bb, ok := src.([]byte); ok {
-		var out interface{}
+		var out any
 		json.Unmarshal(bb, &out)
 		return out
 	}
@@ -3520,11 +3534,11 @@ func decodeUidString(str string) int64 {
 	return store.DecodeUid(uid)
 }
 
-// Convert update to a list of columns and arguments.
+// Convert topic or user update to a list of columns and arguments.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
 		col = strings.ToLower(col)
-		if col == "public" || col == "trusted" || col == "private" {
+		if col == "public" || col == "trusted" || col == "private" || col == "aux" {
 			arg = toJSON(arg)
 		}
 		cols = append(cols, col+"=?")
