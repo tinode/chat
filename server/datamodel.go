@@ -87,6 +87,8 @@ type MsgSetQuery struct {
 	Tags []string `json:"tags,omitempty"`
 	// Update to account credentials.
 	Cred *MsgCredClient `json:"cred,omitempty"`
+	// Update auxiliary data
+	Aux map[string]any
 }
 
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
@@ -186,6 +188,7 @@ const (
 	constMsgMetaTags
 	constMsgMetaDel
 	constMsgMetaCred
+	constMsgMetaAux
 )
 
 const (
@@ -715,6 +718,8 @@ type MsgServerMeta struct {
 	Tags []string `json:"tags,omitempty"`
 	// Account credentials, 'me' only.
 	Cred []*MsgCredServer `json:"cred,omitempty"`
+	// Auxiliary data
+	Aux map[string]any `json:"aux,omitempty"`
 }
 
 // Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.
@@ -749,6 +754,10 @@ func (src *MsgServerMeta) describe() string {
 	if src.Cred != nil {
 		x, _ := json.Marshal(src.Cred)
 		s += " cred=[" + string(x) + "]"
+	}
+	if src.Aux != nil {
+		x, _ := json.Marshal(src.Aux)
+		s += " aux=[" + string(x) + "]"
 	}
 	return s
 }

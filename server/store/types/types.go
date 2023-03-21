@@ -1091,6 +1091,9 @@ type Topic struct {
 	// Indexed tags for finding this topic.
 	Tags StringSlice
 
+	// Auxiliary set of key-value pairs.
+	Aux map[string]any
+
 	// Deserialized ephemeral params
 	perUser map[Uid]*perUserData // deserialized from Subscription
 }

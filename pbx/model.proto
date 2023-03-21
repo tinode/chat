@@ -130,6 +130,8 @@ message SetQuery {
 	repeated string tags = 3;
 	// Credential being updated.
 	ClientCred cred = 4;
+	// Auxiliary data.
+	map<string, bytes> aux = 5;
 }
 
 message SeqRange {
@@ -435,6 +437,7 @@ message ServerPres {
 		RECV = 10;
 		DEL = 11;
 		TAGS = 12;
+		AUX = 13;
 	}
 	What what = 3;
 	string user_agent = 4;
@@ -456,6 +459,7 @@ message ServerMeta {
 	DelValues del = 5;
 	repeated string tags = 6;
 	repeated ServerCred cred = 7;
+	map<string, bytes> aux = 8;
 }
 
 // {info} message: server-side copy of ClientNote with From and optional Src added.
