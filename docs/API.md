@@ -799,7 +799,7 @@ sub: {
       params: { ... } // parameters, specific to the verification method, optional
     },
 
-    aux: { ... } // update auxilliary data.
+    aux: { ... } // update auxiliary data.
   },
 
   get: {
@@ -993,7 +993,7 @@ Query [credentials](#credentail-validation). Server responds with a `{meta}` mes
 
 * `{get what="aux"}`
 
-Query auxillary topic data. Server responds with a `{meta}` message containing an object with auxillary key-value pairs.
+Query auxiliary topic data. Server responds with a `{meta}` message containing an object with auxiliary key-value pairs.
 
 
 #### `{set}`
