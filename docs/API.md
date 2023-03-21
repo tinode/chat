@@ -1,66 +1,66 @@
-<!-- TOC depthfrom:1 depthto:6 withlinks:false updateonsave:false orderedlist:false -->
+<!-- TOC depthfrom:1 depthto:6 withlinks:true updateonsave:false orderedlist:false -->
 
-- Server API
-  - How it Works?
-  - General Considerations
-  - Connecting to the Server
-    - gRPC
-    - WebSocket
-    - Long Polling
-    - Out of Band Large Files
-    - Running Behind a Reverse Proxy
-  - Users
-    - Authentication
-      - Creating an Account
-      - Logging in
-      - Changing Authentication Parameters
-      - Resetting a Password, i.e. "Forgot Password"
-    - Suspending a User
-    - Credential Validation
-    - Access Control
-  - Topics
-    - `me` Topic
-    - `fnd` and Tags: Finding Users and Topics
-      - Query Language
-      - Incremental Updates to Queries
-      - Query Rewrite
-      - Possible Use Cases
-    - Peer to Peer Topics
-    - Group Topics
-    - `sys` Topic
-  - Using Server-Issued Message IDs
-  - User Agent and Presence Notifications
-  - Trusted, Public, and Private Fields
-    - Trusted
-    - Public
-    - Private
-  - Format of Content
-  - Out-of-Band Handling of Large Files
-    - Uploading
-    - Downloading
-  - Push Notifications
-    - Tinode Push Gateway
-    - Google FCM
-    - Stdout
-  - Video Calls
-  - Messages
-    - Client to Server Messages
-      - `{hi}`
-      - `{acc}`
-      - `{login}`
-      - `{sub}`
-      - `{leave}`
-      - `{pub}`
-      - `{get}`
-      - `{set}`
-      - `{del}`
-      - `{note}`
-    - Server to Client Messages
-      - `{data}`
-      - `{ctrl}`
-      - `{meta}`
-      - `{pres}`
-      - `{info}`
+- [Server API](#server-api)
+  - [How it Works?](#how-it-works)
+  - [General Considerations](#general-considerations)
+  - [Connecting to the Server](#connecting-to-the-server)
+    - [gRPC](#grpc)
+    - [WebSocket](#websocket)
+    - [Long Polling](#long-polling)
+    - [Out of Band Large Files](#out-of-band-large-files)
+    - [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
+  - [Users](#users)
+    - [Authentication](#authentication)
+      - [Creating an Account](#creating-an-account)
+      - [Logging in](#logging-in)
+      - [Changing Authentication Parameters](#changing-authentication-parameters)
+      - [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
+    - [Suspending a User](#suspending-a-user)
+    - [Credential Validation](#credential-validation)
+    - [Access Control](#access-control)
+  - [Topics](#topics)
+    - [me Topic](#me-topic)
+    - [fnd and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
+      - [Query Language](#query-language)
+      - [Incremental Updates to Queries](#incremental-updates-to-queries)
+      - [Query Rewrite](#query-rewrite)
+      - [Possible Use Cases](#possible-use-cases)
+    - [Peer to Peer Topics](#peer-to-peer-topics)
+    - [Group Topics](#group-topics)
+    - [sys Topic](#sys-topic)
+  - [Using Server-Issued Message IDs](#using-server-issued-message-ids)
+  - [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
+  - [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
+    - [Trusted](#trusted)
+    - [Public](#public)
+    - [Private](#private)
+  - [Format of Content](#format-of-content)
+  - [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
+    - [Uploading](#uploading)
+    - [Downloading](#downloading)
+  - [Push Notifications](#push-notifications)
+    - [Tinode Push Gateway](#tinode-push-gateway)
+    - [Google FCM](#google-fcm)
+    - [Stdout](#stdout)
+  - [Video Calls](#video-calls)
+  - [Messages](#messages)
+    - [Client to Server Messages](#client-to-server-messages)
+      - [{hi}](#hi)
+      - [{acc}](#acc)
+      - [{login}](#login)
+      - [{sub}](#sub)
+      - [{leave}](#leave)
+      - [{pub}](#pub)
+      - [{get}](#get)
+      - [{set}](#set)
+      - [{del}](#del)
+      - [{note}](#note)
+    - [Server to Client Messages](#server-to-client-messages)
+      - [{data}](#data)
+      - [{ctrl}](#ctrl)
+      - [{meta}](#meta)
+      - [{pres}](#pres)
+      - [{info}](#info)
 
 <!-- /TOC -->
 
