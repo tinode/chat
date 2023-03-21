@@ -1,72 +1,74 @@
-<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+<!-- vscode-markdown-toc -->
+* 1. [How it Works?](#HowitWorks)
+* 2. [General Considerations](#GeneralConsiderations)
+* 3. [Connecting to the Server](#ConnectingtotheServer)
+	* 3.1. [gRPC](#gRPC)
+	* 3.2. [WebSocket](#WebSocket)
+	* 3.3. [Long Polling](#LongPolling)
+	* 3.4. [Out of Band Large Files](#OutofBandLargeFiles)
+	* 3.5. [Running Behind a Reverse Proxy](#RunningBehindaReverseProxy)
+* 4. [Users](#Users)
+	* 4.1. [Authentication](#Authentication)
+		* 4.1.1. [Creating an Account](#CreatinganAccount)
+		* 4.1.2. [Logging in](#Loggingin)
+		* 4.1.3. [Changing Authentication Parameters](#ChangingAuthenticationParameters)
+		* 4.1.4. [Resetting a Password, i.e. "Forgot Password"](#ResettingaPasswordi.e.ForgotPassword)
+	* 4.2. [Suspending a User](#SuspendingaUser)
+	* 4.3. [Credential Validation](#CredentialValidation)
+	* 4.4. [Access Control](#AccessControl)
+* 5. [Topics](#Topics)
+	* 5.1. [`me` Topic](#meTopic)
+	* 5.2. [`fnd` and Tags: Finding Users and Topics](#fndandTags:FindingUsersandTopics)
+		* 5.2.1. [Query Language](#QueryLanguage)
+		* 5.2.2. [Incremental Updates to Queries](#IncrementalUpdatestoQueries)
+		* 5.2.3. [Query Rewrite](#QueryRewrite)
+		* 5.2.4. [Possible Use Cases](#PossibleUseCases)
+	* 5.3. [Peer to Peer Topics](#PeertoPeerTopics)
+	* 5.4. [Group Topics](#GroupTopics)
+	* 5.5. [`sys` Topic](#sysTopic)
+* 6. [Using Server-Issued Message IDs](#UsingServer-IssuedMessageIDs)
+* 7. [User Agent and Presence Notifications](#UserAgentandPresenceNotifications)
+* 8. [Trusted, Public, and Private Fields](#TrustedPublicandPrivateFields)
+	* 8.1. [Trusted](#Trusted)
+	* 8.2. [Public](#Public)
+	* 8.3. [Private](#Private)
+* 9. [Format of Content](#FormatofContent)
+* 10. [Out-of-Band Handling of Large Files](#Out-of-BandHandlingofLargeFiles)
+	* 10.1. [Uploading](#Uploading)
+	* 10.2. [Downloading](#Downloading)
+* 11. [Push Notifications](#PushNotifications)
+	* 11.1. [Tinode Push Gateway](#TinodePushGateway)
+	* 11.2. [Google FCM](#GoogleFCM)
+	* 11.3. [Stdout](#Stdout)
+* 12. [Video Calls](#VideoCalls)
+* 13. [Messages](#Messages)
+	* 13.1. [Client to Server Messages](#ClienttoServerMessages)
+		* 13.1.1. [`{hi}`](#hi)
+		* 13.1.2. [`{acc}`](#acc)
+		* 13.1.3. [`{login}`](#login)
+		* 13.1.4. [`{sub}`](#sub)
+		* 13.1.5. [`{leave}`](#leave)
+		* 13.1.6. [`{pub}`](#pub)
+		* 13.1.7. [`{get}`](#get)
+		* 13.1.8. [`{set}`](#set)
+		* 13.1.9. [`{del}`](#del)
+		* 13.1.10. [`{note}`](#note)
+	* 13.2. [Server to Client Messages](#ServertoClientMessages)
+		* 13.2.1. [`{data}`](#data)
+		* 13.2.2. [`{ctrl}`](#ctrl)
+		* 13.2.3. [`{meta}`](#meta)
+		* 13.2.4. [`{pres}`](#pres)
+		* 13.2.5. [`{info}`](#info)
 
-- [Server API](#server-api)
-	- [How it Works?](#how-it-works)
-	- [General Considerations](#general-considerations)
-	- [Connecting to the Server](#connecting-to-the-server)
-		- [gRPC](#grpc)
-		- [WebSocket](#websocket)
-		- [Long Polling](#long-polling)
-		- [Out of Band Large Files](#out-of-band-large-files)
-		- [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
-	- [Users](#users)
-		- [Authentication](#authentication)
-			- [Creating an Account](#creating-an-account)
-			- [Logging in](#logging-in)
-			- [Changing Authentication Parameters](#changing-authentication-parameters)
-			- [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
-		- [Suspending a User](#suspending-a-user)
-		- [Credential Validation](#credential-validation)
-		- [Access Control](#access-control)
-	- [Topics](#topics)
-		- [`me` Topic](#me-topic)
-		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
-			- [Query Language](#query-language)
-			- [Incremental Updates to Queries](#incremental-updates-to-queries)
-			- [Query Rewrite](#query-rewrite)
-			- [Possible Use Cases](#possible-use-cases)
-		- [Peer to Peer Topics](#peer-to-peer-topics)
-		- [Group Topics](#group-topics)
-		- [`sys` Topic](#sys-topic)
-	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
-	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-	- [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
-		- [Trusted](#trusted)
-		- [Public](#public)
-		- [Private](#private)
-	- [Format of Content](#format-of-content)
-	- [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
-		- [Uploading](#uploading)
-		- [Downloading](#downloading)
-	- [Push Notifications](#push-notifications)
-		- [Tinode Push Gateway](#tinode-push-gateway)
-		- [Google FCM](#google-fcm)
-		- [Stdout](#stdout)
-	- [Video Calls](#video-calls)
-	- [Messages](#messages)
-		- [Client to Server Messages](#client-to-server-messages)
-			- [`{hi}`](#hi)
-			- [`{acc}`](#acc)
-			- [`{login}`](#login)
-			- [`{sub}`](#sub)
-			- [`{leave}`](#leave)
-			- [`{pub}`](#pub)
-			- [`{get}`](#get)
-			- [`{set}`](#set)
-			- [`{del}`](#del)
-			- [`{note}`](#note)
-		- [Server to Client Messages](#server-to-client-messages)
-			- [`{data}`](#data)
-			- [`{ctrl}`](#ctrl)
-			- [`{meta}`](#meta)
-			- [`{pres}`](#pres)
-			- [`{info}`](#info)
-
-<!-- /TOC -->
+<!-- vscode-markdown-toc-config
+	numbering=true
+	autoSave=true
+	/vscode-markdown-toc-config -->
+<!-- /vscode-markdown-toc -->
 
 # Server API
 
-## How it Works?
+##  1. <a name='HowitWorks'></a>How it Works?
 
 Tinode is an IM router and a store. Conceptually it loosely follows a [publish-subscribe](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) model.
 
@@ -94,7 +96,7 @@ Changes to topic metadata, such as changes in topic description, or when other u
 
 When user's `me` topic comes online (i.e. an authenticated session attaches to `me` topic), a `{pres}` packet is sent to `me` topics of all other users, who have peer to peer subscriptions with the first user.
 
-## General Considerations
+##  2. <a name='GeneralConsiderations'></a>General Considerations
 
 Timestamps are always represented as [RFC 3339](http://tools.ietf.org/html/rfc3339)-formatted string with precision up to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
 
@@ -104,7 +106,7 @@ The `{data}` packets have server-issued sequential IDs: base-10 numbers starting
 
 In order to connect requests to responses, client may assign message IDs to all packets set to the server. These IDs are strings defined by the client. Client should make them unique at least per session. The client-assigned IDs are not interpreted by the server, they are returned to the client as is.
 
-## Connecting to the Server
+##  3. <a name='ConnectingtotheServer'></a>Connecting to the Server
 
 There are three ways to access the server over the network: websocket, long polling, and [gRPC](https://grpc.io/).
 
@@ -124,31 +126,31 @@ A default API key is included with every demo app for convenience. Generate your
 
 Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which indicates either success or an error. The `params` field of the response contains server's protocol version `"params":{"ver":"0.15"}` and may include other values.
 
-### gRPC
+###  3.1. <a name='gRPC'></a>gRPC
 
 See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API has slightly more functionality than the API described in this document: it allows the `root` user to send messages on behalf of other users as well as delete users.
 
 The `bytes` fields in protobuf messages expect JSON-encoded UTF-8 content. For example, a string should be quoted before being converted to bytes as UTF-8: `[]byte("\"some string\"")` (Go), `'"another string"'.encode('utf-8')` (Python 3).
 
-### WebSocket
+###  3.2. <a name='WebSocket'></a>WebSocket
 
 Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. By default server allows connections with any value in the `Origin` header.
 
-### Long Polling
+###  3.3. <a name='LongPolling'></a>Long Polling
 
 Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in the URL or in the request body.
 
 Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *`
 
-### Out of Band Large Files
+###  3.4. <a name='OutofBandLargeFiles'></a>Out of Band Large Files
 
 Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/form-data`. See [below](#out-of-band-handling-of-large-files) for details.
 
-### Running Behind a Reverse Proxy
+###  3.5. <a name='RunningBehindaReverseProxy'></a>Running Behind a Reverse Proxy
 
 Tinode server can be set up to run behind a reverse proxy, such as NGINX. For efficiency it can accept client connections from Unix sockets by setting `listen` and/or `grpc_listen` config parameters to the path of the Unix socket file, e.g. `unix:/run/tinode.sock`. The server may also be configured to read peer's IP address from `X-Forwarded-For` HTTP header by setting `use_x_forwarded_for` config parameter to `true`.
 
-## Users
+##  4. <a name='Users'></a>Users
 
 User is meant to represent a person, an end-user: producer and consumer of messages.
 
@@ -181,7 +183,7 @@ A user may maintain multiple simultaneous connections (sessions) with the server
 Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
 
 
-### Authentication
+###  4.1. <a name='Authentication'></a>Authentication
 
 Authentication is conceptually similar to [SASL](https://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer): it's provided as a set of adapters each implementing a different authentication method. Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login). The server comes with the following authentication methods out of the box:
 
@@ -201,19 +203,19 @@ The `anonymous` scheme can be used to create accounts, it cannot be used for log
 Compiled-in authenticator names may be changed by using `logical_names` configuration feature. For example, a custom `rest` authenticator may be exposed as `basic` instead of default one or `token` authenticator could be hidden from users. The feature is activated by providing an array of mappings in the config file: `logical_name:actual_name` to rename or `actual_name:` to hide. For instance, to use a `rest` service for basic authentication use `"logical_names": ["basic:rest"]`.
 
 
-#### Creating an Account
+####  4.1.1. <a name='CreatinganAccount'></a>Creating an Account
 
 When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anonymous` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anonymous` does not exchange secrets.
 
 User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the `{ctrl}` response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anonymous` authentication because that's the only time when the authentication token can be retrieved.
 
-#### Logging in
+####  4.1.2. <a name='Loggingin'></a>Logging in
 
 Logging in is performed by issuing a `{login}` request. Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge in multi-step authentication, or a code 4xx error.
 
 Token has server-configured expiration time so it needs to be periodically refreshed.
 
-#### Changing Authentication Parameters
+####  4.1.3. <a name='ChangingAuthenticationParameters'></a>Changing Authentication Parameters
 
 User may change authentication parameters, such as changing login and password, by issuing an `{acc}` request. Only `basic` authentication currently supports changing parameters:
 ```js
@@ -231,7 +233,7 @@ In order to change just the password, `username` should be left empty, i.e. `sec
 If the session is not authenticated, the request must include a `token`. It can be a regular authentication token obtained during login, or a restricted token received through [Resetting a Password](#resetting-a-password) process. If the session is authenticated, the token must not be included. If the request is authenticated for access level `ROOT`, then the `user` may be set to a valid ID of another user. Otherwise it must be blank (defaulting to the current user) or equal to the ID of the current user.
 
 
-#### Resetting a Password, i.e. "Forgot Password"
+####  4.1.4. <a name='ResettingaPasswordi.e.ForgotPassword'></a>Resetting a Password, i.e. "Forgot Password"
 
 To reset login or password, (or any other authentication secret, if such action is supported by the authenticator), one sends a `{login}` message with the `scheme` set to `reset` and the `secret` containing a base64-encoded string "`authentication scheme to reset secret for`:`reset method`:`reset method value`". Most basic case of resetting a password by email is
 ```js
@@ -245,7 +247,7 @@ where `jdoe@example.com` is an earlier validated user's email.
 
 If the email matches the registration, the server will send a message using specified method and address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
 
-### Suspending a User
+###  4.2. <a name='SuspendingaUser'></a>Suspending a User
 
 User's account can be suspended by service administrator. Once the account is suspended, the user is no longer able to login and use the service.
 
@@ -260,7 +262,7 @@ acc: {
 Sending the same message with `status: "ok"` un-suspends the account. A root user may check account status by executing `{get what="desc"}` command against user's `me` topic.
 
 
-### Credential Validation
+###  4.3. <a name='CredentialValidation'></a>Credential Validation
 
 Server may be optionally configured to require validation of certain credentials associated with the user accounts and authentication scheme. For instance, it's possible to require user to provide a unique email or a phone number, or to solve a captcha as a condition of account registration.
 
@@ -271,7 +273,7 @@ If certain credentials are required, then user must maintain them in validated s
 Credentials are initially assigned at registration time by sending an `{acc}` message, added using `{set topic="me"}`, deleted using `{del topic="me"}`, and queries by `{get topic="me"}` messages. Credentials are verified by the client by sending either a `{login}` or an `{acc}` message.
 
 
-### Access Control
+###  4.4. <a name='AccessControl'></a>Access Control
 
 Access control manages user's access to topics through access control lists (ACLs). The access is assigned individually to each user-topic pair (subscription).
 
@@ -296,7 +298,7 @@ A client may set explicit permissions in `{sub}` and `{set}` messages. If the pe
 Default access is defined for two categories of users: authenticated and anonymous. The default access value is applied as a "given" permission to all new subscriptions. Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by the owner by sending `{set}` messages. Likewise, user's default access is established at the account creation time by `{acc.desc.defacs}` and can be modified by the user by sending a `{set}` message to `me` topic.
 
 
-## Topics
+##  5. <a name='Topics'></a>Topics
 
 Topic is a named communication channel for one or more people. Topics have persistent properties. These topic properties can be queried by `{get what="desc"}` message.
 
@@ -309,17 +311,17 @@ Topic properties independent of the user making the query:
  * `anon`: default access for anonymous users
 * `seq`: integer server-issued sequential ID of the latest `{data}` message sent through the topic
 * `trusted`: an application-defined object issued by the system administrators. Anyone can read it but only administrators can change it.
-* `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
+* `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data, only topic `owner` can change it.
 
 User-dependent topic properties:
 * `acs`: object describing given user's current access permissions; see [Access control](#access-control) for details
  * `want`: access permission requested by this user
  * `given`: access permissions given to this user
-* `private`: an application-defined object that is unique to the current user.
+* `private`: an application-defined object that is unique to the current user (topic subscriber).
 
 Topic usually have subscribers. One of the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
-### `me` Topic
+###  5.1. <a name='meTopic'></a>`me` Topic
 
 Topic `me` is automatically created for every user at the account creation time. It serves as means of managing account information, receiving presence notification from people and topics of interest. Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can `leave` the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
 
@@ -339,7 +341,7 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` is rejected.
 
-### `fnd` and Tags: Finding Users and Topics
+###  5.2. <a name='fndandTags:FindingUsersandTopics'></a>`fnd` and Tags: Finding Users and Topics
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. Users and group topics can be discovered by `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
 
@@ -359,7 +361,7 @@ _CURRENTLY UNSUPPORTED_ When a new user registers with tags matching the given q
 
 [Plugins](../pbx) support `Find` service which can be used to replace default search with a custom one.
 
-#### Query Language
+####  5.2.1. <a name='QueryLanguage'></a>Query Language
 
 Tinode query language is used to define search queries for finding users and topics. The query is a string containing atomic terms separated by spaces or commas. The individual query terms are matched against user's or topic's tags. The individual terms may be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `aaa bbb, ccc` (`aaa AND bbb OR ccc`) is interpreted as `(bbb OR ccc) AND aaa`.
 
@@ -372,13 +374,13 @@ Query terms containing spaces must convert spaces to underscores ` ` -> `_`, e.g
 * `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `(travel OR puppies) AND flowers`.
 * `flowers, travel puppies, kittens`: find topics or users which contain either one of `flowers`, `travel`, `puppies`, or `kittens`, i.e. `flowers OR travel OR puppies OR kittens`. The space between `travel` and `puppies` is treated as `OR` due to `OR` taking precedence over `AND`.
 
-#### Incremental Updates to Queries
+####  5.2.2. <a name='IncrementalUpdatestoQueries'></a>Incremental Updates to Queries
 
 _CURRENTLY UNSUPPORTED_ Queries, particularly `fnd.private` could be arbitrarily large, limited only by the limits on the message size, and by the limits on the query size in the underlying database. Instead of rewriting the entire query to add or remove a term, terms can be added or removed incrementally.
 
 The incremental update request is processed left to right. It may contain the same term multiple times, i.e. `-a_tag+a_tag` is a valid request.
 
-#### Query Rewrite
+####  5.2.3. <a name='QueryRewrite'></a>Query Rewrite
 
 Finding users by login, phone or email requires query terms to be written with prefixes, i.e. `email:alice@example.com` instead of `alice@example.com`. This may present a problem to end users because it requires them to learn the query language. Tinode solves this problem by implementing _query rewrite_ on the server: if query term (tag) does not contain a prefix, server rewrites it by adding the appropriate prefix. In queries to `fnd.public` the original term is also kept (query `alice@example.com` is rewritten as `email:alice@example.com OR alice@example.com`), in queries to `fnd.private` only the rewritten term is kept (`alice@example.com` is rewritten as `email:alice@example.com`). All terms that look like email, for instance, `alice@example.com` are rewritten to `email:alice@example.com OR alice@example.com`. Terms which look like phone numbers are converted to [E.164](https://en.wikipedia.org/wiki/E.164) and also rewritten as `tel:+14155551212 OR +14155551212`. In addition, in queries to `fnd.public` all other unprefixed terms which look like logins are rewritten as logins: `alice` -> `basic:alice OR alice`.
 
@@ -388,7 +390,7 @@ As described above, tags which look like phone numbers are converted to E.164 fo
 * If client has not provided the code in the `hi.lang`, the country code is taken from `default_country_code` field of the `tinode.conf`.
 * If no `default_country_code` is set in `tinode.conf`, `US` country code is used.
 
-#### Possible Use Cases
+####  5.2.4. <a name='PossibleUseCases'></a>Possible Use Cases
 * Restricting users to organisations.
   An immutable tag(s) may be assigned to the user which denotes the organisation the user belongs to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organisations with limited visibility into each other.
 
@@ -399,7 +401,7 @@ As described above, tags which look like phone numbers are converted to E.164 fo
   The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
 
 
-### Peer to Peer Topics
+###  5.3. <a name='PeertoPeerTopics'></a>Peer to Peer Topics
 
 Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
 
@@ -409,7 +411,7 @@ The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic
 
 The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
 
-### Group Topics
+###  5.4. <a name='GroupTopics'></a>Group Topics
 
 Group topic represents a communication channel between multiple users. The name of a group topic is `grp` or `chn` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
@@ -426,15 +428,15 @@ A `channel` topic is different from the non-channel group topic in the following
  * Default permissions for a channel and non-channel group topics are different: channel group topic grants no permissions at all.
  * A subscriber joining or leaving the topic (regular or channel-enabled) generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
 
-### `sys` Topic
+###  5.5. <a name='sysTopic'></a>`sys` Topic
 
 The `sys` topic serves as an always available channel of communication with the system administrators. A normal non-root user cannot subscribe to `sys` but can publish to it without subscription. Existing clients use this channel to report abuse by sending a Drafty-formatted `{pub}` message with the report as JSON attachment. A root user can subscribe to `sys` topic. Once subscribed, the root user will receive messages sent to `sys` topic by other users.
 
-## Using Server-Issued Message IDs
+##  6. <a name='UsingServer-IssuedMessageIDs'></a>Using Server-Issued Message IDs
 
 Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
 
-## User Agent and Presence Notifications
+##  7. <a name='UserAgentandPresenceNotifications'></a>User Agent and Presence Notifications
 
 A user is reported as being online when one or more of user's sessions are attached to the `me` topic. Client-side software identifies itself to the server using `ua` (user agent) field of the `{login}` message. The _user agent_ is published in `{meta}` and `{pres}` messages in the following way:
 
@@ -444,13 +446,13 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Trusted, Public, and Private Fields
+##  8. <a name='TrustedPublicandPrivateFields'></a>Trusted, Public, and Private Fields
 
 Topics and subscriptions have `trusted`, `public`, and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
 
-### Trusted
+###  8.1. <a name='Trusted'></a>Trusted
 
-The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The following optional keys are currently defined:
+The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The field is writable by ROOT users, readable by anyone who has access to the topic or user. The following optional keys are currently defined:
 ```js
 trusted: {
   verified: true, // boolean, an indicator of a verified/trustworthy user or topic.
@@ -460,21 +462,22 @@ trusted: {
 }
 ```
 
-### Public
+###  8.2. <a name='Public'></a>Public
 
-The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md).
+The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md). The field is writable by
+by the user for users, the topic owner for topics. The field is readable by anyone who has access to topic or user.
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
-### Private
+###  8.3. <a name='Private'></a>Private
 
-The format of the `private` field in group and peer to peer topics is a set of key-value pairs. The following keys are currently defined:
+The format of the `private` field in group and peer to peer topics is a set of key-value pairs. The field is writable and readable by the user only. The following keys are currently defined:
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
   arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
-  starred: false,  // boolean, an indicator that the topic is starred or pinned by the user.
+  label: "starred",  // string, label which UI may use for topic display or sorting.
   accepted: "JRWS" // string, 'given' mode accepted by the user.
 }
 ```
@@ -483,7 +486,7 @@ Although it's not yet enforced, custom fields should start with an `x-` followed
 
 The `fnd` topic expects `private` to be a string representing a [search query](#query-language)).
 
-## Format of Content
+##  9. <a name='FormatofContent'></a>Format of Content
 
 Format of `content` field in `{pub}` and `{data}` is application-defined and as such the server does not enforce any particular structure of the field. At the same time, client software should use the same format for interoperability reasons. Currently the following two types of `content` are supported:
  * Plain text
@@ -492,7 +495,7 @@ Format of `content` field in `{pub}` and `{data}` is application-defined and as 
 If Drafty is used, a message header `"head": {"mime": "text/x-drafty"}` must be set.
 
 
-## Out-of-Band Handling of Large Files
+##  10. <a name='Out-of-BandHandlingofLargeFiles'></a>Out-of-Band Handling of Large Files
 
 Large files create problems when sent in-band for multiple reasons:
  * limits on database storage as in-band messages are stored in database fields
@@ -506,7 +509,7 @@ Tinode provides two endpoints for handling large files: `/v0/file/u` for uploadi
  * Form values `auth` and `secret`
  * Cookies `auth` and `secret`
 
-### Uploading
+###  10.1. <a name='Uploading'></a>Uploading
 
 To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` with the new upload URL, or with a `200 OK` and a `{ctrl}` message in response body:
 
@@ -563,13 +566,13 @@ Once the URL of the file is received, either immediately or after following the 
 
 It's important to list the used URLs in the `extra: attachments[...]` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `extra.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `extra.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
 
-### Downloading
+###  10.2. <a name='Downloading'></a>Downloading
 
 The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server.
 
 _Important!_ As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
 
-## Push Notifications
+##  11. <a name='PushNotifications'></a>Push Notifications
 
 Tinode uses compile-time adapters for handling push notifications. The server comes with [Tinode Push Gateway](../server/push/tnpg/), [Google FCM](https://firebase.google.com/docs/cloud-messaging/), and `stdout` adapters. Tinode Push Gateway and Google FCM support Android with [Play Services](https://developers.google.com/android/guides/overview) (may not be supported by some Chinese phones), iOS devices and all major web browsers excluding Safari. The `stdout` adapter does not actually send push notifications. It's mostly useful for debugging, testing and logging. Other types of push notifications such as [TPNS](https://intl.cloud.tencent.com/product/tpns) can be handled by writing appropriate adapters.
 
@@ -585,23 +588,23 @@ If you are writing a custom plugin, the notification payload is the following:
 }
 ```
 
-### Tinode Push Gateway
+###  11.1. <a name='TinodePushGateway'></a>Tinode Push Gateway
 
 Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push notifications on behalf of Tinode. Internally it uses Google FCM and as such supports the same platforms as FCM. The main advantage of using TNPG over FCM is simplicity of configuration: mobile clients do not need to be recompiled, all is needed is a [configuration update](../server/push/tnpg/) on a server.
 
-### Google FCM
+###  11.2. <a name='GoogleFCM'></a>Google FCM
 
 [Google FCM](https://firebase.google.com/docs/cloud-messaging/) supports Android with [Play Services](https://developers.google.com/android/guides/overview), iPhone and iPad devices, and all major web browsers excluding Safari. In order to use FCM mobile clients (iOS, Android) must be recompiled with credentials obtained from Google. See [instructions](../server/push/fcm/) for details.
 
-### Stdout
+###  11.3. <a name='Stdout'></a>Stdout
 
 The `stdout` adapter is mostly useful for debugging and logging. It writes push payload to `STDOUT` where it can be redirected to file or read by some other process.
 
-## Video Calls
+##  12. <a name='VideoCalls'></a>Video Calls
 
 [See separate document](call-establishment.md).
 
-## Messages
+##  13. <a name='Messages'></a>Messages
 
 A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
 
@@ -614,7 +617,7 @@ data needs to be cleared, use a string with a single Unicode DEL character "&#x2
 
 Any unrecognized fields are silently ignored by the server.
 
-### Client to Server Messages
+###  13.1. <a name='ClienttoServerMessages'></a>Client to Server Messages
 
 Every client to server message contains the main payload described in the sections below and an optional top-level field `extra`:
 ```js
@@ -631,7 +634,7 @@ The `attachments` array lists URLs of files uploaded out of band. Such listing i
 The `obo` (On Behalf Of) can be set by the `root` user. If the `obo` is set, the server will treat the message as if it came from the specified user as opposite to the actual sender.
 The `authlevel` is supplementary to the `obo` and permits setting custom authentication level for the user. A an `"auth"` level is used if the field is unset.
 
-#### `{hi}`
+####  13.1.1. <a name='hi'></a>`{hi}`
 
 Handshake message client uses to inform the server of its version and user agent. This message must be the first that
 the client sends to the server. Server responds with a `{ctrl}` which contains server build `build`, wire protocol version `ver`,
@@ -655,7 +658,7 @@ hi: {
 ```
 The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation but the format is not enforced. The message can be sent more than once to update `ua`, `dev` and `lang` values. If sent more than once, the `ver` field of the second and subsequent messages must be either unchanged or not set.
 
-#### `{acc}`
+####  13.1.2. <a name='acc'></a>`{acc}`
 
 Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update authentication data or validate a credential of the current user leave `user` unset.
 
@@ -714,7 +717,7 @@ Server responds with a `{ctrl}` message with `params` containing details of the 
 
 The only supported authentication schemes for account creation are `basic` and `anonymous`.
 
-#### `{login}`
+####  13.1.3. <a name='login'></a>`{login}`
 
 Login is used to authenticate the current session.
 
@@ -737,7 +740,7 @@ login: {
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
-#### `{sub}`
+####  13.1.4. <a name='sub'></a>`{sub}`
 
 The `{sub}` packet serves the following functions:
  * creating a new topic
@@ -796,7 +799,9 @@ sub: {
       val: "alice@example.com", // string, credential to verify such as email or phone
       resp: "178307", // string, verification response, optional
       params: { ... } // parameters, specific to the verification method, optional
-    }
+    },
+
+    aux: { ... } // update auxilliary data.
   },
 
   get: {
@@ -837,9 +842,9 @@ sub: {
 }
 ```
 
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+See [Trusted, Public, and Private Fields](#trusted-public-and-private-fields) for `trusted`, `private`, and `public` format considerations.
 
-#### `{leave}`
+####  13.1.5. <a name='leave'></a>`{leave}`
 
 This is a counterpart to `{sub}` message. It also serves two functions:
 * leaving the topic without unsubscribing (`unsub=false`)
@@ -856,7 +861,7 @@ leave: {
 }
 ```
 
-#### `{pub}`
+####  13.1.6. <a name='pub'></a>`{pub}`
 
 The message is used to distribute content to topic subscribers.
 
@@ -901,7 +906,7 @@ Application-specific fields should start with an `x-<application-name>-`. Althou
 
 The unique message ID should be formed as `<topic_name>:<seqId>` whenever possible, such as `"grp1XUtEhjv6HND:123"`. If the topic is omitted, i.e. `":123"`, it's assumed to be the current topic.
 
-#### `{get}`
+####  13.1.7. <a name='get'></a>`{get}`
 
 Query topic for metadata, such as description or a list of subscribers, or query message history. The requester must be [subscribed and attached](#sub) to the topic to receive the full response. Some limited `desc` and `sub` information is available without being attached.
 
@@ -960,7 +965,7 @@ If `ims` is specified and data has not been updated, the message will skip `trus
 
 Limited information is available without [attaching](#sub) to topic first.
 
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+See [Trusted, Public, and Private Fields](#trusted-public-and-private-fields) for `trusted`, `private`, and `public` format considerations.
 
 * `{get what="sub"}`
 
@@ -988,7 +993,12 @@ Query message deletion history. Server responds with a `{meta}` message containi
 
 Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported for `me` topic only.
 
-#### `{set}`
+* `{get what="aux"}`
+
+Query auxillary topic data. Server responds with a `{meta}` message containing an object with auxillary key-value pairs.
+
+
+####  13.1.8. <a name='set'></a>`{set}`
 
 Update topic metadata, delete messages or topic. The requester is generally expected to be [subscribed and attached](#sub) to the topic. Only `desc.private` and requester's `sub.mode` can be updated without attaching first.
 
@@ -1026,11 +1036,13 @@ set: {
     val: "alice@example.com", // string, credential to verify such as email or phone
     resp: "178307", // string, verification response, optional
     params: { ... } // parameters, specific to the verification method, optional
-  }
+  },
+
+  aux: { ... } // application-defined key-value pairs
 }
 ```
 
-#### `{del}`
+####  13.1.9. <a name='del'></a>`{del}`
 
 Delete messages, subscriptions, topics, users.
 
@@ -1077,7 +1089,7 @@ Deleting a user is a very heavy operation. Use caution.
 Delete credential. Validated credentials and those with no attempts at validation are hard-deleted. Credentials with failed attempts at validation are soft-deleted which prevents their reuse by the same user.
 
 
-#### `{note}`
+####  13.1.10. <a name='note'></a>`{note}`
 
 Client-generated ephemeral notification for forwarding to other clients currently attached to the topic, such as typing notifications or delivery receipts. The message is "fire and forget": not stored to disk per se and not acknowledged by the server. Messages deemed invalid are silently dropped.
 The `{note.recv}` and `{note.read}` do alter persistent state on the server. The value is stored and reported back in the corresponding fields of the `{meta.sub}` message.
@@ -1111,14 +1123,14 @@ The `read` and `recv` notifications may optionally include `unread` value which 
 </p>
 
 
-### Server to Client Messages
+###  13.2. <a name='ServertoClientMessages'></a>Server to Client Messages
 
 Messages to a session generated in response to a specific request contain an `id` field equal to the id of the
 originating message. The `id` is not interpreted by the server.
 
 Most server to client messages have a `ts` field which is a timestamp when the message was generated by the server.
 
-#### `{data}`
+####  13.2.1. <a name='data'></a>`{data}`
 
 Content published in the topic. These messages are the only messages persisted in database; `{data}` messages are
 broadcast to all topic subscribers with an `R` permission.
@@ -1146,7 +1158,7 @@ See [Format of Content](#format-of-content) for `content` format considerations.
 See [`{pub}`](#pub) message for the possible values of the `head` field.
 
 
-#### `{ctrl}`
+####  13.2.2. <a name='ctrl'></a>`{ctrl}`
 
 Generic response indicating an error or a success condition. The message is sent to the originating session.
 
@@ -1164,7 +1176,7 @@ ctrl: {
 }
 ```
 
-#### `{meta}`
+####  13.2.3. <a name='meta'></a>`{meta}`
 
 Information about topic metadata or subscribers, sent in response to `{get}`, `{set}` or `{sub}` message to the originating session.
 
@@ -1195,12 +1207,12 @@ meta: {
     recv: 115, // integer, like 'read', but received, optional
     clear: 12, // integer, in case some messages were deleted, the greatest ID
                // of a deleted message, optional
-    trusted: { ... }, // application-defined payload assigned by the system
-                      // administration
-    public: { ... }, // application-defined data that's available to all topic
-                     // subscribers
-    private: { ...} // application-defined data that's available to the current
-                    // user only
+    trusted: { ... }, // application-defined payload writable by the system
+                      // administration, readable by all
+    public: { ... }, // application-defined data writable by topic owner,
+                     // readable by all
+    private: { ... } // application-defined data that's available to the current
+                     // user only
   }, // object, topic description, optional
   sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
     {
@@ -1253,7 +1265,7 @@ meta: {
     ...
   ],
   tags: [ // array of tags that the topic or user (in case of "me" topic) is indexed by
-    "email:alice@example.com", "tel:+1234567890"
+    "email:alice@example.com", "tel:+1234567890", "flowers"
   ],
   cred: [ // array of user's credentials
     {
@@ -1266,11 +1278,13 @@ meta: {
   del: {
     clear: 3, // ID of the latest applicable 'delete' transaction
     delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages
-  }
+  },
+  aux: { ... } // application-defined key-value pairs writable by topic managers,
+               // readable by topic subscribers.
 }
 ```
 
-#### `{pres}`
+####  13.2.4. <a name='pres'></a>`{pres}`
 
 Tinode uses `{pres}` message to inform clients of important events. A separate [document](https://docs.google.com/spreadsheets/d/e/2PACX-1vStUDHb7DPrD8tF5eANLu4YIjRkqta8KOhLvcj2precsjqR40eDHvJnnuuS3bw-NcWsP1QKc7GSTYuX/pubhtml?gid=1959642482&single=true) explains all possible use cases.
 
@@ -1300,6 +1314,7 @@ The following action types are currently defined:
  * ua: user agent changed, for example user was logged in with one client, then logged in with another
  * upd: topic description has changed
  * tags: topic tags have changed
+ * aux: topic aux data has changed
  * acs: access permissions have changed
  * gone: topic is no longer available, for example, it was deleted or you were unsubscribed from it
  * term: subscription to topic has been terminated, you may try to resubscribe
@@ -1314,13 +1329,15 @@ The `{pres}` messages are purely transient: they are not stored and no attempt i
 Timestamp is not present in `{pres}` messages.
 
 
-#### `{info}`
+####  13.2.5. <a name='info'></a>`{info}`
 
 Forwarded client-generated notification `{note}`. Server guarantees that the message complies with this specification and that content of `topic` and `from` fields is correct. The other content is copied from the `{note}` message verbatim and may potentially be incorrect or misleading if the originator  so desires.
 
 ```js
 info: {
   topic: "grp1XUtEhjv6HND", // string, topic affected, always present
+  src: "usrRkDVe0PYDOo",  // string, topic where the even has occurred;
+                          // present only when "topic": "me"
   from: "usr2il9suCbuko", // string, id of the user who published the
                           // message, always present
   what: "read", // string, one of "kp", "recv", "read", "data", see client-side {note},
@@ -1328,5 +1345,7 @@ info: {
   seq: 123, // integer, ID of the message that client has acknowledged,
             // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for recv &
             // read
+  event: "ringing", // string, used by video/audio calls
+  payload: { ... }  // object, arbitrary payload, used by video calls
 }
 ```
