@@ -1121,6 +1121,9 @@ func (s *Session) set(msg *ClientComMessage) {
 	if msg.Set.Cred != nil {
 		msg.MetaWhat |= constMsgMetaCred
 	}
+	if msg.Set.Aux != nil {
+		msg.MetaWhat |= constMsgMetaAux
+	}
 
 	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
@@ -1133,8 +1136,8 @@ func (s *Session) set(msg *ClientComMessage) {
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
-		logs.Warn.Println("s.set: can Set tags/creds for subscribed topics only", msg.MetaWhat)
+	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred|constMsgMetaAux) != 0 {
+		logs.Warn.Println("s.set: setting tags/creds/aux is allowed for subscribed topics only", msg.MetaWhat)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.

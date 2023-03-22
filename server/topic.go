@@ -59,6 +59,9 @@ type Topic struct {
 	// Topic discovery tags
 	tags []string
 
+	// Auxiliary set of key-value pairs
+	aux map[string]any
+
 	// Topic's public data
 	public any
 	// Topic's trusted data
@@ -383,9 +386,14 @@ func (t *Topic) handleMetaGet(msg *ClientComMessage, asUid types.Uid, asChan boo
 		}
 	}
 	if msg.MetaWhat&constMsgMetaCred != 0 {
-		logs.Warn.Printf("topic[%s] handle getCred", t.name)
 		if err := t.replyGetCreds(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
+		}
+	}
+	if msg.MetaWhat&constMsgMetaAux != 0 {
+		logs.Warn.Printf("topic[%s] handle getAux", t.name)
+		if err := t.replyGetAux(msg.sess, asUid, msg); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Aux failed: %s", t.name, err)
 		}
 	}
 }
@@ -658,6 +666,13 @@ func (t *Topic) handleSubscription(msg *ClientComMessage) error {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetCreds(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, msg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaAux != 0 {
+		// Send get.aux response as a separate {meta} packet
+		if err := t.replyGetAux(msg.sess, asUid, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Aux failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
@@ -2744,6 +2759,9 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 				sess.queueOutBatch(outgoingMessages)
 			}
 		}
+	} else {
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
+		return errors.New("attempt to get messages by non-reader")
 	}
 
 	// Inform the requester that all the data has been served.
@@ -2773,7 +2791,8 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 	if len(t.tags) > 0 {
 		sess.queueOut(&ServerComMessage{
 			Meta: &MsgServerMeta{
-				Id: msg.Id, Topic: t.original(asUid),
+				Id:        msg.Id,
+				Topic:     t.original(asUid),
 				Timestamp: &now,
 				Tags:      t.tags,
 			},
@@ -2919,6 +2938,47 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 	sess.queueOut(decodeStoreErrorExplicitTs(err, set.Id, t.original(asUid), now, incomingReqTs, nil))
 
 	return err
+}
+
+// replyGetAux returns topic's auxiliary set of key-value pairs.
+func (t *Topic) replyGetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+	now := types.TimeNow()
+
+	if len(t.aux) > 0 {
+		sess.queueOut(&ServerComMessage{
+			Meta: &MsgServerMeta{
+				Id:        msg.Id,
+				Topic:     t.original(asUid),
+				Timestamp: &now,
+				Aux:       t.aux,
+			},
+		})
+		return nil
+	}
+
+	// Inform the requester that there are no tags.
+	sess.queueOut(NoContentParamsReply(msg, now, map[string]string{"what": "aux"}))
+
+	return nil
+}
+
+// replyGetAux returns topic's auxiliary set of key-value pairs.
+func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+	now := types.TimeNow()
+	set := msg.Set
+
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsAdmin() {
+		update := map[string]any{"Aux": aux, "UpdatedAt": now}
+		if t.cat == types.TopicCatMe {
+			err = store.Users.Update(asUid, update)
+		} else if t.cat == types.TopicCatGrp {
+			err = store.Topics.Update(t.name, update)
+		}
+		return nil
+	}
+
+	sess.queueOut(ErrPermissionDeniedReply(msg, now))
+	return errors.New("aux update by non-admin")
 }
 
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to

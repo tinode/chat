@@ -216,6 +216,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaDel
 		case "cred":
 			bits |= constMsgMetaCred
+		case "aux":
+			bits |= constMsgMetaAux
 		default:
 			// ignore unknown
 		}
