@@ -2439,7 +2439,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	stateConstraint := ""
 	if activeOnly {
 		args = append(args, t.StateOK)
-		stateConstraint = "u.state=? AND "
+		stateConstraint = "t.state=? AND "
 	}
 	var allReq []string
 	for _, el := range req {
