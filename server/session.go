@@ -814,11 +814,14 @@ func (s *Session) hello(msg *ClientComMessage) {
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 	// Try to deduce the country from the locale.
-	if tag, err := language.Parse(s.lang); err == nil {
+	// Tag may be well-defined even if err != nil. For example, for 'zh_CN_#Hans'
+	// the tag is 'zh-CN' exact but the err is 'tag is not well-formed'.
+	if tag, _ := language.Parse(s.lang); tag != language.Und {
 		if region, conf := tag.Region(); region.IsCountry() && conf >= language.High {
 			s.countryCode = region.String()
 		}
 	}
+
 	if s.countryCode == "" {
 		if len(s.lang) > 2 {
 			// Logging strings longer than 2 b/c language.Parse(XX) always succeeds
