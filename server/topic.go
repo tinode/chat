@@ -422,6 +422,11 @@ func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan boo
 			logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 		}
 	}
+	if msg.MetaWhat&constMsgMetaAux != 0 {
+		if err := t.replySetAux(msg.sess, asUid, msg); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Set.Aux failed: %v", t.name, err)
+		}
+	}
 }
 
 func (t *Topic) handleMetaDel(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
@@ -2906,7 +2911,6 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	set := msg.Set
-	incomingReqTs := msg.Timestamp
 
 	if t.cat != types.TopicCatMe {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
@@ -2935,7 +2939,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
 	}
 
-	sess.queueOut(decodeStoreErrorExplicitTs(err, set.Id, t.original(asUid), now, incomingReqTs, nil))
+	sess.queueOut(decodeStoreErrorExplicitTs(err, set.Id, t.original(asUid), now, msg.Timestamp, nil))
 
 	return err
 }
@@ -2943,6 +2947,11 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 // replyGetAux returns topic's auxiliary set of key-value pairs.
 func (t *Topic) replyGetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
+
+	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp {
+		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
+		return errors.New("invalid topic category to query aux")
+	}
 
 	if len(t.aux) > 0 {
 		sess.queueOut(&ServerComMessage{
@@ -2965,20 +2974,35 @@ func (t *Topic) replyGetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 // replyGetAux returns topic's auxiliary set of key-value pairs.
 func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
-	set := msg.Set
 
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsAdmin() {
+	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp {
+		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
+		return errors.New("invalid topic category to assign aux")
+	}
+
+	if userData := t.perUser[asUid]; !(userData.modeGiven & userData.modeWant).IsAdmin() {
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
+		return errors.New("aux update by non-admin")
+	}
+
+	logs.Info.Println(msg.Set.Aux, t.aux)
+	if aux, changed := mergeMaps(t.aux, msg.Set.Aux); changed {
+		var err error
 		update := map[string]any{"Aux": aux, "UpdatedAt": now}
 		if t.cat == types.TopicCatMe {
 			err = store.Users.Update(asUid, update)
 		} else if t.cat == types.TopicCatGrp {
 			err = store.Topics.Update(t.name, update)
 		}
-		return nil
+		if err == nil {
+			t.aux = aux
+		}
+		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Set.Id, t.original(asUid), now, msg.Timestamp, nil))
+		return err
 	}
 
-	sess.queueOut(ErrPermissionDeniedReply(msg, now))
-	return errors.New("aux update by non-admin")
+	sess.queueOut(InfoNotModifiedReply(msg, now))
+	return nil
 }
 
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
