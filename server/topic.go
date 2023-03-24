@@ -2986,7 +2986,7 @@ func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 	}
 
 	logs.Info.Println(msg.Set.Aux, t.aux)
-	if aux, changed := mergeMaps(t.aux, msg.Set.Aux); changed {
+	if aux, changed := mergeMaps(copyMap(t.aux), msg.Set.Aux); changed {
 		var err error
 		update := map[string]any{"Aux": aux, "UpdatedAt": now}
 		if t.cat == types.TopicCatMe {
@@ -2994,8 +2994,10 @@ func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 		} else if t.cat == types.TopicCatGrp {
 			err = store.Topics.Update(t.name, update)
 		}
+
 		if err == nil {
 			t.aux = aux
+			t.presSubsOnline("aux", "", nilPresParams, nilPresFilters, sess.sid)
 		}
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Set.Id, t.original(asUid), now, msg.Timestamp, nil))
 		return err

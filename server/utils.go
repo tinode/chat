@@ -835,6 +835,15 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 	return dst, changed
 }
 
+// Shallow copy of a map
+func copyMap(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for key, val := range src {
+		dst[key] = val
+	}
+	return dst
+}
+
 // netListener creates net.Listener for tcp and unix domains:
 // if addr is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
 func netListener(addr string) (net.Listener, error) {
