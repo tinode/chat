@@ -814,11 +814,14 @@ func (s *Session) hello(msg *ClientComMessage) {
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 	// Try to deduce the country from the locale.
-	if tag, err := language.Parse(s.lang); err == nil {
+	// Tag may be well-defined even if err != nil. For example, for 'zh_CN_#Hans'
+	// the tag is 'zh-CN' exact but the err is 'tag is not well-formed'.
+	if tag, _ := language.Parse(s.lang); tag != language.Und {
 		if region, conf := tag.Region(); region.IsCountry() && conf >= language.High {
 			s.countryCode = region.String()
 		}
 	}
+
 	if s.countryCode == "" {
 		if len(s.lang) > 2 {
 			// Logging strings longer than 2 b/c language.Parse(XX) always succeeds
@@ -1121,6 +1124,9 @@ func (s *Session) set(msg *ClientComMessage) {
 	if msg.Set.Cred != nil {
 		msg.MetaWhat |= constMsgMetaCred
 	}
+	if msg.Set.Aux != nil {
+		msg.MetaWhat |= constMsgMetaAux
+	}
 
 	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
@@ -1133,8 +1139,8 @@ func (s *Session) set(msg *ClientComMessage) {
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
-		logs.Warn.Println("s.set: can Set tags/creds for subscribed topics only", msg.MetaWhat)
+	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred|constMsgMetaAux) != 0 {
+		logs.Warn.Println("s.set: setting tags/creds/aux is allowed for subscribed topics only", msg.MetaWhat)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.

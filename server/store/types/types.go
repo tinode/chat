@@ -1060,6 +1060,23 @@ type perUserData struct {
 	given   AccessMode
 }
 
+// MessageHeaders is needed to attach Scan() to.
+type KVMap map[string]any
+
+// Scan implements sql.Scanner interface.
+func (kvm *KVMap) Scan(val any) error {
+	if val == nil {
+		kvm = nil
+		return nil
+	}
+	return json.Unmarshal(val.([]byte), kvm)
+}
+
+// Value implements sql's driver.Valuer interface.
+func (kvm KVMap) Value() (driver.Value, error) {
+	return json.Marshal(kvm)
+}
+
 // Topic stored in database. Topic's name is Id
 type Topic struct {
 	ObjHeader `bson:",inline"`
@@ -1090,6 +1107,9 @@ type Topic struct {
 
 	// Indexed tags for finding this topic.
 	Tags StringSlice
+
+	// Auxiliary set of key-value pairs.
+	Aux KVMap `json:"Aux,omitempty" bson:",omitempty"`
 
 	// Deserialized ephemeral params
 	perUser map[Uid]*perUserData // deserialized from Subscription
@@ -1160,19 +1180,6 @@ type SoftDelete struct {
 	DelId int
 }
 
-// MessageHeaders is needed to attach Scan() to.
-type MessageHeaders map[string]interface{}
-
-// Scan implements sql.Scanner interface.
-func (mh *MessageHeaders) Scan(val interface{}) error {
-	return json.Unmarshal(val.([]byte), mh)
-}
-
-// Value implements sql's driver.Valuer interface.
-func (mh MessageHeaders) Value() (driver.Value, error) {
-	return json.Marshal(mh)
-}
-
 // Message is a stored {data} message
 type Message struct {
 	ObjHeader `bson:",inline"`
@@ -1186,7 +1193,7 @@ type Message struct {
 	Topic      string
 	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
-	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
+	Head    KVMap `json:"Head,omitempty" bson:",omitempty"`
 	Content interface{}
 }
 

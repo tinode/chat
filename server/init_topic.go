@@ -259,6 +259,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 		if !stopic.TouchedAt.IsZero() {
 			t.touched = stopic.TouchedAt
 		}
+		t.aux = stopic.Aux
 		t.lastID = stopic.SeqId
 		t.delID = stopic.DelId
 	}
@@ -643,8 +644,9 @@ func initTopicGrp(t *Topic) error {
 	t.accessAuth = stopic.Access.Auth
 	t.accessAnon = stopic.Access.Anon
 
-	// Assign tags
+	// Assign tags & auxiliary data.
 	t.tags = stopic.Tags
+	t.aux = stopic.Aux
 
 	t.public = stopic.Public
 	t.trusted = stopic.Trusted

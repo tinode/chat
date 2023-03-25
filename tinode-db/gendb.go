@@ -392,7 +392,7 @@ func genDb(data *Data) {
 						ObjHeader: types.ObjHeader{CreatedAt: ts},
 						SeqId:     seqId,
 						Topic:     nameIndex[sub.pair],
-						Head:      types.MessageHeaders{"mime": "text/x-drafty"},
+						Head:      types.KVMap{"mime": "text/x-drafty"},
 						From:      from,
 						Content:   form,
 					}, nil, true); err != nil {

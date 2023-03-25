@@ -807,13 +807,13 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 		switch xval.Kind() {
 		case reflect.Map:
 			if xsrc, _ := val.(map[string]any); xsrc != nil {
-				// Deep-copy map[string]interface{}
+				// Deep-copy map[string]any
 				xdst, _ := dst[key].(map[string]any)
 				var lchange bool
 				dst[key], lchange = mergeMaps(xdst, xsrc)
 				changed = changed || lchange
 			} else if val != nil {
-				// The map is shallow-copied if it's not of the type map[string]interface{}
+				// The map is shallow-copied if it's not of the type map[string]any
 				dst[key] = val
 				changed = true
 			}
@@ -833,6 +833,15 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 	}
 
 	return dst, changed
+}
+
+// Shallow copy of a map
+func copyMap(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for key, val := range src {
+		dst[key] = val
+	}
+	return dst
 }
 
 // netListener creates net.Listener for tcp and unix domains:

@@ -1456,6 +1456,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	}
 	tpc.Public = unmarshalBsonD(tpc.Public)
 	tpc.Trusted = unmarshalBsonD(tpc.Trusted)
+	tpc.Aux = unmarshalBsonD(tpc.Aux)
 	return tpc, nil
 }
 
@@ -2787,7 +2788,7 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 
 // Recursive unmarshalling of bson.D type.
 // Mongo drivers unmarshalling into interface{} creates bson.D object for maps and bson.A object for slices.
-// We need manually unmarshal them into correct types: map[string]interface{} and []interface{] respectively.
+// We need to manually unmarshal them into correct types: map[string]interface{} and []interface{] respectively.
 func unmarshalBsonD(bsonObj interface{}) interface{} {
 	if obj, ok := bsonObj.(b.D); ok && len(obj) != 0 {
 		result := make(map[string]interface{})
