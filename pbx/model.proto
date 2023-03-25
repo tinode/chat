@@ -480,7 +480,7 @@ message ServerMsg {
 	}
 	// DEPRECATED. Will be removed soon.
 	// When response is sent to Root, send internal topic name too.
-	string topic = 6;
+	string topic = 6 [deprecated = true];
 }
 
 // Plugin response codes
