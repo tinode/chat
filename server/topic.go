@@ -2987,14 +2987,7 @@ func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 
 	logs.Info.Println(msg.Set.Aux, t.aux)
 	if aux, changed := mergeMaps(copyMap(t.aux), msg.Set.Aux); changed {
-		var err error
-		update := map[string]any{"Aux": aux, "UpdatedAt": now}
-		if t.cat == types.TopicCatMe {
-			err = store.Users.Update(asUid, update)
-		} else if t.cat == types.TopicCatGrp {
-			err = store.Topics.Update(t.name, update)
-		}
-
+		err := store.Topics.Update(t.name, map[string]any{"Aux": aux, "UpdatedAt": now})
 		if err == nil {
 			t.aux = aux
 			t.presSubsOnline("aux", "", nilPresParams, nilPresFilters, sess.sid)
