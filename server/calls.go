@@ -406,7 +406,11 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	// Send a message indicating the call has ended.
 	msgCopy := *msg
 	msgCopy.AsUser = originatorUid.UserId()
-	head := t.currentCall.messageHead(msgCopy.Pub.Head, replaceWith, int(callDuration))
+	var origHead map[string]any
+	if msgCopy.Pub != nil {
+		origHead = msgCopy.Pub.Head
+	} // else fetch the original message from store and use its head.
+	head := t.currentCall.messageHead(origHead, replaceWith, int(callDuration))
 	if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, head, t.currentCall.content); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
