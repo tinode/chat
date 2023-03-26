@@ -291,7 +291,11 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			msgCopy := *msg
 			msgCopy.AsUser = originatorUid.UserId()
 			replaceWith := constCallMsgAccepted
-			head := t.currentCall.messageHead(msgCopy.Pub.Head, replaceWith, 0)
+			var origHead map[string]any
+			if msgCopy.Pub != nil {
+				origHead = msgCopy.Pub.Head
+			} // else fetch the original message from store and use its head.
+			head := t.currentCall.messageHead(origHead, replaceWith, 0)
 			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil,
 				head, t.currentCall.content); err != nil {
 				return
