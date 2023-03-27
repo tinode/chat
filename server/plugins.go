@@ -274,7 +274,7 @@ func pluginsInit(configString json.RawMessage) {
 		}
 		if globals.plugins[count].filterTopic, err =
 			ParsePluginFilter(conf.Filters.Topic, plgFilterByTopicType|plgFilterByAction); err != nil {
-			logs.Err.Fatal("plugins: bad FireHose filter", err)
+			logs.Err.Fatal("plugins: bad Topic filter", err)
 		}
 		if globals.plugins[count].filterSubscription, err =
 			ParsePluginFilter(conf.Filters.Subscription, plgFilterByTopicType|plgFilterByAction); err != nil {
