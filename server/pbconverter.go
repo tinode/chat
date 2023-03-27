@@ -71,6 +71,8 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 		what = pbx.ServerPres_DEL
 	case "tags":
 		what = pbx.ServerPres_TAGS
+	case "aux":
+		what = pbx.ServerPres_AUX
 	default:
 		logs.Info.Println("Unknown pres.what value", pres.What)
 	}
@@ -114,6 +116,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 			Del:   pbDelValuesSerialize(meta.Del),
 			Tags:  meta.Tags,
 			Cred:  pbServerCredsSerialize(meta.Cred),
+			Aux:   interfaceMapToByteMap(meta.Aux),
 		},
 	}
 }
@@ -135,6 +138,7 @@ func pbServSerialize(msg *ServerComMessage) *pbx.ServerMsg {
 		pkt.Message = pbServMetaSerialize(msg.Meta)
 	}
 
+	// DEPRECATED.
 	pkt.Topic = msg.RcptTo
 
 	return &pkt
@@ -191,6 +195,8 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			what = "del"
 		case pbx.ServerPres_TAGS:
 			what = "tags"
+		case pbx.ServerPres_AUX:
+			what = "aux"
 		}
 		msg.Pres = &MsgServerPres{
 			Topic:     pres.GetTopic(),
@@ -223,6 +229,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Del:   pbDelValuesDeserialize(meta.GetDel()),
 			Tags:  meta.GetTags(),
 			Cred:  pbServerCredsDeserialize(meta.GetCred()),
+			Aux:   byteMapToInterfaceMap(meta.GetAux()),
 		}
 	}
 	return &msg
