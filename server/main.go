@@ -249,7 +249,7 @@ type configType struct {
 	// Cache-Control value for static content.
 	CacheControl int `json:"cache_control"`
 	// If true, do not attempt to negotiate websocket per message compression (RFC 7692.4).
-	// It should be disabled (set to true) if you are using MSFT IIS as reverse proxy.
+	// It should be disabled (set to true) if you are using MSFT IIS as a reverse proxy.
 	WSCompressionDisabled bool `json:"ws_compression_disabled"`
 	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
 	// Could be overridden from the command line with --grpc_listen.
