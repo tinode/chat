@@ -168,11 +168,6 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	// Actually opening the network connection.
 	err = a.db.Ping(ctx)
 
-	// if isMissingDb(err) {
-	// 	// Ignore missing database here. If we are initializing the database
-	// 	// missing DB is OK.
-	// 	err = nil
-	// }
 	if err == nil {
 		if config.MaxOpenConns > 0 {
 
@@ -221,7 +216,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 		defer cancel()
 	}
 	var vers string
-	err := a.db.QueryRow(ctx, `SELECT value FROM kvmeta WHERE key = $1`, "version").Scan(&vers)
+	err := a.db.QueryRow(ctx, "SELECT value FROM kvmeta WHERE key = $1", "version").Scan(&vers)
 
 	if err != nil {
 		if isMissingDb(err) || isMissingTable(err) || err == pgx.ErrNoRows {
@@ -241,7 +236,7 @@ func (a *adapter) updateDbVersion(v int) error {
 		defer cancel()
 	}
 	a.version = -1
-	if _, err := a.db.Exec(ctx, `UPDATE kvmeta SET value = $1 WHERE key = $2`, strconv.Itoa(v), "version"); err != nil {
+	if _, err := a.db.Exec(ctx, "UPDATE kvmeta SET value = $1 WHERE key = $2", strconv.Itoa(v), "version"); err != nil {
 		return err
 	}
 	return nil
@@ -306,10 +301,8 @@ func (a *adapter) CreateDb(reset bool) error {
 	if a.db != nil {
 		a.db.Close()
 	}
-	// // This DSN has been parsed before and produced no error, not checking for errors here.
-	// cfg, _ := pgxpool.ParseConfig(a.dsn)
 
-	// // Create default database name
+	// Create default database name
 	a.poolConfig.ConnConfig.Database = "postgres"
 
 	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
@@ -616,15 +609,15 @@ func (a *adapter) UpgradeDb() error {
 	if a.version == 106 {
 		// Perform database upgrade from version 106 to version 107.
 
-		if _, err := a.db.Exec(ctx, `CREATE UNIQUE INDEX usertags_userid_tag ON usertags(userid, tag)`); err != nil {
+		if _, err := a.db.Exec(ctx, "CREATE UNIQUE INDEX usertags_userid_tag ON usertags(userid, tag)"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag)`); err != nil {
+		if _, err := a.db.Exec(ctx, "CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag)"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE credentials ADD deletedat TIMESTAMP(3) AFTER updatedat`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE credentials ADD deletedat TIMESTAMP(3) AFTER updatedat"); err != nil {
 			return err
 		}
 
@@ -669,7 +662,7 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 109 {
 		// Perform database upgrade from version 109 to version 110.
-		if _, err := a.db.Exec(ctx, `UPDATE topics SET touchedat=updatedat WHERE touchedat IS NULL`); err != nil {
+		if _, err := a.db.Exec(ctx, "UPDATE topics SET touchedat=updatedat WHERE touchedat IS NULL"); err != nil {
 			return err
 		}
 
@@ -680,47 +673,47 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 110 {
 		// Users
-		if _, err := a.db.Exec(ctx, `ALTER TABLE users MODIFY state SMALLINT NOT NULL DEFAULT 0 AFTER updatedat`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE users MODIFY state SMALLINT NOT NULL DEFAULT 0 AFTER updatedat"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE users CHANGE deletedat stateat TIMESTAMP(3)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE users CHANGE deletedat stateat TIMESTAMP(3)"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE users DROP INDEX users_deletedat`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE users DROP INDEX users_deletedat"); err != nil {
 			return err
 		}
 
 		// Add status to formerly soft-deleted users.
-		if _, err := a.db.Exec(ctx, `UPDATE users SET state=$1 WHERE stateat IS NOT NULL`, t.StateDeleted); err != nil {
+		if _, err := a.db.Exec(ctx, "UPDATE users SET state=$1 WHERE stateat IS NOT NULL", t.StateDeleted); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE users ADD INDEX users_state(state)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE users ADD INDEX users_state(state)"); err != nil {
 			return err
 		}
 
 		// Topics
-		if _, err := a.db.Exec(ctx, `ALTER TABLE topics ADD state SMALLINT NOT NULL DEFAULT 0 AFTER updatedat`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD state SMALLINT NOT NULL DEFAULT 0 AFTER updatedat"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE topics CHANGE deletedat stateat TIMESTAMP(3)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics CHANGE deletedat stateat TIMESTAMP(3)"); err != nil {
 			return err
 		}
 
 		// Add status to formerly soft-deleted topics.
-		if _, err := a.db.Exec(ctx, `UPDATE topics SET state=$1 WHERE stateat IS NOT NULL`, t.StateDeleted); err != nil {
+		if _, err := a.db.Exec(ctx, "UPDATE topics SET state=$1 WHERE stateat IS NOT NULL", t.StateDeleted); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE topics ADD INDEX topics_state(state)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD INDEX topics_state(state)"); err != nil {
 			return err
 		}
 
 		// Subscriptions
-		if _, err := a.db.Exec(ctx, `ALTER TABLE subscriptions ADD INDEX topics_deletedat(deletedat)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE subscriptions ADD INDEX topics_deletedat(deletedat)"); err != nil {
 			return err
 		}
 
@@ -731,41 +724,41 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 111 {
 		// Perform database upgrade from version 111 to version 112.
-		if _, err := a.db.Exec(ctx, `ALTER TABLE users ADD trusted JSON AFTER public`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE users ADD trusted JSON AFTER public"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE topics ADD trusted JSON AFTER public`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD trusted JSON AFTER public"); err != nil {
 			return err
 		}
 
 		// Remove NOT NULL constraint, so an avatar upload can be done at registration.
-		if _, err := a.db.Exec(ctx, `ALTER TABLE fileuploads MODIFY userid BIGINT`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE fileuploads MODIFY userid BIGINT"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE fileuploads ADD INDEX fileuploads_status(status)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE fileuploads ADD INDEX fileuploads_status(status)"); err != nil {
 			return err
 		}
 
 		// Remove NOT NULL constraint to enable links to users and topics.
-		if _, err := a.db.Exec(ctx, `ALTER TABLE filepgglinks MODIFY pggid INT`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE filepgglinks MODIFY pggid INT"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE filepgglinks ADD topic CHAR(25)`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE filepgglinks ADD topic CHAR(25)"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE filepgglinks ADD userid BIGINT`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE filepgglinks ADD userid BIGINT"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE filepgglinks ADD FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE filepgglinks ADD FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec(ctx, `ALTER TABLE filepgglinks ADD FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE`); err != nil {
+		if _, err := a.db.Exec(ctx, "ALTER TABLE filepgglinks ADD FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE"); err != nil {
 			return err
 		}
 
@@ -847,7 +840,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 
 	decoded_uid := store.DecodeUid(user.Uid())
 	if _, err = tx.Exec(ctx,
-		`INSERT INTO users(id,createdat,updatedat,state,access,public,trusted,tags) VALUES($1,$2,$3,$4,$5,$6,$7,$8);`,
+		"INSERT INTO users(id,createdat,updatedat,state,access,public,trusted,tags) VALUES($1,$2,$3,$4,$5,$6,$7,$8);",
 		decoded_uid,
 		user.CreatedAt,
 		user.UpdatedAt,
@@ -1121,7 +1114,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete records of messages soft-deleted for the user.
-		if _, err = tx.Exec(ctx, `DELETE FROM dellog WHERE deletedfor=$1;`, decoded_uid); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM dellog WHERE deletedfor=$1", decoded_uid); err != nil {
 			return err
 		}
 
@@ -1131,34 +1124,34 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Delete topics where the user is the owner.
 
 		// First delete all messages in those topics.
-		if _, err = tx.Exec(ctx, `DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1;`,
+		if _, err = tx.Exec(ctx, "DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1",
 			decoded_uid); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1;`,
+		if _, err = tx.Exec(ctx, "DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete all subscriptions.
-		if _, err = tx.Exec(ctx, `DELETE FROM subscriptions USING topics WHERE topics.name=subscriptions.topic AND topics.owner=$1;`,
+		if _, err = tx.Exec(ctx, "DELETE FROM subscriptions USING topics WHERE topics.name=subscriptions.topic AND topics.owner=$1",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete topic tags.
-		if _, err = tx.Exec(ctx, `DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1;`,
+		if _, err = tx.Exec(ctx, "DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// And finally delete the topics.
-		if _, err = tx.Exec(ctx, `DELETE FROM topics WHERE owner=$1;`, decoded_uid); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM topics WHERE owner=$1", decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete user's authentication records.
-		if _, err = tx.Exec(ctx, `DELETE FROM auth WHERE userid=$1;`, decoded_uid); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM auth WHERE userid=$1", decoded_uid); err != nil {
 			return err
 		}
 
@@ -1601,8 +1594,6 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	}
 
 	tt.Owner = store.EncodeUid(owner).String()
-	// tt.Public = fromJSON(tt.Public)
-	// tt.Trusted = fromJSON(tt.Trusted)
 
 	return tt, nil
 }
@@ -1672,8 +1663,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			&sub.RecvSeqId, &sub.ReadSeqId, &modeWant, &modeGiven, &sub.Private); err != nil {
 			break
 		}
-		// modeWant = bytes.Trim(modeWant, " ")
-		// modeGiven = bytes.Trim(modeGiven, " ")
 		sub.ModeWant.Scan(modeWant)
 		sub.ModeGiven.Scan(modeGiven)
 		tname := sub.Topic
@@ -1922,13 +1911,10 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			break
 		}
 
-		// sub.SetUid(store.EncodeUid(userId))
 		sub.User = store.EncodeUid(userId).String()
 		sub.SetPublic(public)
 		sub.SetTrusted(trusted)
 		sub.SetLastSeenAndUA(lastSeen, userAgent)
-		// modeWant = bytes.Trim(modeWant, " ")
-		// modeGiven = bytes.Trim(modeGiven, " ")
 		sub.ModeWant.Scan(modeWant)
 		sub.ModeGiven.Scan(modeGiven)
 		subs = append(subs, sub)
@@ -2185,7 +2171,6 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 		return nil, nil
 	}
 
-	//sub.SetUid(store.EncodeUid(userId))
 	sub.User = store.EncodeUid(userId).String()
 	sub.ModeWant.Scan(modeWant)
 	sub.ModeGiven.Scan(modeGiven)
@@ -2220,10 +2205,7 @@ func (a *adapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
 			break
 		}
 
-		// sub.SetUid(store.EncodeUid(userId))
 		sub.User = store.EncodeUid(userId).String()
-		// modeWant = bytes.Trim(modeWant, " ")
-		// modeGiven = bytes.Trim(modeGiven, " ")
 		sub.ModeWant.Scan(modeWant)
 		sub.ModeGiven.Scan(modeGiven)
 		subs = append(subs, sub)
@@ -2286,10 +2268,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 			break
 		}
 
-		// sub.SetUid(store.EncodeUid(userId))
 		sub.User = store.EncodeUid(userId).String()
-		// modeWant = bytes.Trim(modeWant, " ")
-		// modeGiven = bytes.Trim(modeGiven, " ")
 		sub.ModeWant.Scan(modeWant)
 		sub.ModeGiven.Scan(modeGiven)
 		subs = append(subs, sub)
@@ -2382,10 +2361,10 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 func subsDelForUser(ctx context.Context, tx pgx.Tx, user t.Uid, hard bool) error {
 	var err error
 	if hard {
-		_, err = tx.Exec(ctx, `DELETE FROM subscriptions WHERE userid=$1;`, store.DecodeUid(user))
+		_, err = tx.Exec(ctx, "DELETE FROM subscriptions WHERE userid=$1;", store.DecodeUid(user))
 	} else {
 		now := t.TimeNow()
-		_, err = tx.Exec(ctx, `UPDATE subscriptions SET updatedat=$1,deletedat=$2 WHERE userid=$3 AND deletedat IS NULL;`,
+		_, err = tx.Exec(ctx, "UPDATE subscriptions SET updatedat=$1,deletedat=$2 WHERE userid=$3 AND deletedat IS NULL;",
 			now, now, store.DecodeUid(user))
 	}
 	return err
@@ -2481,7 +2460,6 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 			// Skip the callee
 			continue
 		}
-		//sub.SetUid(store.EncodeUid(userId))
 		sub.User = store.EncodeUid(userId).String()
 		sub.SetPublic(public)
 		sub.SetTrusted(trusted)
@@ -2935,9 +2913,9 @@ func deviceDelete(ctx context.Context, tx pgx.Tx, uid t.Uid, deviceID string) er
 	var err error
 	var res pgconn.CommandTag
 	if deviceID == "" {
-		res, err = tx.Exec(ctx, `DELETE FROM devices WHERE userid=$1;`, store.DecodeUid(uid))
+		res, err = tx.Exec(ctx, "DELETE FROM devices WHERE userid=$1", store.DecodeUid(uid))
 	} else {
-		res, err = tx.Exec(ctx, `DELETE FROM devices WHERE userid=$1 AND hash=$2;`, store.DecodeUid(uid), deviceHasher(deviceID))
+		res, err = tx.Exec(ctx, "DELETE FROM devices WHERE userid=$1 AND hash=$2", store.DecodeUid(uid), deviceHasher(deviceID))
 	}
 
 	if err == nil {
@@ -3472,6 +3450,75 @@ func (a *adapter) FileLinkAttachments(topic string, userId, pggId t.Uid, fids []
 	return tx.Commit(ctx)
 }
 
+// PCacheGet reads a persistet cache entry.
+func (a *adapter) PCacheGet(key string) (string, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	var value string
+	if err := a.db.QueryRow(ctx, `SELECT "value" FROM kvmeta WHERE "key"=$1 LIMIT 1`, key).Scan(&value); err != nil {
+		if err == pgx.ErrNoRows {
+			return "", t.ErrNotFound
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+// PCacheUpsert creates or updates a persistent cache entry.
+func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) error {
+	if strings.Contains(key, "%") {
+		// Do not allow % in keys: it interferes with LIKE query.
+		return t.ErrMalformed
+	}
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	var action string
+	if failOnDuplicate {
+		action = "INSERT"
+	} else {
+		action = "REPLACE"
+	}
+
+	_, err := a.db.Exec(ctx, action+` INTO kvmeta("key",createdat,"value") VALUES($1,$2,$3)`, key, t.TimeNow(), value)
+	if isDupe(err) {
+		return t.ErrDuplicate
+	}
+	return err
+}
+
+// PCacheDelete deletes one persistent cache entry.
+func (a *adapter) PCacheDelete(key string) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	_, err := a.db.Exec(ctx, `DELETE FROM kvmeta WHERE "key"=$1`, key)
+	return err
+}
+
+// PCacheExpire expires old entries with the given key prefix.
+func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
+	if keyPrefix == "" {
+		return t.ErrMalformed
+	}
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+
+	_, err := a.db.Exec(ctx, `DELETE FROM kvmeta WHERE "key" LIKE $1 AND createdat<$2`, keyPrefix+"%", olderThan)
+	return err
+}
+
 // Helper functions
 
 // Check if MySQL error is a Error Code: 1062. Duplicate entry ... for key ...
@@ -3575,21 +3622,6 @@ func setConnStr(c configType) (string, error) {
 		c.SqlTimeout)
 
 	return connStr, nil
-}
-
-func repeatStringValues(str string, src *int, max int) string {
-	if max <= 0 {
-		return ""
-	}
-
-	var newString string
-
-	for max > 0 {
-		newString += fmt.Sprintf(str, *src)
-		*src += 1
-		max--
-	}
-	return newString
 }
 
 func expandQuery(query string, args ...interface{}) (string, []interface{}) {
