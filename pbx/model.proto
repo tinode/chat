@@ -346,6 +346,7 @@ message TopicDesc {
 	int64 state_at = 13;
 	bytes trusted = 14;
 	bool is_chan = 17; // 17!
+	bool online = 18;
 
 	// P2P only: other user's last online timestamp & user agent
 	int64 last_seen_time = 15;
