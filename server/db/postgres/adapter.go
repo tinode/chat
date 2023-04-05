@@ -2398,10 +2398,14 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	args = append(args, t.StateOK)
+	stateConstraint := ""
+	if activeOnly {
+		args = append(args, t.StateOK)
+		stateConstraint = "u.state=? AND "
+	}
 	allReq := t.FlattenDoubleSlice(req)
 	allTags := append(allReq, opt...)
 	for _, tag := range allTags {
@@ -2411,7 +2415,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE u.state=? AND t.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat"
+		"WHERE " + stateConstraint + "t.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat"
 	if len(allReq) > 0 {
 		query += " HAVING"
 		first := true
@@ -2448,7 +2452,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	var ignored int
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := store.DecodeUid(uid)
+	thisUser := store.DecodeUid(user)
 	for rows.Next() {
 		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access,
 			&public, &trusted, &userTags, &ignored); err != nil {
@@ -2483,10 +2487,14 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	args = append(args, t.StateOK)
+	stateConstraint := ""
+	if activeOnly {
+		args = append(args, t.StateOK)
+		stateConstraint = "t.state=? AND "
+	}
 	allReq := t.FlattenDoubleSlice(req)
 	allTags := append(allReq, opt...)
 	for _, tag := range allTags {
@@ -2496,7 +2504,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 
 	query := "SELECT t.id,t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE t.state=? AND tt.tag IN (?) GROUP BY t.id,t.name,t.createdat,t.updatedat,t.usebt"
+		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.id,t.name,t.createdat,t.updatedat,t.usebt"
 	if len(allReq) > 0 {
 		query += " HAVING"
 		first := true
@@ -2707,7 +2715,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		if dellog.Hi <= dellog.Low+1 {
 			dellog.Hi = 0
 		}
-		dpgg.SeqIdRanges = append(dpgg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
+		dpgg.SeqIdRanges = append(dpgg.SeqIdRanges, t.Range{Low: dellog.Low, Hi: dellog.Hi})
 	}
 	if err == nil {
 		err = rows.Err()
