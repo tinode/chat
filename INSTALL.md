@@ -34,15 +34,20 @@ See [instructions](./docker/README.md)
 
 3. Make sure one of the following databases is installed and running:
  * MySQL 5.7 or above. MySQL 5.6 or below **will not work**.
- * MongoDB 4.0 or above.
- * RethinkDB.
  * PostgreSQL 13 or above. PostgreSQL 12 or below **will not work**.
+ * MongoDB 4.2 or above.
+ * RethinkDB.
 
 4. Fetch, build Tinode server and tinode-db database initializer:
   - **MySQL**:
 	```
 	go install -tags mysql github.com/tinode/chat/server@latest
 	go install -tags mysql github.com/tinode/chat/tinode-db@latest
+	```
+	- **PostgreSQL**:
+	```
+	go install -tags postgres github.com/tinode/chat/server@latest
+	go install -tags postgres github.com/tinode/chat/tinode-db@latest
 	```
   - **MongoDB**:
 	```
@@ -53,11 +58,6 @@ See [instructions](./docker/README.md)
 	```
 	go install -tags rethinkdb github.com/tinode/chat/server@latest
 	go install -tags rethinkdb github.com/tinode/chat/tinode-db@latest
-	```
-  - **PostgreSQL**:
-	```
-	go install -tags postgres github.com/tinode/chat/server@latest
-	go install -tags postgres github.com/tinode/chat/tinode-db@latest
 	```
   - **All** (bundle all of the above DB adapters):
 	```
@@ -115,6 +115,10 @@ cd $GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X
 	```
 	mysql.server start
 	```
+ - **PostgreSQL**: https://www.postgresql.org/docs/current/app-pg-ctl.html
+	```
+	pg_ctl start
+	```
  - **MongoDB**: https://docs.mongodb.com/manual/administration/install-community/
 MongoDB should run as single node replicaset. See https://docs.mongodb.com/manual/administration/replica-set-deployment/
 	```
@@ -123,10 +127,6 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
  - **RethinkDB**: https://www.rethinkdb.com/docs/start-a-server/
 	```
 	rethinkdb --bind all --daemon
-	```
- - **PostgreSQL**: https://www.postgresql.org/docs/current/app-pg-ctl.html
-	```
-	pg_ctl start
 	```
 
 2. Run DB initializer
