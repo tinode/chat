@@ -16,6 +16,7 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/vc"
 	jcr "github.com/tinode/jsonco"
 )
 
@@ -56,6 +57,8 @@ type callConfig struct {
 	ICEServers []iceServer `json:"ice_servers"`
 	// Alternative config as an external file.
 	ICEServersFile string `json:"ice_servers_file"`
+	// Video conferencing configuraiton.
+	VideoConferencing json.RawMessage `json:"vc"`
 }
 
 // ICE server config.
@@ -168,6 +171,10 @@ func initVideoCalls(jsconfig json.RawMessage) error {
 	}
 
 	logs.Info.Println("Video calls enabled with", len(globals.iceServers), "ICE servers")
+
+	if err := vc.VideoConferencing.Open(config.VideoConferencing); err != nil {
+		logs.Err.Println("Video conferencing initialization failed: ", err)
+	}
 	return nil
 }
 
@@ -233,7 +240,36 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		sess:         callPartySession(msg.sess),
 	}
 	// Wait for constCallEstablishmentTimeout for the other side to accept the call.
-	t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
+	if t.cat != types.TopicCatGrp {
+		t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
+	}
+}
+
+type Token struct {
+	Token string `json:"token,omitempty"`
+}
+
+func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientComMessage) {
+	if call.Event == "token" {
+		// User is trying to join an existing call.
+		logs.Info.Printf("topic[%s]: user %s joins subscriber", t.name, asUid.UserId())
+		tok, _ := vc.VideoConferencing.GetToken(t.name, asUid.String())
+		// All is good. Send {info} message to the requestor.
+		reply := t.currentCall.infoMessage("token")
+		reply.Info.From = asUid.UserId()
+		reply.Info.Topic = t.name
+		tt := &Token{
+			Token: tok,
+		}
+		if bytes, e := json.Marshal(tt); e == nil {
+			reply.Info.Payload = bytes
+		} else {
+			logs.Warn.Printf("topic[%s]: err serializing %+v, e = %+v", t.name, tt, e)
+		}
+		msg.sess.queueOut(reply)
+	} else {
+		logs.Info.Printf("topic[%s]: unknown VC call note event %+v", t.name, call)
+	}
 }
 
 // Handles events on existing video call (acceptance, termination, metadata exchange).
@@ -257,6 +293,11 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	}
 
 	asUid := types.ParseUserId(msg.AsUser)
+
+	if t.cat == types.TopicCatGrp {
+		t.handleVCEvent(call, asUid, msg)
+		return
+	}
 
 	if _, userFound := t.perUser[asUid]; !userFound {
 		// User not found in topic.
@@ -297,7 +338,7 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			} // else fetch the original message from store and use its head.
 			head := t.currentCall.messageHead(origHead, replaceWith, 0)
 			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil,
-				head, t.currentCall.content); err != nil {
+				head, t.currentCall.content, true); err != nil {
 				return
 			}
 			// Add callee data to t.currentCall.
@@ -415,7 +456,7 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 		origHead = msgCopy.Pub.Head
 	} // else fetch the original message from store and use its head.
 	head := t.currentCall.messageHead(origHead, replaceWith, int(callDuration))
-	if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, head, t.currentCall.content); err != nil {
+	if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, head, t.currentCall.content, false); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
 	}
 

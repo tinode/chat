@@ -25,6 +25,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/vc"
 
 	"golang.org/x/text/language"
 )
@@ -1237,8 +1238,8 @@ func (s *Session) note(msg *ClientComMessage) {
 			return
 		}
 	case "call":
-		if types.GetTopicCat(msg.RcptTo) != types.TopicCatP2P {
-			// Calls are only available in P2P topics.
+		if types.GetTopicCat(msg.RcptTo) != types.TopicCatP2P && !vc.VideoConferencing.IsAvailable() {
+			// Apparently, group calls are not surpported.
 			return
 		}
 		fallthrough

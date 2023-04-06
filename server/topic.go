@@ -18,6 +18,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/vc"
 )
 
 // Topic is an isolated communication channel
@@ -973,7 +974,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // Saves a new message (defined by head, content and attachments) in the topic
 // in response to a client request (msg, asUid) and broadcasts it to the attached sessions.
-func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]any, content any) error {
+func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]any, content any, isCall bool) error {
 	pud, userFound := t.perUser[asUid]
 	// Anyone is allowed to post to 'sys' topic.
 	if t.cat != types.TopicCatSys {
@@ -1023,7 +1024,16 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 
 	if msg.Id != "" && msg.sess != nil {
 		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-		reply.Ctrl.Params = map[string]any{"seq": t.lastID}
+		params := map[string]any{"seq": t.lastID}
+
+		if isCall && t.cat == types.TopicCatGrp && vc.VideoConferencing.IsAvailable() {
+			if token, err := vc.VideoConferencing.GetToken(t.name, asUid.String()); err == nil {
+				params["token"] = token
+			} else {
+				logs.Warn.Printf("topic[%s]: failed to generate VC token - %+v", t.name, err)
+			}
+		}
+		reply.Ctrl.Params = params
 		msg.sess.queueOut(reply)
 	}
 
@@ -1084,7 +1094,8 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrNotImplementedReply(msg, types.TimeNow()))
 			return
 		}
-		if t.cat != types.TopicCatP2P {
+		if t.cat != types.TopicCatP2P && !vc.VideoConferencing.IsAvailable() {
+			// Group calls aren't supported.
 			msg.sess.queueOut(ErrPermissionDeniedReply(msg, types.TimeNow()))
 			return
 		}
@@ -1100,7 +1111,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		attachments = msg.Extra.Attachments
 	}
 
-	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content); err != nil {
+	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content, isCall); err != nil {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
 	}
