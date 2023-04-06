@@ -63,6 +63,10 @@
 				"database": "tinode",
 				"dsn": "$MYSQL_DSN?parseTime=true&collation=utf8mb4_unicode_ci"
 			},
+			"postgres": {
+				"database": "tinode",
+				"dsn": "$POSTGRES_DSN?sslmode=disable"
+			},
 			"rethinkdb": {
 				"database": "tinode",
 				"addresses": "rethinkdb"

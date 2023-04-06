@@ -11,17 +11,19 @@ All images are available at https://hub.docker.com/r/tinode/
 
 3. Decide which database backend you want to use: RethinkDB, MySQL or MongoDB. Run the selected database container, attaching it to `tinode-net` network:
 
-	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
-	```
-	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
-	```
-	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
-
-	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
+	1. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
 	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
+
+	2. **PostgreSQL**: If you've decided to use PostgreSQL backend, run the official PostgreSQL Docker container:
+	```
+	$ docker run --name postgres --network tinode-net --restart always --env POSTGRES_PASSWORD=postgres -d postgres:13
+	```
+	See [instructions](https://hub.docker.com/_/postgres/) for more options. PostgresSQL 13 or above is required.
+
+	The name `rethinkdb`, `mysql`, `mongodb` or `postgres` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
    ```
@@ -34,23 +36,32 @@ All images are available at https://hub.docker.com/r/tinode/
    ```
 	See [instructions](https://hub.docker.com/_/mongo/) for more options. MongoDB 4.2 or above is required.
 
-	The name `rethinkdb`, `mysql` or `mongodb` in the `--name` assignment is important. It's used by other containers as a database's host name.
+	4. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
+	```
+	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
+	```
+	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
 
 4. Run the Tinode container for the appropriate database:
 
-	1. **RethinkDB**:
-	```
-	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-rethinkdb:latest
-	```
-
-	2. **MySQL**:
+	1. **MySQL**:
 	```
 	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
+	```
+
+	2. **PostgreSQL**:
+	```
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-postgresql:latest
 	```
 
 	3. **MongoDB**:
 	```
 	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
+	```
+
+	4. **RethinkDB**:
+	```
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-rethinkdb:latest
 	```
 
 	You can also run Tinode with the `tinode/tinode` image (which has all of the above DB adapters compiled in). You will need to specify the database adapter via `STORE_USE_ADAPTER` environment variable. E.g. for `mysql`, the command line will look like
@@ -64,9 +75,10 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	You may replace `:latest` with a different tag. See all all available tags here:
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
-	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+	 * [PostgreSQL tags](https://hub.docker.com/r/tinode/tinode-postgresql/tags/) (beta version)
 	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/)
-	 * [All bundle tags](https://hub.docker.com/r/tinode/tinode/tags/) (comming soon)
+	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+	 * [All bundle tags](https://hub.docker.com/r/tinode/tinode/tags/)
 
 5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 
@@ -189,6 +201,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot |
+| `POSTGRES_DSN` | string | `'postgresql://postgres:postgres@localhost:5432/tinode'` |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
 | `SAMPLE_DATA` | string |  _see comment →_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `` (empty string) to disable |
 | `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |

@@ -14,7 +14,7 @@ goarc=( amd64 arm64 amd64 amd64 )
 buildCount=${#goplat[@]}
 
 # Supported database tags
-dbadapters=( mysql mongodb rethinkdb )
+dbadapters=( mysql mongodb rethinkdb postgres )
 dbtags=( ${dbadapters[@]} alldbs )
 
 for line in $@; do

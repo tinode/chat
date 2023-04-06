@@ -6,7 +6,7 @@ The config file [`tinode.conf`](./server/tinode.conf) contains extensive instruc
 
 1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
 
-2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**.
+2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. In case of PostgreSQL, Tinode will try connect as `postgres` with the password `postgres`. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. PostgreSQL 13 or above is required. PostgreSQL 12 or below **will not work**.
 
 3. Run the database initializer `init-db` (or `init-db.exe` on Windows):
 	```
@@ -34,7 +34,8 @@ See [instructions](./docker/README.md)
 
 3. Make sure one of the following databases is installed and running:
  * MySQL 5.7 or above. MySQL 5.6 or below **will not work**.
- * MongoDB 4.0 or above.
+ * PostgreSQL 13 or above. PostgreSQL 12 or below **will not work**.
+ * MongoDB 4.2 or above.
  * RethinkDB.
 
 4. Fetch, build Tinode server and tinode-db database initializer:
@@ -42,6 +43,11 @@ See [instructions](./docker/README.md)
 	```
 	go install -tags mysql github.com/tinode/chat/server@latest
 	go install -tags mysql github.com/tinode/chat/tinode-db@latest
+	```
+	- **PostgreSQL**:
+	```
+	go install -tags postgres github.com/tinode/chat/server@latest
+	go install -tags postgres github.com/tinode/chat/tinode-db@latest
 	```
   - **MongoDB**:
 	```
@@ -55,13 +61,13 @@ See [instructions](./docker/README.md)
 	```
   - **All** (bundle all of the above DB adapters):
 	```
-	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/server@latest
-	go install -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db@latest
+	go install -tags "mysql rethinkdb mongodb postgres" github.com/tinode/chat/server@latest
+	go install -tags "mysql rethinkdb mongodb postgres" github.com/tinode/chat/tinode-db@latest
 	```
 
     The steps above install Tinode binaries at `$GOPATH/bin/`, sorces and supporting files are located at `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/` where `X.XX.X` is the version you installed, such as `0.19.1`.
 
-    Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
+    Note the required **`-tags rethinkdb`**, **`-tags mysql`**, **`-tags mongodb`** or **`-tags postgres`** build option.
 
     You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
     ```
@@ -108,6 +114,10 @@ cd $GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X
  - **MySQL**: https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/mysql-server.html
 	```
 	mysql.server start
+	```
+ - **PostgreSQL**: https://www.postgresql.org/docs/current/app-pg-ctl.html
+	```
+	pg_ctl start
 	```
  - **MongoDB**: https://docs.mongodb.com/manual/administration/install-community/
 MongoDB should run as single node replicaset. See https://docs.mongodb.com/manual/administration/replica-set-deployment/

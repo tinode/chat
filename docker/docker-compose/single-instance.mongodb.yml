@@ -1,4 +1,4 @@
-version: '3.7'
+version: '3.8'
 
 x-mongodb-tinode-env-vars: &mongodb-tinode-env-vars
   "STORE_USE_ADAPTER": "mongodb"
