@@ -5,7 +5,6 @@
 package postgres
 
 import (
-	//"bytes"
 	"context"
 	"encoding/json"
 	"errors"
