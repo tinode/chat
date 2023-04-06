@@ -556,16 +556,16 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Links between uploaded files and the topics, users or messages they are attached to.
 	if _, err = tx.Exec(ctx,
-		`CREATE TABLE filepgglinks(
+		`CREATE TABLE filemsglinks(
 			id        SERIAL NOT NULL,
 			createdat TIMESTAMP(3) NOT NULL,
 			fileid    BIGINT NOT NULL,
-			pggid     INT,
+			msgid     INT,
 			topic     VARCHAR(25),
 			userid    BIGINT,
 			PRIMARY KEY(id),
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
-			FOREIGN KEY(pggid) REFERENCES messages(id) ON DELETE CASCADE,
+			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
 			FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE,
 			FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 		);`); err != nil {
@@ -1950,12 +1950,12 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	return tx.Commit(ctx)
 }
 
-func (a *adapter) TopicUpdateOnMessage(topic string, pgg *t.Message) error {
+func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	_, err := a.db.Exec(ctx, "UPDATE topics SET seqid=$1,touchedat=$2 WHERE name=$3", pgg.SeqId, pgg.CreatedAt, topic)
+	_, err := a.db.Exec(ctx, "UPDATE topics SET seqid=$1,touchedat=$2 WHERE name=$3", msg.SeqId, msg.CreatedAt, topic)
 
 	return err
 }
@@ -2442,7 +2442,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 }
 
 // Messages
-func (a *adapter) MessageSave(pgg *t.Message) error {
+func (a *adapter) MessageSave(msg *t.Message) error {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
@@ -2452,11 +2452,11 @@ func (a *adapter) MessageSave(pgg *t.Message) error {
 	var id int
 	err := a.db.QueryRow(ctx,
 		`INSERT INTO messages(createdAt,updatedAt,seqid,topic,"from",head,content) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-		pgg.CreatedAt, pgg.UpdatedAt, pgg.SeqId, pgg.Topic,
-		store.DecodeUid(t.ParseUid(pgg.From)), pgg.Head, toJSON(pgg.Content)).Scan(&id)
+		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content)).Scan(&id)
 	if err == nil {
 		// Replacing ID given by store by ID given by the DB.
-		pgg.SetUid(t.Uid(id))
+		msg.SetUid(t.Uid(id))
 	}
 	return err
 }
@@ -2500,22 +2500,22 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	}
 	defer rows.Close()
 
-	pggs := make([]t.Message, 0, limit)
+	msgs := make([]t.Message, 0, limit)
 	for rows.Next() {
-		var pgg t.Message
+		var msg t.Message
 		var from int64
-		if err = rows.Scan(&pgg.CreatedAt, &pgg.UpdatedAt, &pgg.DeletedAt, &pgg.DelId, &pgg.SeqId,
-			&pgg.Topic, &from, &pgg.Head, &pgg.Content); err != nil {
+		if err = rows.Scan(&msg.CreatedAt, &msg.UpdatedAt, &msg.DeletedAt, &msg.DelId, &msg.SeqId,
+			&msg.Topic, &from, &msg.Head, &msg.Content); err != nil {
 			break
 		}
-		pgg.From = store.EncodeUid(from).String()
-		pggs = append(pggs, pgg)
+		msg.From = store.EncodeUid(from).String()
+		msgs = append(msgs, msg)
 	}
 	if err == nil {
 		err = rows.Err()
 	}
 
-	return pggs, err
+	return msgs, err
 }
 
 // Get ranges of deleted messages
@@ -2558,43 +2558,43 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		Low        int
 		Hi         int
 	}
-	var dpggs []t.DelMessage
-	var dpgg t.DelMessage
+	var dmsgs []t.DelMessage
+	var dmsg t.DelMessage
 	for rows.Next() {
 		if err = rows.Scan(&dellog.Topic, &dellog.Deletedfor, &dellog.Delid, &dellog.Low, &dellog.Hi); err != nil {
-			dpggs = nil
+			dmsgs = nil
 			break
 		}
 
-		if dellog.Delid != dpgg.DelId {
-			if dpgg.DelId > 0 {
-				dpggs = append(dpggs, dpgg)
+		if dellog.Delid != dmsg.DelId {
+			if dmsg.DelId > 0 {
+				dmsgs = append(dmsgs, dmsg)
 			}
-			dpgg.DelId = dellog.Delid
-			dpgg.Topic = dellog.Topic
+			dmsg.DelId = dellog.Delid
+			dmsg.Topic = dellog.Topic
 			if dellog.Deletedfor > 0 {
-				dpgg.DeletedFor = store.EncodeUid(dellog.Deletedfor).String()
+				dmsg.DeletedFor = store.EncodeUid(dellog.Deletedfor).String()
 			} else {
-				dpgg.DeletedFor = ""
+				dmsg.DeletedFor = ""
 			}
-			dpgg.SeqIdRanges = nil
+			dmsg.SeqIdRanges = nil
 		}
 		if dellog.Hi <= dellog.Low+1 {
 			dellog.Hi = 0
 		}
-		dpgg.SeqIdRanges = append(dpgg.SeqIdRanges, t.Range{Low: dellog.Low, Hi: dellog.Hi})
+		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{Low: dellog.Low, Hi: dellog.Hi})
 	}
 	if err == nil {
 		err = rows.Err()
 	}
 
 	if err == nil {
-		if dpgg.DelId > 0 {
-			dpggs = append(dpggs, dpgg)
+		if dmsg.DelId > 0 {
+			dmsgs = append(dmsgs, dmsg)
 		}
 	}
 
-	return dpggs, err
+	return dmsgs, err
 }
 
 func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.DelMessage) error {
@@ -2605,7 +2605,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 		if err == nil {
 			_, err = tx.Exec(ctx, "DELETE FROM messages WHERE topic=$1", topic)
 		}
-		// filepgglinks will be deleted because of ON DELETE CASCADE
+		// filemsglinks will be deleted because of ON DELETE CASCADE
 
 	} else {
 		// Only some messages are being deleted
@@ -2650,7 +2650,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
 			}
 			where += " AND m.deletedAt IS NULL"
-			query, newargs := expandQuery("DELETE FROM filepgglinks AS fml USING messages AS m WHERE m.id=fml.pggid AND "+
+			query, newargs := expandQuery("DELETE FROM filemsglinks AS fml USING messages AS m WHERE m.id=fml.msgid AND "+
 				where, args...)
 
 			_, err = tx.Exec(ctx, query, newargs...)
@@ -3199,7 +3199,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}()
 
 	// Garbage collecting entries which as either marked as deleted, or lack message references, or have no user assigned.
-	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filepgglinks AS fml ON fml.fileid=fu.id " +
+	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
 		"WHERE fml.id IS NULL"
 	var args []interface{}
 
@@ -3252,8 +3252,8 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, userId, pggId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && pggId.IsZero() && userId.IsZero()) {
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
+	if len(fids) == 0 || (topic == "" && msgId.IsZero() && userId.IsZero()) {
 		return t.ErrMalformed
 	}
 	now := t.TimeNow()
@@ -3261,9 +3261,9 @@ func (a *adapter) FileLinkAttachments(topic string, userId, pggId t.Uid, fids []
 	var args []interface{}
 	var linkId interface{}
 	var linkBy string
-	if !pggId.IsZero() {
-		linkBy = "pggid"
-		linkId = int64(pggId)
+	if !msgId.IsZero() {
+		linkBy = "msgid"
+		linkId = int64(msgId)
 	} else if topic != "" {
 		linkBy = "topic"
 		linkId = topic
@@ -3287,7 +3287,7 @@ func (a *adapter) FileLinkAttachments(topic string, userId, pggId t.Uid, fids []
 	}
 
 	for _, id := range dids {
-		// createdat,fileid,[pggid|topic|userid]
+		// createdat,fileid,[msgid|topic|userid]
 		args = append(args, now, id, linkId)
 	}
 
@@ -3306,15 +3306,15 @@ func (a *adapter) FileLinkAttachments(topic string, userId, pggId t.Uid, fids []
 	}()
 
 	// Unlink earlier uploads on the same topic or user allowing them to be garbage-collected.
-	if pggId.IsZero() {
-		sql := "DELETE FROM filepgglinks WHERE " + linkBy + "=$1"
+	if msgId.IsZero() {
+		sql := "DELETE FROM filemsglinks WHERE " + linkBy + "=$1"
 		_, err = tx.Exec(ctx, sql, linkId)
 		if err != nil {
 			return err
 		}
 	}
 
-	query, args := expandQuery("INSERT INTO filepgglinks(createdat,fileid,"+linkBy+") VALUES (?,?,?)"+
+	query, args := expandQuery("INSERT INTO filemsglinks(createdat,fileid,"+linkBy+") VALUES (?,?,?)"+
 		strings.Repeat(",(?,?,?)", len(dids)-1), args...)
 
 	_, err = tx.Exec(ctx, query, args...)
