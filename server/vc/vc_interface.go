@@ -18,3 +18,7 @@ type VideoConferencingInterface interface {
 var VideoConferencing VideoConferencingInterface
 
 type vcObj struct{}
+
+func init() {
+	VideoConferencing = vcObj{}
+}

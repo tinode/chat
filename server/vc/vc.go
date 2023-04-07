@@ -9,15 +9,15 @@ import (
 	adapter "github.com/tinode/videoconferencing"
 )
 
-var adp adapter.VideoConferencing
+var adp *adapter.VideoConferencing
 
 func (vcObj) Open(jsonconf json.RawMessage) error {
-	adp = adapter.VideoConferencing{}
+	adp = &adapter.VideoConferencing{}
 	return adp.Open(jsonconf)
 }
 
 func (vcObj) IsAvailable() bool {
-	return true
+	return adp != nil && adp.IsReady()
 }
 
 func (vcObj) GetToken(topic, uid string) (string, error) {
