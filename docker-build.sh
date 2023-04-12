@@ -30,7 +30,7 @@ if [ `uname -m` != 'x86_64' ]; then
   buildcmd='buildx build --platform=linux/amd64'
 fi
 
-dbtags=( mysql mongodb rethinkdb postgres alldbs )
+dbtags=( mysql postgres mongodb rethinkdb alldbs )
 
 # Build an images for various DB backends
 for dbtag in "${dbtags[@]}"
