@@ -1,11 +1,11 @@
-version: '3.7'
+version: '3.8'
 
 x-rethinkdb-tinode-env-vars: &rethinkdb-tinode-env-vars
   "STORE_USE_ADAPTER": "rethinkdb"
 
 services:
   db:
-    image: rethinkdb:2.4.0
+    image: rethinkdb:2.4.2
     container_name: rethinkdb
     healthcheck:
       test: ["CMD", "curl -f http://localhost:8080/ || exit 1"]

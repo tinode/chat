@@ -16,6 +16,7 @@ import (
 	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
+	_ "github.com/tinode/chat/server/db/postgres"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"

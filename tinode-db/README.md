@@ -13,6 +13,9 @@ This utility initializes the `tinode` database (or upgrades an existing DB from 
  - **MongoDB**
   `go build -tags mongodb` or `go build -i -tags mongodb` to automatically install missing dependencies.
 
+ - **PostgreSQL**
+  `go build -tags postgres` or `go build -i -tags postgres` to automatically install missing dependencies.
+
 
 ## Run
 
@@ -48,3 +51,4 @@ Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www
 * [RethinkDB schema](https://github.com/tinode/chat/tree/master/server/db/rethinkdb/schema.md)
 * [MySQL schema](https://github.com/tinode/chat/tree/master/server/db/mysql/schema.sql)
 * [MongoDB schema](https://github.com/tinode/chat/tree/master/server/db/mongodb/schema.md)
+* [PostgreSQL schema](https://github.com/tinode/chat/tree/master/server/db/postgres/schema.sql)
