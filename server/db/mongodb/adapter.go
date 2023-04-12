@@ -1456,7 +1456,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	}
 	tpc.Public = unmarshalBsonD(tpc.Public)
 	tpc.Trusted = unmarshalBsonD(tpc.Trusted)
-	tpc.Aux = unmarshalBsonD(tpc.Aux)
+	// tpc.Aux = unmarshalBsonD(tpc.Aux)
 	return tpc, nil
 }
 
