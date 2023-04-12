@@ -152,7 +152,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Spanish | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
-More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali, Turkish.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Vietnamese, Persian.
 
 ## Third-Party
 
@@ -206,6 +206,7 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * 인스턴트 메신저
 * پیام رسان فوری
 * تراسل فوري
+* فوری پیغام رسانی
 * Nhắn tin tức thời
 * anlık mesajlaşma sohbet
 * mensageiro instantâneo
@@ -213,3 +214,4 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * mensajería instantánea
 * চ্যাট ইন্সট্যান্ট মেসেজিং
 * चैट त्वरित संदेश
+* তাৎক্ষণিক বার্তা আদান প্রদান
