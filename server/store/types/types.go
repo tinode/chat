@@ -399,7 +399,7 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 type StringSlice []string
 
 // Scan implements sql.Scanner interface.
-func (ss *StringSlice) Scan(val interface{}) error {
+func (ss *StringSlice) Scan(val any) error {
 	if val == nil {
 		return nil
 	}
@@ -477,7 +477,7 @@ func (os *ObjState) UnmarshalJSON(b []byte) error {
 
 // Scan is an implementation of sql.Scanner interface. It expects the
 // value to be a byte slice representation of an ASCII string.
-func (os *ObjState) Scan(val interface{}) error {
+func (os *ObjState) Scan(val any) error {
 	switch intval := val.(type) {
 	case int64:
 		*os = ObjState(intval)
@@ -508,8 +508,8 @@ type User struct {
 	// User agent provided when accessing the topic last time
 	UserAgent string
 
-	Public  interface{}
-	Trusted interface{}
+	Public  any
+	Trusted any
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
@@ -670,7 +670,7 @@ func (m *AccessMode) UnmarshalJSON(b []byte) error {
 
 // Scan is an implementation of sql.Scanner interface. It expects the
 // value to be a byte slice representation of an ASCII string.
-func (m *AccessMode) Scan(val interface{}) error {
+func (m *AccessMode) Scan(val any) error {
 	if bb, ok := val.([]byte); ok {
 		return m.UnmarshalText(bb)
 	}
@@ -842,7 +842,7 @@ type DefaultAccess struct {
 
 // Scan is an implementation of Scanner interface so the value can be read from SQL DBs
 // It assumes the value is serialized and stored as JSON
-func (da *DefaultAccess) Scan(val interface{}) error {
+func (da *DefaultAccess) Scan(val any) error {
 	return json.Unmarshal(val.([]byte), da)
 }
 
@@ -899,15 +899,15 @@ type Subscription struct {
 	// Access mode granted to this user
 	ModeGiven AccessMode
 	// User's private data associated with the subscription to topic
-	Private interface{}
+	Private any
 
 	// Deserialized ephemeral values
 
 	// Deserialized public value from topic or user (depends on context)
 	// In case of P2P topics this is the Public value of the other user.
-	public interface{}
+	public any
 	// In case of P2P topics this is the Trusted value of the other user.
-	trusted interface{}
+	trusted any
 	// deserialized SeqID from user or topic
 	seqId int
 	// Deserialized TouchedAt from topic
@@ -928,22 +928,22 @@ type Subscription struct {
 }
 
 // SetPublic assigns a value to `public`, otherwise not accessible from outside the package.
-func (s *Subscription) SetPublic(pub interface{}) {
+func (s *Subscription) SetPublic(pub any) {
 	s.public = pub
 }
 
 // GetPublic reads value of `public`.
-func (s *Subscription) GetPublic() interface{} {
+func (s *Subscription) GetPublic() any {
 	return s.public
 }
 
 // SetTrusted assigns a value to `trusted`, otherwise not accessible from outside the package.
-func (s *Subscription) SetTrusted(tstd interface{}) {
+func (s *Subscription) SetTrusted(tstd any) {
 	s.trusted = tstd
 }
 
 // GetTrusted reads value of `trusted`.
-func (s *Subscription) GetTrusted() interface{} {
+func (s *Subscription) GetTrusted() any {
 	return s.trusted
 }
 
@@ -1051,11 +1051,11 @@ type Contact struct {
 	MatchOn  []string
 	Access   DefaultAccess
 	LastSeen time.Time
-	Public   interface{}
+	Public   any
 }
 
 type perUserData struct {
-	private interface{}
+	private any
 	want    AccessMode
 	given   AccessMode
 }
@@ -1102,8 +1102,8 @@ type Topic struct {
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
 
-	Public  interface{}
-	Trusted interface{}
+	Public  any
+	Trusted any
 
 	// Indexed tags for finding this topic.
 	Tags StringSlice
@@ -1136,7 +1136,7 @@ func (t *Topic) GiveAccess(uid Uid, want, given AccessMode) {
 }
 
 // SetPrivate updates private value for the given user.
-func (t *Topic) SetPrivate(uid Uid, private interface{}) {
+func (t *Topic) SetPrivate(uid Uid, private any) {
 	if t.perUser == nil {
 		t.perUser = make(map[Uid]*perUserData, 1)
 	}
@@ -1149,7 +1149,7 @@ func (t *Topic) SetPrivate(uid Uid, private interface{}) {
 }
 
 // GetPrivate returns given user's private value.
-func (t *Topic) GetPrivate(uid Uid) (private interface{}) {
+func (t *Topic) GetPrivate(uid Uid) (private any) {
 	if t.perUser == nil {
 		return
 	}
@@ -1194,7 +1194,7 @@ type Message struct {
 	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
 	Head    KVMap `json:"Head,omitempty" bson:",omitempty"`
-	Content interface{}
+	Content any
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).

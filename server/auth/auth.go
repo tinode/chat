@@ -184,7 +184,7 @@ type Duration time.Duration
 
 // UnmarshalJSON handles the cases where duration is specified in JSON as a "5000s" string or just plain seconds.
 func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
@@ -224,8 +224,8 @@ type Rec struct {
 	// Authenticator may request the server to create a new account.
 	// These are the account parameters which can be used for creating the account.
 	DefAcs  *types.DefaultAccess `json:"defacs,omitempty"`
-	Public  interface{}          `json:"public,omitempty"`
-	Private interface{}          `json:"private,omitempty"`
+	Public  any                  `json:"public,omitempty"`
+	Private any                  `json:"private,omitempty"`
 }
 
 // AuthHandler is the interface which auth providers must implement.
@@ -273,7 +273,7 @@ type AuthHandler interface {
 	// GetResetParams returns authenticator parameters passed to password reset handler
 	// for the provided user id.
 	// Returns: map of params.
-	GetResetParams(uid types.Uid) (map[string]interface{}, error)
+	GetResetParams(uid types.Uid) (map[string]any, error)
 
 	// GetRealName returns the hardcoded name of the authenticator.
 	GetRealName() string

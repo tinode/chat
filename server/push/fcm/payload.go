@@ -361,7 +361,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		}
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})
+	payload, err := json.Marshal(map[string]any{"aps": apsPayload})
 	if err != nil {
 		return nil
 	}

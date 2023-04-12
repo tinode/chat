@@ -55,9 +55,9 @@ const (
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
 	// Connection string URI https://www.mongodb.com/docs/manual/reference/connection-string/
-	Uri            string      `json:"uri,omitempty"`
-	Addresses      interface{} `json:"addresses,omitempty"`
-	ConnectTimeout int         `json:"timeout,omitempty"`
+	Uri            string `json:"uri,omitempty"`
+	Addresses      any    `json:"addresses,omitempty"`
+	ConnectTimeout int    `json:"timeout,omitempty"`
 
 	// Options separately from ClientOptions (custom options):
 	Database   string `json:"database,omitempty"`
@@ -99,7 +99,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		opts.SetHosts([]string{defaultHost})
 	} else if host, ok := config.Addresses.(string); ok {
 		opts.SetHosts([]string{host})
-	} else if ihosts, ok := config.Addresses.([]interface{}); ok && len(ihosts) > 0 {
+	} else if ihosts, ok := config.Addresses.([]any); ok && len(ihosts) > 0 {
 		hosts := make([]string, len(ihosts))
 		for i, ih := range ihosts {
 			h, ok := ih.(string)
@@ -256,7 +256,7 @@ func (a *adapter) Version() int {
 }
 
 // DB connection stats object.
-func (a *adapter) Stats() interface{} {
+func (a *adapter) Stats() any {
 	if a.db == nil {
 		return nil
 	}
@@ -420,7 +420,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Collection "kvmeta" with metadata key-value pairs.
 	// Key in "_id" field.
 	// Record current DB version.
-	if _, err := a.db.Collection("kvmeta").InsertOne(a.ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
+	if _, err := a.db.Collection("kvmeta").InsertOne(a.ctx, map[string]any{"_id": "version", "value": adpVersion}); err != nil {
 		return err
 	}
 
@@ -557,7 +557,7 @@ func createSystemTopic(a *adapter) error {
 			UpdatedAt: now},
 		TouchedAt: now,
 		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
-		Public:    map[string]interface{}{"fn": "System"},
+		Public:    map[string]any{"fn": "System"},
 	})
 	return err
 }
@@ -592,7 +592,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 
 // UserGetAll returns user records for a given list of user IDs
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	uids := make([]interface{}, len(ids))
+	uids := make([]any, len(ids))
 	for i, id := range ids {
 		uids[i] = id.String()
 	}
@@ -787,7 +787,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 }
 
 // topicStateForUser is called by UserUpdate when the update contains state change
-func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}) error {
+func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update any) error {
 	state, ok := update.(t.ObjState)
 	if !ok {
 		return t.ErrMalformed
@@ -821,7 +821,7 @@ func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}
 }
 
 // UserUpdate updates user record
-func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
+func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	// to get round the hardcoded "UpdatedAt" key in store.Users.Update()
 	update = normalizeUpdateMap(update)
 
@@ -842,7 +842,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	// Compare to nil vs checking for zero length: zero length reset is valid.
 	if reset != nil {
 		// Replace Tags with the new value
-		return reset, a.UserUpdate(uid, map[string]interface{}{"tags": reset})
+		return reset, a.UserUpdate(uid, map[string]any{"tags": reset})
 	}
 
 	var user t.User
@@ -860,7 +860,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 		newTags = diff(newTags, remove)
 	}
 
-	update := map[string]interface{}{"tags": newTags}
+	update := map[string]any{"tags": newTags}
 	if err := a.UserUpdate(uid, update); err != nil {
 		return nil, err
 	}
@@ -1679,7 +1679,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	// Fetch subscriptions
 	var subs []t.Subscription
 	join := make(map[string]t.Subscription)
-	usrq := make([]interface{}, 0, 16)
+	usrq := make([]any, 0, 16)
 	for cur.Next(a.ctx) {
 		var sub t.Subscription
 		if err = cur.Decode(&sub); err != nil {
@@ -1876,11 +1876,11 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	return a.topicUpdate(topic, map[string]interface{}{"seqid": msg.SeqId, "touchedat": msg.CreatedAt})
+	return a.topicUpdate(topic, map[string]any{"seqid": msg.SeqId, "touchedat": msg.CreatedAt})
 }
 
 // TopicUpdate updates topic record.
-func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
+func (a *adapter) TopicUpdate(topic string, update map[string]any) error {
 	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
 		update["TouchedAt"] = u
 	}
@@ -1889,10 +1889,10 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 
 // TopicOwnerChange updates topic's owner
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
-	return a.topicUpdate(topic, map[string]interface{}{"owner": newOwner.String()})
+	return a.topicUpdate(topic, map[string]any{"owner": newOwner.String()})
 }
 
-func (a *adapter) topicUpdate(topic string, update map[string]interface{}) error {
+func (a *adapter) topicUpdate(topic string, update map[string]any) error {
 	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
 		b.M{"$set": update})
@@ -1985,7 +1985,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 }
 
 // SubsUpdate updates part of a subscription object. Pass nil for fields which don't need to be updated
-func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
+func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]any) error {
 	// to get round the hardcoded pass of "Private" key
 	update = normalizeUpdateMap(update)
 
@@ -2058,7 +2058,7 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 func (a *adapter) getFindPipeline(req [][]string, opt []string, activeOnly bool) (map[string]struct{}, b.A) {
 	allReq := t.FlattenDoubleSlice(req)
 	index := make(map[string]struct{})
-	var allTags []interface{}
+	var allTags []any
 	for _, tag := range append(allReq, opt...) {
 		allTags = append(allTags, tag)
 		index[tag] = struct{}{}
@@ -2092,7 +2092,7 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string, activeOnly bool)
 	}
 
 	for _, l := range req {
-		var reqTags []interface{}
+		var reqTags []any
 		for _, tag := range l {
 			reqTags = append(reqTags, tag)
 		}
@@ -2388,7 +2388,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
 	if err == nil && user.Id != "" { // current user owns this device
 		// ArrayFilter used to avoid adding another (duplicate) device object. Update that device data
 		updOpts := mdbopts.Update().SetArrayFilters(mdbopts.ArrayFilters{
-			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}}})
+			Filters: []any{b.M{"dev.deviceid": dev.DeviceId}}})
 		_, err = a.db.Collection("users").UpdateOne(a.ctx,
 			b.M{"_id": userId},
 			b.M{"$set": b.M{
@@ -2429,7 +2429,7 @@ func (a *adapter) deviceInsert(userId string, dev *t.DeviceDef) error {
 	if err != nil && strings.Contains(err.Error(), "must be an array") {
 		// field 'devices' is not array. Make it array with 'dev' as its first element
 		_, err = a.db.Collection("users").UpdateOne(a.ctx, filter,
-			b.M{"$set": b.M{"devices": []interface{}{dev}}})
+			b.M{"$set": b.M{"devices": []any{dev}}})
 	}
 
 	return err
@@ -2437,7 +2437,7 @@ func (a *adapter) deviceInsert(userId string, dev *t.DeviceDef) error {
 
 // DeviceGetAll returns all devices for a given set of users
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
-	ids := make([]interface{}, len(uids))
+	ids := make([]any, len(uids))
 	for i, id := range uids {
 		ids[i] = id.String()
 	}
@@ -2479,7 +2479,7 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	filter := b.M{"_id": uid.String()}
 	update := b.M{}
 	if deviceID == "" {
-		update["$set"] = b.M{"devices": []interface{}{}}
+		update["$set"] = b.M{"devices": []any{}}
 	} else {
 		update["$pull"] = b.M{"devices": b.M{"deviceid": deviceID}}
 	}
@@ -2657,7 +2657,7 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		}
 	}
 
-	ids := make([]interface{}, len(fids))
+	ids := make([]any, len(fids))
 	for i, id := range fids {
 		ids[i] = id
 	}
@@ -2777,8 +2777,8 @@ func diff(userTags, removeTags []string) []string {
 }
 
 // normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase (MongoDB uses lowercase by default)
-func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{}, len(update))
+func normalizeUpdateMap(update map[string]any) map[string]any {
+	result := make(map[string]any, len(update))
 	for key, value := range update {
 		result[strings.ToLower(key)] = value
 	}
@@ -2787,11 +2787,11 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 }
 
 // Recursive unmarshalling of bson.D type.
-// Mongo drivers unmarshalling into interface{} creates bson.D object for maps and bson.A object for slices.
-// We need to manually unmarshal them into correct types: map[string]interface{} and []interface{] respectively.
-func unmarshalBsonD(bsonObj interface{}) interface{} {
+// Mongo drivers unmarshalling into any creates bson.D object for maps and bson.A object for slices.
+// We need to manually unmarshal them into correct types: map[string]any and []interface{] respectively.
+func unmarshalBsonD(bsonObj any) any {
 	if obj, ok := bsonObj.(b.D); ok && len(obj) != 0 {
-		result := make(map[string]interface{})
+		result := make(map[string]any)
 		for key, val := range obj.Map() {
 			result[key] = unmarshalBsonD(val)
 		}
@@ -2801,7 +2801,7 @@ func unmarshalBsonD(bsonObj interface{}) interface{} {
 		return obj.Data
 	} else if obj, ok := bsonObj.(b.A); ok {
 		// in case of array of bson.D objects
-		var result []interface{}
+		var result []any
 		for _, elem := range obj {
 			result = append(result, unmarshalBsonD(elem))
 		}

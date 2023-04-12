@@ -305,7 +305,7 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 }
 
 // GetResetParams returns authenticator parameters passed to password reset handler.
-func (a *authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+func (a *authenticator) GetResetParams(uid types.Uid) (map[string]any, error) {
 	login, _, _, _, err := store.Users.GetAuthRecord(uid, a.name)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (a *authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, e
 		return nil, types.ErrNotFound
 	}
 
-	params := make(map[string]interface{})
+	params := make(map[string]any)
 	params["login"] = login
 	return params, nil
 }

@@ -49,11 +49,11 @@ type newAccount struct {
 	Auth string `json:"auth,omitempty"`
 	Anon string `json:"anon,omitempty"`
 	// User's Public data
-	Public interface{} `json:"public,omitempty"`
+	Public any `json:"public,omitempty"`
 	// User's Trusted data
-	Trusted interface{} `json:"trusted,omitempty"`
+	Trusted any `json:"trusted,omitempty"`
 	// Per-subscription private data
-	Private interface{} `json:"private,omitempty"`
+	Private any `json:"private,omitempty"`
 }
 
 // Response from the server.
@@ -302,7 +302,7 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 
 // GetResetParams returns authenticator parameters passed to password reset handler
 // (none for rest).
-func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+func (authenticator) GetResetParams(uid types.Uid) (map[string]any, error) {
 	// TODO: route request to the server.
 	return nil, nil
 }

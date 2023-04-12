@@ -78,7 +78,7 @@ type Payload struct {
 	// MIME-Type of the message content, text/x-drafty or text/plain
 	ContentType string `json:"mime"`
 	// Actual Data.Content of the message, if requested
-	Content interface{} `json:"content,omitempty"`
+	Content any `json:"content,omitempty"`
 	// State of the video call (available in video call messages only).
 	Webrtc string `json:"webrtc,omitempty"`
 	// If call is audio-only (available only if Webrtc is present).
