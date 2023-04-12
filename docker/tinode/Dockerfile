@@ -21,12 +21,11 @@ LABEL version=$VERSION
 
 # Build-time options.
 
-# Database selector. Builds for RethinkDB by default.
-# Alternatively use
-# `--build-arg TARGET_DB=mysql` to build for MySQL or
-# `--build-arg TARGET_DB=mongodb` to build for MongoDB.
-# `--build-arg TARGET_DB=alldbs` to build a generic Tinode docker image.
-ARG TARGET_DB=rethinkdb
+# Database selector. Builds for MySQL by default.
+# Alternatively use one of: postgres mongodb rethinkdb for a corresponsing
+# DB backend or alldbs to build a generic Tinode docker image, for example:
+# `--build-arg TARGET_DB=postgres` to build for PostgreSQL.
+ARG TARGET_DB=mysql
 ENV TARGET_DB=$TARGET_DB
 
 # Runtime options.
@@ -50,6 +49,9 @@ ENV SAMPLE_DATA=$SAMPLE_DATA
 
 # The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'
+
+# The PostgreSQL DSN connection.
+ENV POSTGRES_DSN='postgresql://postgres:postgres@localhost:5432/tinode'
 
 # Disable chatbot plugin by default.
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false

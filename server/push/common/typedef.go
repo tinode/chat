@@ -273,8 +273,8 @@ type Aps struct {
 	ContentAvailable  int                   `json:"content-available,omitempty"`
 	InterruptionLevel InterruptionLevelType `json:"interruption-level,omitempty"`
 	MutableContent    int                   `json:"mutable-content,omitempty"`
-	RelevanceScore    interface{}           `json:"relevance-score,omitempty"`
-	Sound             interface{}           `json:"sound,omitempty"`
+	RelevanceScore    any                   `json:"relevance-score,omitempty"`
+	Sound             any                   `json:"sound,omitempty"`
 	ThreadID          string                `json:"thread-id,omitempty"`
 	URLArgs           []string              `json:"url-args,omitempty"`
 }
@@ -489,7 +489,7 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 
 		// Decode the FCM error.
 		for _, iface := range gerr.Details {
-			details, ok := iface.(map[string]interface{})
+			details, ok := iface.(map[string]any)
 			if !ok {
 				errs = append(errs, fmt.Errorf("error.Details unrecognized format %T", iface))
 				continue
@@ -508,12 +508,12 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 				}
 			case "type.googleapis.com/google.rpc.BadRequest":
 				// dst.fcmErrCode == INVALID_ARGUMENT
-				if fieldViolations, ok := details["fieldViolations"].([]interface{}); !ok {
+				if fieldViolations, ok := details["fieldViolations"].([]any); !ok {
 					errs = append(errs, fmt.Errorf("wrong type of error.Details 'fieldViolations': %T", details["fieldViolations"]))
 				} else {
 					var fields []string
 					for _, violationIface := range fieldViolations {
-						if violation, ok := violationIface.(map[string]interface{}); !ok {
+						if violation, ok := violationIface.(map[string]any); !ok {
 							errs = append(errs, fmt.Errorf("wrong type of error.Details.fieldViolations item: %T", iface))
 						} else if field, ok := violation["field"].(string); ok && field != "" {
 							fields = append(fields, field)

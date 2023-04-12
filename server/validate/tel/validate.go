@@ -114,7 +114,7 @@ func (v *validator) IsInitialized() bool {
 
 // PreCheck validates the credential and parameters without sending an SMS or making the call.
 // If credential is valid, it's formatted and prefixed with a tag namespace.
-func (*validator) PreCheck(cred string, params map[string]interface{}) (string, error) {
+func (*validator) PreCheck(cred string, params map[string]any) (string, error) {
 	// Parse will try to extract the number from any text, make sure it's just the number.
 	if !phonenumbers.VALID_PHONE_NUMBER_PATTERN.MatchString(cred) {
 		return "", t.ErrMalformed
@@ -160,7 +160,7 @@ func (v *validator) Request(user t.Uid, phone, lang, resp string, tmpToken []byt
 		template = v.universalTempl[0]
 	}
 
-	content, err := validate.ExecuteTemplate(template, nil, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, nil, map[string]any{
 		"Code":    resp,
 		"HostUrl": v.HostUrl})
 	if err != nil {
@@ -184,7 +184,7 @@ func (v *validator) Request(user t.Uid, phone, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params map[string]interface{}) error {
+func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params map[string]any) error {
 	var template *textt.Template
 	if v.langMatcher != nil {
 		_, idx := i18n.MatchStrings(v.langMatcher, lang)
@@ -193,7 +193,7 @@ func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params 
 		template = v.universalTempl[0]
 	}
 
-	content, err := validate.ExecuteTemplate(template, nil, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, nil, map[string]any{
 		"Code":    string(code),
 		"HostUrl": v.HostUrl})
 	if err != nil {

@@ -219,7 +219,7 @@ func (v *validator) IsInitialized() bool {
 
 // PreCheck validates the credential and parameters without sending an email.
 // If the credential is valid, it's returned with an appropriate prefix.
-func (v *validator) PreCheck(cred string, _ map[string]interface{}) (string, error) {
+func (v *validator) PreCheck(cred string, _ map[string]any) (string, error) {
 	if len(cred) > maxEmailLength {
 		return "", t.ErrMalformed
 	}
@@ -286,7 +286,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 		template = v.validationTempl[0]
 	}
 
-	content, err := validate.ExecuteTemplate(template, templateParts, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, templateParts, map[string]any{
 		"Token":   url.QueryEscape(string(token)),
 		"Code":    resp,
 		"HostUrl": v.HostUrl})
@@ -311,7 +311,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, params map[string]interface{}) error {
+func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, params map[string]any) error {
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
@@ -332,7 +332,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 		login = params["login"].(string)
 	}
 
-	content, err := validate.ExecuteTemplate(template, templateParts, map[string]interface{}{
+	content, err := validate.ExecuteTemplate(template, templateParts, map[string]any{
 		"Login":   login,
 		"Token":   url.QueryEscape(string(token)),
 		"Scheme":  scheme,
