@@ -247,7 +247,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	file, _, err := req.FormFile("file")
+	file, header, err := req.FormFile("file")
 	if err != nil {
 		logs.Info.Println("media upload: invalid multipart form", err)
 		if strings.Contains(err.Error(), "request body too large") {
@@ -263,12 +263,21 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
+
+	mimeType := http.DetectContentType(buff)
+	// If DetectContentType failed, use user-provided content type.
+	if mimeType == "application/octet-stream" {
+		if contentType := header.Header.Get("Content-Type"); contentType != "" {
+			mimeType = contentType
+		}
+	}
+
 	fdef := &types.FileDef{
 		ObjHeader: types.ObjHeader{
 			Id: store.Store.GetUidString(),
 		},
 		User:     uid.String(),
-		MimeType: http.DetectContentType(buff),
+		MimeType: mimeType,
 	}
 	fdef.InitTimes()
 
