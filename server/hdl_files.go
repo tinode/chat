@@ -15,6 +15,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -133,7 +134,9 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	defer rsc.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
-	wrt.Header().Set("Content-Disposition", "attachment")
+	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+		wrt.Header().Set("Content-Disposition", "attachment")
+	}
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 
 	logs.Info.Println("media serve: OK, uid=", uid)
@@ -265,7 +268,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	mimeType := http.DetectContentType(buff)
-	// If DetectContentType failed, use user-provided content type.
+	// If DetectContentType fails, use client-provided content type.
 	if mimeType == "application/octet-stream" {
 		if contentType := header.Header.Get("Content-Type"); contentType != "" {
 			mimeType = contentType
