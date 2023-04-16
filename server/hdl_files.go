@@ -15,6 +15,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -133,7 +134,9 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	defer rsc.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
-	wrt.Header().Set("Content-Disposition", "attachment")
+	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+		wrt.Header().Set("Content-Disposition", "attachment")
+	}
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 
 	logs.Info.Println("media serve: OK, uid=", uid)
@@ -247,7 +250,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	file, _, err := req.FormFile("file")
+	file, header, err := req.FormFile("file")
 	if err != nil {
 		logs.Info.Println("media upload: invalid multipart form", err)
 		if strings.Contains(err.Error(), "request body too large") {
@@ -263,12 +266,21 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
+
+	mimeType := http.DetectContentType(buff)
+	// If DetectContentType fails, use client-provided content type.
+	if mimeType == "application/octet-stream" {
+		if contentType := header.Header.Get("Content-Type"); contentType != "" {
+			mimeType = contentType
+		}
+	}
+
 	fdef := &types.FileDef{
 		ObjHeader: types.ObjHeader{
 			Id: store.Store.GetUidString(),
 		},
 		User:     uid.String(),
-		MimeType: http.DetectContentType(buff),
+		MimeType: mimeType,
 	}
 	fdef.InitTimes()
 
