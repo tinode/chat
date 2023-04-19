@@ -37,15 +37,29 @@ var tagRegexp = regexp.MustCompile(`^[-_+.!?#@\pL\pN]{1,96}$`)
 
 const nullValue = "\u2421"
 
-// Convert a list of IDs into ranges
-func delrangeDeserialize(in []types.Range) []MsgDelRange {
+// Convert database ranges into wire protocol ranges.
+func rangeDeserialize(in []types.Range) []MsgRange {
 	if len(in) == 0 {
 		return nil
 	}
 
-	out := make([]MsgDelRange, 0, len(in))
+	out := make([]MsgRange, 0, len(in))
 	for _, r := range in {
-		out = append(out, MsgDelRange{LowId: r.Low, HiId: r.Hi})
+		out = append(out, MsgRange{LowId: r.Low, HiId: r.Hi})
+	}
+
+	return out
+}
+
+// Convert wire protocol ranges into database ranges.
+func rangeSerialize(in []MsgRange) []types.Range {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]types.Range, 0, len(in))
+	for _, r := range in {
+		out = append(out, types.Range{Low: r.LowId, Hi: r.HiId})
 	}
 
 	return out
@@ -215,6 +229,7 @@ func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
 			Limit:           req.Limit,
 			Since:           req.SinceId,
 			Before:          req.BeforeId,
+			IdRanges:        rangeSerialize(req.IdRanges),
 		}
 	}
 	return opts

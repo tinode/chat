@@ -95,6 +95,11 @@ message SetDesc {
 	bytes trusted = 4;
 }
 
+message SeqRange {
+	int32 low = 1;
+	int32 hi = 2;
+}
+
 message GetOpts {
 	// Timestamp in milliseconds since epoch 01/01/1970
 	int64 if_modified_since = 1;
@@ -108,6 +113,8 @@ message GetOpts {
 	int32 before_id = 5;
 	// Maximum number of results to return
 	int32 limit = 6;
+	// Load messages by id or ranges of ids
+	repeated SeqRange ranges = 7;
 }
 
 message GetQuery {
@@ -132,11 +139,6 @@ message SetQuery {
 	ClientCred cred = 4;
 	// Auxiliary data.
 	map<string, bytes> aux = 5;
-}
-
-message SeqRange {
-	int32 low = 1;
-	int32 hi = 2;
 }
 
 // Client handshake

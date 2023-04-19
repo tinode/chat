@@ -3030,7 +3030,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 					Topic: toriginal,
 					Del: &MsgDelValues{
 						DelId:  delID,
-						DelSeq: delrangeDeserialize(ranges),
+						DelSeq: rangeDeserialize(ranges),
 					},
 					Timestamp: &now,
 				},
@@ -3130,7 +3130,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 
 	// Increment Delete transaction ID
 	t.delID++
-	dr := delrangeDeserialize(ranges)
+	dr := rangeDeserialize(ranges)
 	if del.Hard {
 		for uid, pud := range t.perUser {
 			pud.delID = t.delID

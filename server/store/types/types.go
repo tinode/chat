@@ -1278,6 +1278,8 @@ type QueryOpt struct {
 	Before int
 	// Common parameter
 	Limit int
+	// Ranges of IDs.
+	IdRanges []Range
 }
 
 // TopicCat is an enum of topic categories.

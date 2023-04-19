@@ -14,7 +14,7 @@ type presParams struct {
 	userAgent string
 	seqID     int
 	delID     int
-	delSeq    []MsgDelRange
+	delSeq    []MsgRange
 
 	// Uid who performed the action
 	actor string
@@ -681,7 +681,7 @@ func (t *Topic) presPubMessageCount(uid types.Uid, mode types.AccessMode, read, 
 
 // Let other sessions of a given user know that messages are now deleted
 // Cases V.1, V.2
-func (t *Topic) presPubMessageDelete(uid types.Uid, mode types.AccessMode, delID int, list []MsgDelRange, skip string) {
+func (t *Topic) presPubMessageDelete(uid types.Uid, mode types.AccessMode, delID int, list []MsgRange, skip string) {
 	if len(list) == 0 && delID <= 0 {
 		logs.Warn.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
 		return
