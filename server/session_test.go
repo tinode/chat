@@ -911,7 +911,7 @@ func TestDispatchDelMsg(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}
@@ -994,7 +994,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}
@@ -1028,7 +1028,7 @@ func TestDispatchDelUnsubscribedSession(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}

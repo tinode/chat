@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -172,10 +173,15 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 
 	var awsReq *request.Request
 	if req.Method == http.MethodGet {
+		var contentDisposition *string
+		if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+			contentDisposition = aws.String("attachment")
+		}
 		awsReq, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
-			Bucket:              aws.String(ah.conf.BucketName),
-			Key:                 aws.String(fid.String32()),
-			ResponseContentType: aws.String(fd.MimeType),
+			Bucket:                     aws.String(ah.conf.BucketName),
+			Key:                        aws.String(fid.String32()),
+			ResponseContentType:        aws.String(fd.MimeType),
+			ResponseContentDisposition: contentDisposition,
 		})
 	} else if req.Method == http.MethodHead {
 		awsReq, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{

@@ -26,12 +26,14 @@ type MsgGetOpts struct {
 	Topic string `json:"topic,omitempty"`
 	// Return results modified since this timespamp.
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
-	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)
+	// Load messages/ranges with IDs equal or greater than this (inclusive or closed).
 	SinceId int `json:"since,omitempty"`
-	// Load messages/ranges with IDs lower than this (exclusive or open)
+	// Load messages/ranges with IDs lower than this (exclusive or open).
 	BeforeId int `json:"before,omitempty"`
-	// Limit the number of messages loaded
+	// Limit the number of messages loaded.
 	Limit int `json:"limit,omitempty"`
+	// Fetch messages with IDs in these ranges.
+	IdRanges []MsgRange `json:"ranges,omitempty"`
 }
 
 // MsgGetQuery is a topic metadata or data query.
@@ -50,19 +52,23 @@ type MsgGetQuery struct {
 
 // MsgSetSub is a payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub".
 type MsgSetSub struct {
-	// User affected by this request. Default (empty): current user
+	// User affected by this request. Default (empty): current user.
 	User string `json:"user,omitempty"`
 
-	// Access mode change, either Given or Want depending on context
+	// Access mode change, either Given or Want depending on context.
 	Mode string `json:"mode,omitempty"`
 }
 
 // MsgSetDesc is a C2S in set.what == "desc", acc, sub message.
 type MsgSetDesc struct {
-	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`  // default access mode
-	Public     any                `json:"public,omitempty"`  // description of the user or topic
-	Trusted    any                `json:"trusted,omitempty"` // trusted (system-provided) user or topic data
-	Private    any                `json:"private,omitempty"` // per-subscription private data
+	// Default access mode.
+	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
+	// Description of the user or topic.
+	Public any `json:"public,omitempty"`
+	// Trusted (system-provided) user or topic data.
+	Trusted any `json:"trusted,omitempty"`
+	// Per-subscription private data.
+	Private any `json:"private,omitempty"`
 }
 
 // MsgCredClient is an account credential such as email or phone number.
@@ -91,9 +97,9 @@ type MsgSetQuery struct {
 	Aux map[string]any
 }
 
-// MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
+// MsgRange is either an individual ID (HiId=0) or a randge of IDs, low end inclusive (closed),
 // high-end exclusive (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4.
-type MsgDelRange struct {
+type MsgRange struct {
 	LowId int `json:"low,omitempty"`
 	HiId  int `json:"hi,omitempty"`
 }
@@ -291,7 +297,7 @@ type MsgClientDel struct {
 	// * "cred" to delete credential (email or phone)
 	What string `json:"what"`
 	// Delete messages with these IDs (either one by one or a set of ranges)
-	DelSeq []MsgDelRange `json:"delseq,omitempty"`
+	DelSeq []MsgRange `json:"delseq,omitempty"`
 	// User ID of the user or subscription to delete
 	User string `json:"user,omitempty"`
 	// Credential to delete
@@ -562,8 +568,8 @@ func (src *MsgTopicSub) describe() string {
 
 // MsgDelValues describes request to delete messages.
 type MsgDelValues struct {
-	DelId  int           `json:"clear,omitempty"`
-	DelSeq []MsgDelRange `json:"delseq,omitempty"`
+	DelId  int        `json:"clear,omitempty"`
+	DelSeq []MsgRange `json:"delseq,omitempty"`
 }
 
 // MsgServerCtrl is a server control message {ctrl}.
@@ -626,15 +632,15 @@ func (src *MsgServerData) describe() string {
 
 // MsgServerPres is presence notification {pres} (authoritative update).
 type MsgServerPres struct {
-	Topic     string        `json:"topic"`
-	Src       string        `json:"src,omitempty"`
-	What      string        `json:"what"`
-	UserAgent string        `json:"ua,omitempty"`
-	SeqId     int           `json:"seq,omitempty"`
-	DelId     int           `json:"clear,omitempty"`
-	DelSeq    []MsgDelRange `json:"delseq,omitempty"`
-	AcsTarget string        `json:"tgt,omitempty"`
-	AcsActor  string        `json:"act,omitempty"`
+	Topic     string     `json:"topic"`
+	Src       string     `json:"src,omitempty"`
+	What      string     `json:"what"`
+	UserAgent string     `json:"ua,omitempty"`
+	SeqId     int        `json:"seq,omitempty"`
+	DelId     int        `json:"clear,omitempty"`
+	DelSeq    []MsgRange `json:"delseq,omitempty"`
+	AcsTarget string     `json:"tgt,omitempty"`
+	AcsActor  string     `json:"act,omitempty"`
 	// Acs or a delta Acs. Need to marshal it to json under a name different than 'acs'
 	// to allow different handling on the client
 	Acs *MsgAccessMode `json:"dacs,omitempty"`

@@ -586,6 +586,13 @@ func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 			SinceId:  int32(in.Data.SinceId),
 			Limit:    int32(in.Data.Limit),
 		}
+
+		if len(in.Data.IdRanges) > 0 {
+			out.Data.Ranges = make([]*pbx.SeqRange, len(in.Data.IdRanges))
+			for i, dq := range in.Data.IdRanges {
+				out.Data.Ranges[i] = &pbx.SeqRange{Low: int32(dq.LowId), Hi: int32(dq.HiId)}
+			}
+		}
 	}
 	return out
 }
@@ -616,6 +623,14 @@ func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
 			BeforeId: int(data.GetBeforeId()),
 			SinceId:  int(data.GetSinceId()),
 			Limit:    int(data.GetLimit()),
+		}
+
+		if ranges := data.GetRanges(); len(ranges) > 0 {
+			msg.Data.IdRanges = make([]MsgRange, len(ranges))
+			for i, sr := range ranges {
+				msg.Data.IdRanges[i].LowId = int(sr.GetLow())
+				msg.Data.IdRanges[i].HiId = int(sr.GetHi())
+			}
 		}
 	}
 
@@ -1036,7 +1051,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 	return out
 }
 
-func pbDelQuerySerialize(in []MsgDelRange) []*pbx.SeqRange {
+func pbDelQuerySerialize(in []MsgRange) []*pbx.SeqRange {
 	if in == nil {
 		return nil
 	}
@@ -1049,12 +1064,12 @@ func pbDelQuerySerialize(in []MsgDelRange) []*pbx.SeqRange {
 	return out
 }
 
-func pbDelQueryDeserialize(in []*pbx.SeqRange) []MsgDelRange {
+func pbDelQueryDeserialize(in []*pbx.SeqRange) []MsgRange {
 	if in == nil {
 		return nil
 	}
 
-	out := make([]MsgDelRange, len(in))
+	out := make([]MsgRange, len(in))
 	for i, sr := range in {
 		out[i].LowId = int(sr.GetLow())
 		out[i].HiId = int(sr.GetHi())
