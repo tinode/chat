@@ -64,6 +64,10 @@ See more info at https://github.com/tinode/ios/#push_notifications
 ```sh
 ./tinode-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
 ```
+Starting with 0.21 you can use a simpler command:
+```sh
+./tinode-db -make_root=usrAbcDef123
+```
 Where `usrAbcDef123` is the ID of the user to update.
 
 In version 0.17 and older the `root` access can be granted to a user only by executing a database query.
@@ -72,7 +76,7 @@ First create or choose the user you want to promote to `root` then execute the q
 ```js
 r.db('tinode').table('auth').get('basic:login-of-the-user-to-make-root').update({authLvl: 30})
 ```
-* MySQL:
+* MySQL, PostgreSQL:
 ```sql
 USE 'tinode';
 UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
