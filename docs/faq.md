@@ -16,24 +16,24 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 
 
 ### Q: What are the options for enabling push notifications?<br/>
-**A**: You can use Tinode Push Gateway (TNPG) or you can use Google FCM:
- * _Tinode Push Gateway_ requires minimum configuration changes by sending pushes on behalf of Tinode.
- * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to build your own mobile apps (iOS and Android).
+**A**: You can use [Tinode Push Gateway (TNPG)](https://github.com/tinode/chat/tree/master/server/push/tnpg) or you can use [Google FCM](https://firebase.google.com/docs/cloud-messaging):
+ * _Tinode Push Gateway_ uses Tinode servers to send pushes on your behalf. It requires minumum setup: your server sends request to TNPG, which forwards it to Google FCM or Apple APNS.
+ * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to build and release your own mobile apps (iOS and Android).
 
 
 ### Q: How to setup push notifications with Tinode Push Gateway?<br/>
 **A**: Enabling TNPG push notifications requires two steps:
- * register at console.tinode.co and obtain a TNPG token.
+ * register at [console.tinode.co](https://console.tinode.co) and obtain a TNPG token.
  * configure server with the token.
 See detailed instructions [here](../server/push/tnpg/).
 
 
 ### Q: How to setup push notifications with Google FCM?<br/>
-**A**: This option requires you to build and release your own mobile apps. If you do not want to do it, the the TNPG option above.
+**A**: This option requires you to build and release your own mobile apps. If you do not want to do it, use the TNPG option above.
 
 Enabling FCM push notifications requires the following steps:
- * enable push sending from the server
- * enable receiving pushes in the clients
+ * enable push sending from the server.
+ * enable receiving pushes in the clients.
 
 #### Server and TinodeWeb
 
