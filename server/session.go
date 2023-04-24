@@ -764,6 +764,11 @@ func (s *Session) hello(msg *ClientComMessage) {
 			params["callTimeout"] = globals.callEstablishmentTimeout
 		}
 
+		if s.proto == GRPC {
+			// gRPC client may need server address to be able to fetch large files over http(s).
+			params["servingAt"] = globals.servingAt
+		}
+
 		// Set ua & platform in the beginning of the session.
 		// Don't change them later.
 		s.userAgent = msg.Hi.UserAgent

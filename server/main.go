@@ -199,6 +199,9 @@ var globals struct {
 
 	// Websocket per-message compression negotiation is enabled.
 	wsCompression bool
+
+	// URL of the main endpoint.
+	servingAt string
 }
 
 // Credential validator config.
@@ -693,6 +696,16 @@ func main() {
 		}
 	}
 	logs.Info.Printf("API served from root URL path '%s'", config.ApiPath)
+
+	// Best guess location of the main endpoint.
+	// TODO: provide fix for the case when the serving is over unix sockets.
+	// TODO: implement serving large files over gRPC, then remove globals.servingAt.
+	globals.servingAt = config.Listen + config.ApiPath
+	if tlsConfig != nil {
+		globals.servingAt = "https://" + globals.servingAt
+	} else {
+		globals.servingAt = "http://" + globals.servingAt
+	}
 
 	sspath := *serverStatusPath
 	if sspath == "" || sspath == "-" {
