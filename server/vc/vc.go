@@ -5,6 +5,7 @@ package vc
 
 import (
 	"encoding/json"
+	"time"
 
 	adapter "github.com/tinode/videoconferencing"
 )
@@ -20,6 +21,10 @@ func (vcObj) IsAvailable() bool {
 	return adp != nil && adp.IsReady()
 }
 
-func (vcObj) GetToken(topic, uid string) (string, error) {
-	return adp.GetToken(topic, uid)
+func (vcObj) EndpointUrl() string {
+	return adp.EndpointUrl()
+}
+
+func (vcObj) GetToken(topic, uid string, createdAt time.Time) (string, error) {
+	return adp.GetToken(topic, uid, createdAt)
 }

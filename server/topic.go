@@ -1026,13 +1026,17 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
 		params := map[string]any{"seq": t.lastID}
 
-		if isCall && t.cat == types.TopicCatGrp && vc.VideoConferencing.IsAvailable() {
-			if token, err := vc.VideoConferencing.GetToken(t.name, asUid.String()); err == nil {
-				params["token"] = token
-			} else {
-				logs.Warn.Printf("topic[%s]: failed to generate VC token - %+v", t.name, err)
+		if isCall {
+			t.handleCallInvite(msg, asUid)
+			if t.cat == types.TopicCatGrp && t.currentCall != nil && vc.VideoConferencing.IsAvailable() {
+				if token, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), t.currentCall.createdAt); err == nil {
+					params["token"] = token
+				} else {
+					logs.Warn.Printf("topic[%s]: failed to generate VC token - %+v", t.name, err)
+				}
 			}
 		}
+
 		reply.Ctrl.Params = params
 		msg.sess.queueOut(reply)
 	}
@@ -1114,10 +1118,6 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content, isCall); err != nil {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
-	}
-
-	if isCall {
-		t.handleCallInvite(msg, asUid)
 	}
 }
 

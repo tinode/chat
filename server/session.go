@@ -764,6 +764,9 @@ func (s *Session) hello(msg *ClientComMessage) {
 		if globals.callEstablishmentTimeout > 0 {
 			params["callTimeout"] = globals.callEstablishmentTimeout
 		}
+		if vcEndpoint := vc.VideoConferencing.EndpointUrl(); vcEndpoint != "" {
+			params["vcEndpoint"] = vcEndpoint
+		}
 
 		// Set ua & platform in the beginning of the session.
 		// Don't change them later.

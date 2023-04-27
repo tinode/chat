@@ -6,6 +6,7 @@ package vc
 import (
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 func (vcObj) Open(jsonconf json.RawMessage) error {
@@ -16,6 +17,10 @@ func (vcObj) IsAvailable() bool {
 	return false
 }
 
-func (vcObj) GetToken(topic, uid string) (string, error) {
+func (vcObj) EndpointUrl() string {
+	return ""
+}
+
+func (vcObj) GetToken(topic, uid string, createdAt time.Time) (string, error) {
 	return "", errors.New("Video conferencing not available")
 }

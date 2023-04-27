@@ -91,6 +91,8 @@ type videoCall struct {
 	contentMime any
 	// Time when the call was accepted.
 	acceptedAt time.Time
+	// Time when the call was created.
+	createdAt time.Time
 }
 
 // callPartySession returns a session to be stored in the call party data.
@@ -233,6 +235,7 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		seq:         t.lastID,
 		content:     msg.Pub.Content,
 		contentMime: msg.Pub.Head["mime"],
+		createdAt:   time.Now(),
 	}
 	t.currentCall.parties[msg.sess.sid] = callPartyData{
 		uid:          asUid,
@@ -253,20 +256,23 @@ func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientC
 	if call.Event == "token" {
 		// User is trying to join an existing call.
 		logs.Info.Printf("topic[%s]: user %s joins subscriber", t.name, asUid.UserId())
-		tok, _ := vc.VideoConferencing.GetToken(t.name, asUid.String())
-		// All is good. Send {info} message to the requestor.
-		reply := t.currentCall.infoMessage("token")
-		reply.Info.From = asUid.UserId()
-		reply.Info.Topic = t.name
-		tt := &Token{
-			Token: tok,
-		}
-		if bytes, e := json.Marshal(tt); e == nil {
-			reply.Info.Payload = bytes
+		if tok, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), t.currentCall.createdAt); err == nil {
+			// All is good. Send {info} message to the requestor.
+			reply := t.currentCall.infoMessage("token")
+			reply.Info.From = asUid.UserId()
+			reply.Info.Topic = t.name
+			tt := &Token{
+				Token: tok,
+			}
+			if bytes, e := json.Marshal(tt); e == nil {
+				reply.Info.Payload = bytes
+			} else {
+				logs.Warn.Printf("topic[%s]: err serializing %+v, e = %+v", t.name, tt, e)
+			}
+			msg.sess.queueOut(reply)
 		} else {
-			logs.Warn.Printf("topic[%s]: err serializing %+v, e = %+v", t.name, tt, e)
+			logs.Warn.Printf("topic[%s]: could not create call token - %+v", t.name, err)
 		}
-		msg.sess.queueOut(reply)
 	} else {
 		logs.Info.Printf("topic[%s]: unknown VC call note event %+v", t.name, call)
 	}
