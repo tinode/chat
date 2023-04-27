@@ -11,10 +11,8 @@ service Node {
 // Plugin interface.
 service Plugin {
 	// This plugin method is called by Tinode server for every message received from the clients. The
-	// method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further
-	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl
-	// and forward it to the client session.
-	// ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
+	// method returns a ServerResp message. ServerResp.status tells Tinode server what to do next.
+	// See possible values for ServerResp.status in RespCode below.
 	rpc FireHose(ClientReq) returns (ServerResp) {}
 
 	// An alteranative user and topic discovery mechanism.
@@ -496,10 +494,11 @@ enum RespCode {
 	CONTINUE = 0;
 	// Drop the request as if the client did not send it
 	DROP = 1;
-	// Send the the provided response to the client.
+	// Send the the provided srvmsg response to the client. ServerResp must contain non-zero
+	// srvmsg.
 	RESPOND = 2;
-	// Replace client's original request with the provided request then continue with
-	// processing.
+	// Replace client's original request with the provided clmsg request then continue with
+	// processing. ServerResp must contain non-zero clmsg.
 	REPLACE = 3;
 }
 

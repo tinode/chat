@@ -16,24 +16,24 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 
 
 ### Q: What are the options for enabling push notifications?<br/>
-**A**: You can use Tinode Push Gateway (TNPG) or you can use Google FCM:
- * _Tinode Push Gateway_ requires minimum configuration changes by sending pushes on behalf of Tinode.
- * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to build your own mobile apps (iOS and Android).
+**A**: You can use [Tinode Push Gateway (TNPG)](https://github.com/tinode/chat/tree/master/server/push/tnpg) or you can use [Google FCM](https://firebase.google.com/docs/cloud-messaging):
+ * _Tinode Push Gateway_ uses Tinode servers to send pushes on your behalf. It requires minumum setup: your server sends request to TNPG, which forwards it to Google FCM or Apple APNS.
+ * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to build and release your own mobile apps (iOS and Android).
 
 
 ### Q: How to setup push notifications with Tinode Push Gateway?<br/>
 **A**: Enabling TNPG push notifications requires two steps:
- * register at console.tinode.co and obtain a TNPG token.
+ * register at [console.tinode.co](https://console.tinode.co) and obtain a TNPG token.
  * configure server with the token.
 See detailed instructions [here](../server/push/tnpg/).
 
 
 ### Q: How to setup push notifications with Google FCM?<br/>
-**A**: This option requires you to build and release your own mobile apps. If you do not want to do it, the the TNPG option above.
+**A**: This option requires you to build and release your own mobile apps. If you do not want to do it, use the TNPG option above.
 
 Enabling FCM push notifications requires the following steps:
- * enable push sending from the server
- * enable receiving pushes in the clients
+ * enable push sending from the server.
+ * enable receiving pushes in the clients.
 
 #### Server and TinodeWeb
 
@@ -64,6 +64,10 @@ See more info at https://github.com/tinode/ios/#push_notifications
 ```sh
 ./tinode-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
 ```
+Starting with 0.21 you can use a simpler command:
+```sh
+./tinode-db -make_root=usrAbcDef123
+```
 Where `usrAbcDef123` is the ID of the user to update.
 
 In version 0.17 and older the `root` access can be granted to a user only by executing a database query.
@@ -72,7 +76,7 @@ First create or choose the user you want to promote to `root` then execute the q
 ```js
 r.db('tinode').table('auth').get('basic:login-of-the-user-to-make-root').update({authLvl: 30})
 ```
-* MySQL:
+* MySQL, PostgreSQL:
 ```sql
 USE 'tinode';
 UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
