@@ -201,6 +201,7 @@ var globals struct {
 	wsCompression bool
 
 	// URL of the main endpoint.
+	// TODO: implement file-serving API for gRPC and remove this feature.
 	servingAt string
 }
 
