@@ -25,6 +25,14 @@ func (vcObj) EndpointUrl() string {
 	return adp.EndpointUrl()
 }
 
+func (vcObj) CallMaxDuration() time.Duration {
+	return adp.CallMaxDuration()
+}
+
 func (vcObj) GetToken(topic, uid string, createdAt time.Time) (string, error) {
 	return adp.GetToken(topic, uid, createdAt)
+}
+
+func (vcObj) TerminateCall(topic string) error {
+	return adp.TerminateCall(topic)
 }

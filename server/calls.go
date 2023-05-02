@@ -35,6 +35,12 @@ const (
 	// Call finished by either side or server.
 	constCallEventHangUp = "hang-up"
 
+	// VC events.
+	// Client has joined the call.
+	constCallEventJoin = "vc-join"
+	// Token for joining a conference call.
+	constCallEventVCToken = "vc-token"
+
 	// Message headers representing call states.
 	// Call is established.
 	constCallMsgAccepted = "accepted"
@@ -81,6 +87,10 @@ type callPartyData struct {
 
 // videoCall describes video call that's being established or in progress.
 type videoCall struct {
+	// User who started the call.
+	originatorUid types.Uid
+	// Session from which the call was orinated.
+	originatorSess *Session
 	// Call participants (session sid -> callPartyData).
 	parties map[string]callPartyData
 	// Call message seq ID.
@@ -93,6 +103,10 @@ type videoCall struct {
 	acceptedAt time.Time
 	// Time when the call was created.
 	createdAt time.Time
+	// Topic name.
+	topicName string
+	// Original call message headers.
+	origHead map[string]any
 }
 
 // callPartySession returns a session to be stored in the call party data.
@@ -205,6 +219,7 @@ func (call *videoCall) messageHead(head map[string]any, newState string, duratio
 func (call *videoCall) infoMessage(event string) *ServerComMessage {
 	return &ServerComMessage{
 		Info: &MsgServerInfo{
+			Topic: call.topicName, // Topic.broadcastToSessions will adjust it based on the receiver identity.
 			What:  "call",
 			Event: event,
 			SeqId: call.seq,
@@ -218,24 +233,24 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 	if t.currentCall == nil {
 		return types.ZeroUid, nil
 	}
-	for _, p := range t.currentCall.parties {
-		if p.isOriginator {
-			return p.uid, p.sess
-		}
-	}
-	return types.ZeroUid, nil
+	return t.currentCall.originatorUid, t.currentCall.originatorSess
 }
 
 // Handles video call invite (initiation)
 // (in response to msg = {pub head=[mime: application/x-tiniode-webrtc]}).
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
+	originatorSess := callPartySession(msg.sess)
 	// Call being establshed.
 	t.currentCall = &videoCall{
-		parties:     make(map[string]callPartyData),
-		seq:         t.lastID,
-		content:     msg.Pub.Content,
-		contentMime: msg.Pub.Head["mime"],
-		createdAt:   time.Now(),
+		originatorUid:  asUid,
+		originatorSess: originatorSess,
+		parties:        make(map[string]callPartyData),
+		seq:            t.lastID,
+		content:        msg.Pub.Content,
+		contentMime:    msg.Pub.Head["mime"],
+		createdAt:      time.Now(),
+		topicName:      t.name,
+		origHead:       msg.Pub.Head,
 	}
 	t.currentCall.parties[msg.sess.sid] = callPartyData{
 		uid:          asUid,
@@ -243,8 +258,14 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		sess:         callPartySession(msg.sess),
 	}
 	// Wait for constCallEstablishmentTimeout for the other side to accept the call.
-	if t.cat != types.TopicCatGrp {
+	switch t.cat {
+	case types.TopicCatP2P:
 		t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
+	case types.TopicCatGrp:
+		timeout := vc.VideoConferencing.CallMaxDuration()
+		if timeout > 0 {
+			t.callEstablishmentTimer.Reset(timeout)
+		}
 	}
 }
 
@@ -253,14 +274,14 @@ type Token struct {
 }
 
 func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientComMessage) {
-	if call.Event == "token" {
+	switch call.Event {
+	case constCallEventJoin:
 		// User is trying to join an existing call.
-		logs.Info.Printf("topic[%s]: user %s joins subscriber", t.name, asUid.UserId())
+		logs.Info.Printf("topic[%s]: user %s joins call seq id %d", t.name, asUid.UserId(), t.currentCall.seq)
 		if tok, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), t.currentCall.createdAt); err == nil {
 			// All is good. Send {info} message to the requestor.
-			reply := t.currentCall.infoMessage("token")
+			reply := t.currentCall.infoMessage(constCallEventVCToken)
 			reply.Info.From = asUid.UserId()
-			reply.Info.Topic = t.name
 			tt := &Token{
 				Token: tok,
 			}
@@ -269,12 +290,29 @@ func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientC
 			} else {
 				logs.Warn.Printf("topic[%s]: err serializing %+v, e = %+v", t.name, tt, e)
 			}
+			t.currentCall.parties[msg.sess.sid] = callPartyData{
+				uid:          asUid,
+				isOriginator: false,
+				sess:         callPartySession(msg.sess),
+			}
 			msg.sess.queueOut(reply)
 		} else {
 			logs.Warn.Printf("topic[%s]: could not create call token - %+v", t.name, err)
 		}
-	} else {
-		logs.Info.Printf("topic[%s]: unknown VC call note event %+v", t.name, call)
+	case constCallEventHangUp:
+		if _, ok := t.currentCall.parties[msg.sess.sid]; !ok {
+			// Unknown session.
+			logs.Warn.Printf("topic[%s]: unknown video conference participant - sid %s", t.name, msg.sess.sid)
+			return
+		}
+		if len(t.currentCall.parties) == 1 {
+			// Last remaining user on the call. Drop the call altogether.
+			t.maybeEndCallInProgress(msg.AsUser, msg, false)
+		} else {
+			delete(t.currentCall.parties, msg.sess.sid)
+		}
+	default:
+		logs.Info.Printf("topic[%s]: unknown VC call note event %s", t.name, call.Event)
 	}
 }
 
@@ -341,7 +379,9 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 			var origHead map[string]any
 			if msgCopy.Pub != nil {
 				origHead = msgCopy.Pub.Head
-			} // else fetch the original message from store and use its head.
+			} else {
+				origHead = t.currentCall.origHead
+			}
 			head := t.currentCall.messageHead(origHead, replaceWith, 0)
 			if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil,
 				head, t.currentCall.content, true); err != nil {
@@ -420,6 +460,44 @@ func (t *Topic) handleCallEvent(msg *ClientComMessage) {
 	}
 }
 
+func (t *Topic) callDoneStatus(from string, originatorUid types.Uid, callDidTimeout bool) (string, int64) {
+	var replaceWith string
+	var callDuration int64
+	switch t.cat {
+	case types.TopicCatP2P:
+		if from != "" && len(t.currentCall.parties) == 2 {
+			// This is a call in progress.
+			replaceWith = constCallMsgFinished
+			callDuration = time.Since(t.currentCall.acceptedAt).Milliseconds()
+		} else {
+			if from != "" {
+				// User originated hang-up.
+				if from == originatorUid.UserId() {
+					// Originator/caller requested event.
+					replaceWith = constCallMsgMissed
+				} else {
+					// Callee requested event.
+					replaceWith = constCallMsgDeclined
+				}
+			} else {
+				// Server initiated disconnect.
+				// Call hasn't been established. Just drop it.
+				if callDidTimeout {
+					replaceWith = constCallMsgMissed
+				} else {
+					replaceWith = constCallMsgDisconnected
+				}
+			}
+		}
+	case types.TopicCatGrp:
+		replaceWith = constCallMsgFinished
+		callDuration = time.Since(t.currentCall.createdAt).Milliseconds()
+	default:
+		logs.Err.Fatalf("topic[%s]: invalid topic category %d", t.name, t.cat)
+	}
+	return replaceWith, callDuration
+}
+
 // Ends current call in response to a client hangup request (msg).
 func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callDidTimeout bool) {
 	if t.currentCall == nil {
@@ -427,32 +505,10 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	}
 	t.callEstablishmentTimer.Stop()
 	originatorUid, _ := t.getCallOriginator()
-	var replaceWith string
-	var callDuration int64
-	if from != "" && len(t.currentCall.parties) == 2 {
-		// This is a call in progress.
-		replaceWith = constCallMsgFinished
-		callDuration = time.Since(t.currentCall.acceptedAt).Milliseconds()
-	} else {
-		if from != "" {
-			// User originated hang-up.
-			if from == originatorUid.UserId() {
-				// Originator/caller requested event.
-				replaceWith = constCallMsgMissed
-			} else {
-				// Callee requested event.
-				replaceWith = constCallMsgDeclined
-			}
-		} else {
-			// Server initiated disconnect.
-			// Call hasn't been established. Just drop it.
-			if callDidTimeout {
-				replaceWith = constCallMsgMissed
-			} else {
-				replaceWith = constCallMsgDisconnected
-			}
-		}
+	if originatorUid.IsZero() {
+		logs.Warn.Printf("topic[%s]: cannot properly finalize call seq %d - originator info missing", t.name, t.currentCall.seq)
 	}
+	replaceWith, callDuration := t.callDoneStatus(from, originatorUid, callDidTimeout)
 
 	// Send a message indicating the call has ended.
 	msgCopy := *msg
@@ -460,7 +516,9 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 	var origHead map[string]any
 	if msgCopy.Pub != nil {
 		origHead = msgCopy.Pub.Head
-	} // else fetch the original message from store and use its head.
+	} else {
+		origHead = t.currentCall.origHead
+	}
 	head := t.currentCall.messageHead(origHead, replaceWith, int(callDuration))
 	if err := t.saveAndBroadcastMessage(&msgCopy, originatorUid, false, nil, head, t.currentCall.content, false); err != nil {
 		logs.Err.Printf("topic[%s]: failed to write finalizing message for call seq id %d - '%s'", t.name, t.currentCall.seq, err)
@@ -474,6 +532,13 @@ func (t *Topic) maybeEndCallInProgress(from string, msg *ClientComMessage, callD
 		t.infoCallSubsOffline(from, tgt, constCallEventHangUp, t.currentCall.seq, nil, "", true)
 	}
 	t.currentCall = nil
+
+	if t.cat == types.TopicCatGrp {
+		// Also tell the media server to terminate the conference.
+		if err := vc.VideoConferencing.TerminateCall(t.name); err != nil {
+			logs.Warn.Printf("topic[%s]: video conference termination error - %+v", t.name, err)
+		}
+	}
 }
 
 // Server initiated call termination.
