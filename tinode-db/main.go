@@ -242,7 +242,10 @@ func main() {
 	defer store.Store.Close()
 
 	adapterVersion := store.Store.GetAdapterVersion()
-	databaseVersion := store.Store.GetDbVersion()
+	databaseVersion := 0
+	if store.Store.IsOpen() {
+		databaseVersion = store.Store.GetDbVersion()
+	}
 	log.Printf("Database adapter: '%s'; version: %d", store.Store.GetAdapterName(), adapterVersion)
 
 	var created bool

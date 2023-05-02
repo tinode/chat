@@ -766,7 +766,14 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 		if s.proto == GRPC {
 			// gRPC client may need server address to be able to fetch large files over http(s).
+			// TODO: add support for fetching files over gRPC, then remove this parameter.
 			params["servingAt"] = globals.servingAt
+			// Report cluster size.
+			if globals.cluster != nil {
+				params["clusterSize"] = len(globals.cluster.nodes) + 1
+			} else {
+				params["clusterSize"] = 1
+			}
 		}
 
 		// Set ua & platform in the beginning of the session.
