@@ -150,26 +150,25 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("adapter postgres failed to parse config: " + err.Error())
 	}
 
-	// This just initializes the driver but does not open the network connection.
+	// ConnectConfig creates a new Pool and immediately establishes one connection.
 	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
 	if isMissingDb(err) {
-		// Ignore missing database here. If we are initializing the database
-		// missing DB is OK.
-		if a.poolConfig.ConnConfig.Database == "tinode" {
-			a.poolConfig.ConnConfig.Database = "postgres"
-			a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
-		}
+		// Missing DB is OK if we are initializing the database.
+		// Since tinode DB does not exist, connect without specifying the DB name.
+		a.poolConfig.ConnConfig.Database = ""
+		a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
 	}
 	if err != nil {
 		return err
 	}
 
-	// Actually opening the network connection.
-	err = a.db.Ping(ctx)
+	// Actually opening the network connection if one was not opened earlier.
+	if a.poolConfig.LazyConnect {
+		err = a.db.Ping(ctx)
+	}
 
 	if err == nil {
 		if config.MaxOpenConns > 0 {
-
 			a.poolConfig.MaxConns = int32(config.MaxOpenConns)
 		}
 		if config.MaxIdleConns > 0 {

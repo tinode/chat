@@ -5,7 +5,7 @@ option go_package = "github.com/tinode/chat/pbx";
 // This is the single method that needs to be implemented by a gRPC client.
 service Node {
 	// Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
-  	rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+  rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
 }
 
 // Plugin interface.
