@@ -371,6 +371,7 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 			uid = rec.Uid
 		} else {
 			logs.Info.Println("media: unknown auth method", authMethod)
+			return uid, nil, types.ErrMalformed
 		}
 	} else {
 		// Find the session, make sure it's appropriately authenticated.
