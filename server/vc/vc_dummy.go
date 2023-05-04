@@ -26,7 +26,7 @@ func (vcObj) CallMaxDuration() time.Duration {
 	return 10 * time.Minute
 }
 
-func (vcObj) GetToken(topic, uid string, createdAt time.Time) (string, error) {
+func (vcObj) GetToken(topic, uid string, canPublish bool, createdAt time.Time) (string, error) {
 	return "", errors.New("Video conferencing not available")
 }
 

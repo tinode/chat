@@ -17,7 +17,7 @@ type VideoConferencingInterface interface {
 	// Maximum call duration.
 	CallMaxDuration() time.Duration
 	// Returns a token to join a VC call in progress for uid in the given topic.
-	GetToken(topic, uid string, createdAt time.Time) (string, error)
+	GetToken(topic, uid string, canPublish bool, createdAt time.Time) (string, error)
 	// Terminates a video conference in the given topic.
 	TerminateCall(topic string) error
 }

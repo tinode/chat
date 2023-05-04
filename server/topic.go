@@ -303,21 +303,21 @@ func (t *Topic) computePerUserAcsUnion() {
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
 	if t.currentCall != nil {
-		shouldTerminateCall := false
+		shouldDetachFromCall := false
 		if msg.sess.isMultiplex() {
 			// Check if any of the call party sessions is multiplexed over msg.sess.
 			for _, p := range t.currentCall.parties {
 				if p.sess.isProxy() && p.sess.multi == msg.sess {
-					shouldTerminateCall = true
+					shouldDetachFromCall = true
 					break
 				}
 			}
 		} else if _, found := t.currentCall.parties[msg.sess.sid]; found {
-			// Normal session disconnecting from topic. Just terminate the call.
-			shouldTerminateCall = true
+			// Normal session disconnecting from topic. Detach from call too.
+			shouldDetachFromCall = true
 		}
-		if shouldTerminateCall {
-			t.terminateCallInProgress(false)
+		if shouldDetachFromCall {
+			t.detachPartyFromCall(msg)
 		}
 	}
 	t.handleLeaveRequest(msg, msg.sess)
@@ -1027,13 +1027,10 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 		params := map[string]any{"seq": t.lastID}
 
 		if isCall {
-			t.handleCallInvite(msg, asUid)
-			if t.cat == types.TopicCatGrp && t.currentCall != nil && vc.VideoConferencing.IsAvailable() {
-				if token, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), t.currentCall.createdAt); err == nil {
-					params["token"] = token
-				} else {
-					logs.Warn.Printf("topic[%s]: failed to generate VC token - %+v", t.name, err)
-				}
+			callParams := t.handleCallInvite(msg, asUid)
+			// Merge params and callParams.
+			for k, v := range callParams {
+				params[k] = v
 			}
 		}
 

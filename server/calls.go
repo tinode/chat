@@ -238,7 +238,7 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 
 // Handles video call invite (initiation)
 // (in response to msg = {pub head=[mime: application/x-tiniode-webrtc]}).
-func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
+func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) map[string]any {
 	originatorSess := callPartySession(msg.sess)
 	// Call being establshed.
 	t.currentCall = &videoCall{
@@ -257,28 +257,59 @@ func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 		isOriginator: true,
 		sess:         callPartySession(msg.sess),
 	}
-	// Wait for constCallEstablishmentTimeout for the other side to accept the call.
+	params := make(map[string]any)
 	switch t.cat {
 	case types.TopicCatP2P:
+		// Wait for constCallEstablishmentTimeout for the other side to accept the call.
 		t.callEstablishmentTimer.Reset(time.Duration(globals.callEstablishmentTimeout) * time.Second)
 	case types.TopicCatGrp:
+		if token, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), true, t.currentCall.createdAt); err == nil {
+			params["token"] = token
+		} else {
+			logs.Warn.Printf("topic[%s]: failed to generate VC token - %+v", t.name, err)
+		}
 		timeout := vc.VideoConferencing.CallMaxDuration()
 		if timeout > 0 {
 			t.callEstablishmentTimer.Reset(timeout)
 		}
 	}
+	return params
 }
 
 type Token struct {
 	Token string `json:"token,omitempty"`
 }
 
+func (t *Topic) detachPartyFromCall(msg *ClientComMessage) {
+	switch t.cat {
+	case types.TopicCatP2P:
+		// Any session disconnecting from the call terminates it.
+		t.terminateCallInProgress(false)
+	case types.TopicCatGrp:
+		if _, ok := t.currentCall.parties[msg.sess.sid]; !ok {
+			// Unknown session.
+			logs.Warn.Printf("topic[%s]: unknown video conference participant - sid %s", t.name, msg.sess.sid)
+			return
+		}
+		if len(t.currentCall.parties) == 1 {
+			// Last remaining user on the call. Drop the call altogether.
+			t.maybeEndCallInProgress(msg.AsUser, msg, false)
+		} else {
+			delete(t.currentCall.parties, msg.sess.sid)
+		}
+	default:
+		logs.Warn.Printf("topic[%s]: video calls/conferences aren't supported in topic category %d", t.name, t.cat)
+	}
+}
+
 func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientComMessage) {
 	switch call.Event {
 	case constCallEventJoin:
+		canPublish := asUid == t.currentCall.originatorUid || !t.isChan
+
 		// User is trying to join an existing call.
 		logs.Info.Printf("topic[%s]: user %s joins call seq id %d", t.name, asUid.UserId(), t.currentCall.seq)
-		if tok, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), t.currentCall.createdAt); err == nil {
+		if tok, err := vc.VideoConferencing.GetToken(t.name, asUid.UserId(), canPublish, t.currentCall.createdAt); err == nil {
 			// All is good. Send {info} message to the requestor.
 			reply := t.currentCall.infoMessage(constCallEventVCToken)
 			reply.Info.From = asUid.UserId()
@@ -300,17 +331,7 @@ func (t *Topic) handleVCEvent(call *MsgClientNote, asUid types.Uid, msg *ClientC
 			logs.Warn.Printf("topic[%s]: could not create call token - %+v", t.name, err)
 		}
 	case constCallEventHangUp:
-		if _, ok := t.currentCall.parties[msg.sess.sid]; !ok {
-			// Unknown session.
-			logs.Warn.Printf("topic[%s]: unknown video conference participant - sid %s", t.name, msg.sess.sid)
-			return
-		}
-		if len(t.currentCall.parties) == 1 {
-			// Last remaining user on the call. Drop the call altogether.
-			t.maybeEndCallInProgress(msg.AsUser, msg, false)
-		} else {
-			delete(t.currentCall.parties, msg.sess.sid)
-		}
+		t.detachPartyFromCall(msg)
 	default:
 		logs.Info.Printf("topic[%s]: unknown VC call note event %s", t.name, call.Event)
 	}

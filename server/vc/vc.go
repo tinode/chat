@@ -29,8 +29,8 @@ func (vcObj) CallMaxDuration() time.Duration {
 	return adp.CallMaxDuration()
 }
 
-func (vcObj) GetToken(topic, uid string, createdAt time.Time) (string, error) {
-	return adp.GetToken(topic, uid, createdAt)
+func (vcObj) GetToken(topic, uid string, canPublish bool, createdAt time.Time) (string, error) {
+	return adp.GetToken(topic, uid, canPublish, createdAt)
 }
 
 func (vcObj) TerminateCall(topic string) error {
