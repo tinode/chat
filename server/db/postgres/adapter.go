@@ -69,8 +69,7 @@ type configType struct {
 	Port   string `json:"port,omitempty"`
 	DBName string `json:"dbname,omitempty"`
 	// Deprecated.
-	DSN      string `json:"dsn,omitempty"`
-	Database string `json:"database,omitempty"`
+	DSN string `json:"dsn,omitempty"`
 
 	// Connection pool settings.
 	//
@@ -119,15 +118,14 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if config.DSN != "" {
 		a.dsn = config.DSN
-		a.dbName = config.Database
 	} else {
-		dsn, err := setConnStr(config)
+		a.dsn, err = setConnStr(config)
 		if err != nil {
 			return err
 		}
-		a.dsn = dsn
-		a.dbName = config.DBName
 	}
+
+	a.dbName = config.DBName
 
 	if a.dsn == "" {
 		a.dsn = defaultDSN
