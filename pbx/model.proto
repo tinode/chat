@@ -2,10 +2,14 @@ syntax = "proto3";
 package pbx;
 option go_package = "github.com/tinode/chat/pbx";
 
-// This is the single method that needs to be implemented by a gRPC client.
+// This is the methods that needs to be implemented by a gRPC client.
 service Node {
 	// Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
   rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+	// Large file upload: a request with a stream of chunks.
+	rpc FileReceive(stream File) returns (FileResp) {}
+	// Large file file download: a response with a stream of chunks.
+	rpc FileServe(FileReq) returns (stream File) {}
 }
 
 // Plugin interface.
