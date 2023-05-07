@@ -413,10 +413,10 @@ func main() {
 	}
 
 	err = store.Store.Open(workerId, config.Store)
+	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
-	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
 		store.Store.Close()
 		logs.Info.Println("Closed database connection(s)")

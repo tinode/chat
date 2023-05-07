@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -45,9 +46,6 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10"
-	defaultDatabase = "tinode"
-
 	adpVersion  = 113
 	adapterName = "postgres"
 
@@ -106,7 +104,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if len(jsonconfig) < 2 {
-		return errors.New("adapter postgres missing config")
+		return errors.New("postgres adapter missing config")
 	}
 
 	var err error
@@ -118,21 +116,16 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if config.DSN != "" {
 		a.dsn = config.DSN
-	} else {
-		a.dsn, err = setConnStr(config)
-		if err != nil {
+		if uri, err := url.Parse(a.dsn); err == nil {
+			a.dbName = strings.TrimPrefix(uri.Path, "/")
+		} else {
 			return err
 		}
-	}
-
-	a.dbName = config.DBName
-
-	if a.dsn == "" {
-		a.dsn = defaultDSN
-	}
-
-	if a.dbName == "" {
-		a.dbName = defaultDatabase
+	} else {
+		if a.dsn, err = setConnStr(config); err != nil {
+			return err
+		}
+		a.dbName = config.DBName
 	}
 
 	if a.maxResults <= 0 {
@@ -143,9 +136,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
-	a.poolConfig, err = pgxpool.ParseConfig(a.dsn)
-	if err != nil {
-		return errors.New("adapter postgres failed to parse config: " + err.Error())
+	if a.poolConfig, err = pgxpool.ParseConfig(a.dsn); err != nil {
+		return errors.New("postgres adapter failed to parse DSN: " + err.Error())
 	}
 
 	// ConnectConfig creates a new Pool and immediately establishes one connection.
