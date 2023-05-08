@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	adapter "github.com/tinode/videoconferencing"
+	adapter "github.com/tinode/chat-vc/videoconferencing"
 )
 
 var adp *adapter.VideoConferencing

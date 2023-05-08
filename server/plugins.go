@@ -1,5 +1,5 @@
 // External services contacted through RPC
-package main
+package server
 
 import (
 	"context"

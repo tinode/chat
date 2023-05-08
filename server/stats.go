@@ -3,7 +3,7 @@
 // The stats updates happen in a separate go routine to avoid
 // locking on main logic routines.
 
-package main
+package server
 
 import (
 	"encoding/json"

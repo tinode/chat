@@ -2,7 +2,7 @@
 // 		http(s)://<host-name>/<configured-path>/<profile-name>
 // See godoc for the list of possible profile names: https://golang.org/pkg/runtime/pprof/#Profile
 
-package main
+package server
 
 import (
 	"fmt"

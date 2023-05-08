@@ -4,7 +4,7 @@
  *    Video call handling (establishment, metadata exhange and termination).
  *
  *****************************************************************************/
-package main
+package server
 
 import (
 	"encoding/json"

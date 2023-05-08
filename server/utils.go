@@ -1,6 +1,6 @@
 // Generic data manipulation utilities.
 
-package main
+package server
 
 import (
 	"crypto/tls"

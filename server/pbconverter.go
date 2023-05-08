@@ -1,6 +1,6 @@
 // Converts between protobuf structs and Go representation of packets
 
-package main
+package server
 
 import (
 	"encoding/json"
