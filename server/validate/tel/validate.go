@@ -200,7 +200,7 @@ func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params 
 		return err
 	}
 
-	// Send SMS without blocking. It sending may take long time.
+	// Send SMS without blocking. Sending may take long time.
 	go v.send(phone, content[""])
 
 	return nil

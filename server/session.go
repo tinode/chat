@@ -989,8 +989,8 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	// Technically we don't need to check it here, but we are going to mail the 'authName' string to the user.
 	// We have to make sure it does not contain any exploits. This is the simplest check.
-	hdl := store.Store.GetLogicalAuthHandler(authScheme)
-	if hdl == nil {
+	auther := store.Store.GetLogicalAuthHandler(authScheme)
+	if auther == nil {
 		return types.ErrUnsupported
 	}
 	validator := store.Store.GetValidator(credMethod)
@@ -1006,7 +1006,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return nil
 	}
 
-	resetParams, err := hdl.GetResetParams(uid)
+	resetParams, err := auther.GetResetParams(uid)
 	if err != nil {
 		return err
 	}
