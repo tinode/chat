@@ -248,6 +248,11 @@ func (*validator) Remove(user t.Uid, value string) error {
 	return store.Users.DelCred(user, validatorName, value)
 }
 
+// TempAuthScheme returns a temporary authentication method used by this validator.
+func (v *validator) TempAuthScheme() (string, error) {
+	return "code", nil
+}
+
 // Implement sending the SMS.
 func (*validator) send(to, body string) error {
 	logs.Info.Println("Send SMS, To:", to, "; Text:", body)

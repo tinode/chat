@@ -26,7 +26,7 @@ type Validator interface {
 	// Returns normalized credential prefixed with an appropriate namespace prefix.
 	PreCheck(cred string, params map[string]interface{}) (string, error)
 
-	// Request sends a request for confirmation to the user. Returns true if it's a new credential,
+	// Request sends a request for validation to the user. Returns true if it's a new credential,
 	// false if it re-sent request for an existing unconfirmed credential.
 	//   user: UID of the user making the request.
 	//   cred: credential being validated, such as email or phone.
@@ -52,6 +52,10 @@ type Validator interface {
 
 	// Delete deletes user's record.
 	Delete(user t.Uid) error
+
+	// TempAuthScheme returns a temporary authentication method used by this validator.
+	// It should be either "code" or "token".
+	TempAuthScheme() (string, error)
 }
 
 func ValidateHostURL(origUrl string) (string, error) {

@@ -987,7 +987,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return types.ErrMalformed
 	}
 
-	// Technically we don't need to check it here, but we are going to mail the 'authName' string to the user.
+	// Technically we don't need to check it here, but we are going to mail the 'authScheme' string to the user.
 	// We have to make sure it does not contain any exploits. This is the simplest check.
 	auther := store.Store.GetLogicalAuthHandler(authScheme)
 	if auther == nil {
@@ -1010,8 +1010,12 @@ func (s *Session) authSecretReset(params []byte) error {
 	if err != nil {
 		return err
 	}
+	tempScheme, err := validator.TempAuthScheme()
+	if err != nil {
+		return err
+	}
 
-	code, _, err := store.Store.GetLogicalAuthHandler("code").GenSecret(&auth.Rec{
+	code, _, err := store.Store.GetLogicalAuthHandler(tempScheme).GenSecret(&auth.Rec{
 		Uid:        uid,
 		AuthLevel:  auth.LevelAuth,
 		Features:   auth.FeatureNoLogin,
