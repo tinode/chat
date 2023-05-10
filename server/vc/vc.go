@@ -22,6 +22,9 @@ func (vcObj) IsAvailable() bool {
 }
 
 func (vcObj) EndpointUrl() string {
+	if adp == nil {
+		return ""
+	}
 	return adp.EndpointUrl()
 }
 
