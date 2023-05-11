@@ -413,7 +413,7 @@ func main() {
 	}
 
 	err = store.Store.Open(workerId, config.Store)
-	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
+	logs.Info.Println("DB adapter", store.Store.GetAdapterName(), store.Store.GetAdapterVersion())
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
