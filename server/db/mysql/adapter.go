@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -62,8 +63,7 @@ type configType struct {
 	// for the full list of fields.
 	ms.Config
 	// Deprecated.
-	DSN      string `json:"dsn,omitempty"`
-	Database string `json:"database,omitempty"`
+	DSN string `json:"dsn,omitempty"`
 
 	// Connection pool settings.
 	//
@@ -114,18 +114,26 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		// MySql config is specified. Use it.
 		a.dbName = config.DBName
 		a.dsn = dsn
-		if config.DSN != "" || config.Database != "" {
-			return errors.New("mysql config: `dsn` and `database` fields are deprecated. Please, specify individual connection settings via mysql.Config: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config")
+		if config.DSN != "" {
+			return errors.New("mysql config: conflicting config and DSN are provided")
 		}
 	} else {
-		// Otherwise, use DSN and Database to configure database connection.
+		// Otherwise, use DSN to configure database connection.
 		// Note: this method is deprecated.
 		if config.DSN != "" {
-			a.dsn = config.DSN
+			// Remove optional schema.
+			a.dsn = strings.TrimPrefix(config.DSN, "mysql://")
 		} else {
 			a.dsn = defaultDSN
 		}
-		a.dbName = config.Database
+
+		// Parse out the database name from the DSN.
+		// Add schema to create a valid URL.
+		if uri, err := url.Parse("mysql://" + a.dsn); err == nil {
+			a.dbName = strings.TrimPrefix(uri.Path, "/")
+		} else {
+			return err
+		}
 	}
 
 	if a.dbName == "" {

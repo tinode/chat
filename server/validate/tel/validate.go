@@ -200,7 +200,7 @@ func (v *validator) ResetSecret(phone, scheme, lang string, code []byte, params 
 		return err
 	}
 
-	// Send SMS without blocking. It sending may take long time.
+	// Send SMS without blocking. Sending may take long time.
 	go v.send(phone, content[""])
 
 	return nil
@@ -246,6 +246,11 @@ func (*validator) Delete(user t.Uid) error {
 // Remove or disable the given record.
 func (*validator) Remove(user t.Uid, value string) error {
 	return store.Users.DelCred(user, validatorName, value)
+}
+
+// TempAuthScheme returns a temporary authentication method used by this validator.
+func (v *validator) TempAuthScheme() (string, error) {
+	return "code", nil
 }
 
 // Implement sending the SMS.
