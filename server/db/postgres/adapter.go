@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -45,9 +46,6 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10"
-	defaultDatabase = "tinode"
-
 	adpVersion  = 114
 	adapterName = "postgres"
 
@@ -69,8 +67,7 @@ type configType struct {
 	Port   string `json:"port,omitempty"`
 	DBName string `json:"dbname,omitempty"`
 	// Deprecated.
-	DSN      string `json:"dsn,omitempty"`
-	Database string `json:"database,omitempty"`
+	DSN string `json:"dsn,omitempty"`
 
 	// Connection pool settings.
 	//
@@ -107,7 +104,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if len(jsonconfig) < 2 {
-		return errors.New("adapter postgres missing config")
+		return errors.New("postgres adapter missing config")
 	}
 
 	var err error
@@ -119,22 +116,16 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if config.DSN != "" {
 		a.dsn = config.DSN
-		a.dbName = config.Database
-	} else {
-		dsn, err := setConnStr(config)
-		if err != nil {
+		if uri, err := url.Parse(a.dsn); err == nil {
+			a.dbName = strings.TrimPrefix(uri.Path, "/")
+		} else {
 			return err
 		}
-		a.dsn = dsn
+	} else {
+		if a.dsn, err = setConnStr(config); err != nil {
+			return err
+		}
 		a.dbName = config.DBName
-	}
-
-	if a.dsn == "" {
-		a.dsn = defaultDSN
-	}
-
-	if a.dbName == "" {
-		a.dbName = defaultDatabase
 	}
 
 	if a.maxResults <= 0 {
@@ -145,9 +136,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
-	a.poolConfig, err = pgxpool.ParseConfig(a.dsn)
-	if err != nil {
-		return errors.New("adapter postgres failed to parse config: " + err.Error())
+	if a.poolConfig, err = pgxpool.ParseConfig(a.dsn); err != nil {
+		return errors.New("postgres adapter failed to parse DSN: " + err.Error())
 	}
 
 	// ConnectConfig creates a new Pool and immediately establishes one connection.
@@ -535,7 +525,6 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Records of uploaded files.
 	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
-	// Using INDEX rather than FK on topic because it's either 'topics' or 'users' reference.
 	if _, err = tx.Exec(ctx,
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
