@@ -525,7 +525,6 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Records of uploaded files.
 	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
-	// Using INDEX rather than FK on topic because it's either 'topics' or 'users' reference.
 	if _, err = tx.Exec(ctx,
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
