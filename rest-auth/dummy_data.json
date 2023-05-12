@@ -126,5 +126,24 @@
     "tags": [
       "email:xena@example.com"
     ]
+  },
+  "xena1": {
+    "anon": "N",
+    "auth": "JRWPA",
+    "authlvl": "root",
+    "features": "V",
+    "password": "xena123",
+    "private": "",
+    "public": {
+      "fn": "Xena Peaceful Peasant",
+      "photo": {
+        "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAgACADASIAAhEBAxEB/8QAGAABAQEBAQAAAAAAAAAAAAAABgAEBQj/xAArEAABAwMCBAQHAAAAAAAAAAABAgMEAAUREjEGISJhNEFRcRQjJTJCQ4L/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8A9U1VUeukuRar/EffcUu1TMRVg7R3s/LX7LzoPfR6mgQ1Ue4fmSbvOl3FLhTavDxG88ncHre9ieSeyc/lyQ0FRTi36y43ww2fGtlyaobtRQcHHopZ6R/RH20rrM1GYakOvtstIfeADiwkBS8bZPnjJoOBwbIcYadsM7R8baghoEJwHmP1OgbcwMEDZST5YpRWZUZgy0yiy2ZSUFsO6RqCSQSnO+MgHHatNB//2Q==",
+        "type": "jpeg"
+      }
+    },
+    "tags": [
+      "email:xena@example.com"
+    ],
+    "uid": "bwRO4MaU280"
   }
 }

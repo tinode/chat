@@ -11,115 +11,142 @@ dummy_data = {}
 
 app = Flask(__name__)
 
+
 def parse_secret(ecoded_secret):
     secret = base64.b64decode(ecoded_secret)
-    return secret.split(':')
+    return secret.decode().split(":")
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    return 'Sample Tinode REST/JSON-RPC authentication service. '+\
-        'See <a href="https://github.com/tinode/chat/rest-auth/">https://github.com/tinode/chat/rest-auth/</a> for details.'
+    return (
+        "Sample Tinode REST/JSON-RPC authentication service. "
+        + 'See <a href="https://github.com/tinode/chat/rest-auth/">https://github.com/tinode/chat/rest-auth/</a> for details.'
+    )
 
-@app.route('/add', methods=['POST'])
+
+@app.route("/add", methods=["POST"])
 def add():
-    return jsonify({'err': 'unsupported'})
+    return jsonify({"err": "unsupported"})
 
-@app.route('/auth', methods=['POST'])
+
+@app.route("/auth", methods=["POST"])
 def auth():
     if not request.json:
-        return jsonify({'err': 'malformed'})
-    uname, password = parse_secret(request.json.get('secret'))
+        return jsonify({"err": "malformed"})
+    uname, password = parse_secret(request.json.get("secret"))
     if uname in dummy_data:
-        if dummy_data[uname]['password'] != password:
+        if dummy_data[uname]["password"] != password:
             # Wrong password
-            return jsonify({'err': 'failed'})
-        if 'uid' in dummy_data[uname]:
+            return jsonify({"err": "failed"})
+        if "uid" in dummy_data[uname]:
             # We have uname -> uid mapping
-            return jsonify({
-                'rec': {
-                    'uid': dummy_data[uname]['uid'],
-                    'authlvl': dummy_data[uname]['authlvl'],
-                    'features': dummy_data[uname]['features']
+            return jsonify(
+                {
+                    "rec": {
+                        "uid": dummy_data[uname]["uid"],
+                        "authlvl": dummy_data[uname]["authlvl"],
+                        "features": dummy_data[uname]["features"],
+                    }
                 }
-            })
+            )
         else:
             # This is the first login. Tell Tinode to create a new account.
-            return jsonify({
-                'rec': {
-                    'authlvl': dummy_data[uname]['authlvl'],
-                    'tags': dummy_data[uname]['tags'],
-                    'features': dummy_data[uname]['features']
-                },
-                'newacc': {
-                    'auth': dummy_data[uname]['auth'],
-                    'anon': dummy_data[uname]['anon'],
-                    'public': dummy_data[uname]['public'],
-                    'private': dummy_data[uname]['private']
+            return jsonify(
+                {
+                    "rec": {
+                        "authlvl": dummy_data[uname]["authlvl"],
+                        "tags": dummy_data[uname]["tags"],
+                        "features": dummy_data[uname]["features"],
+                    },
+                    "newacc": {
+                        "auth": dummy_data[uname]["auth"],
+                        "anon": dummy_data[uname]["anon"],
+                        "public": dummy_data[uname]["public"],
+                        "private": dummy_data[uname]["private"],
+                    },
                 }
-            })
-        return jsonify({'err': 'unsupported'})
+            )
+        return jsonify({"err": "unsupported"})
     else:
-        return jsonify({'err': 'not found'})
+        return jsonify({"err": "not found"})
 
-@app.route('/checkunique', methods=['POST'])
+
+@app.route("/checkunique", methods=["POST"])
 def checkunique():
-    return jsonify({'err': 'unsupported'})
+    return jsonify({"err": "unsupported"})
 
-@app.route('/del', methods=['POST'])
+
+@app.route("/del", methods=["POST"])
 def xdel():
-    return jsonify({'err': 'unsupported'})
+    return jsonify({"err": "unsupported"})
 
-@app.route('/gen', methods=['POST'])
+
+@app.route("/gen", methods=["POST"])
 def gen():
-    return jsonify({'err': 'unsupported'})
+    return jsonify({"err": "unsupported"})
 
-@app.route('/link', methods=['POST'])
+
+@app.route("/link", methods=["POST"])
 def link():
     if not request.json:
-        return jsonify({'err': 'malformed'})
+        return jsonify({"err": "malformed"})
 
-    rec = request.json.get('rec', None)
-    secret = request.json.get('secret', '')
-    if not rec or not rec['uid'] or not secret:
-        return jsonify({'err': 'malformed'})
+    rec = request.json.get("rec", None)
+    secret = request.json.get("secret", "")
+    if not rec or not rec["uid"] or not secret:
+        return jsonify({"err": "malformed"})
 
     # Save the link account <-> secret to database.
     uname, password = parse_secret(secret)
     if uname not in dummy_data:
         # Unknown user name
-        return jsonify({'err': 'not found'})
-    if 'uid' in dummy_data[uname]:
+        return jsonify({"err": "not found"})
+    if "uid" in dummy_data[uname]:
         # Already linked
-        return jsonify({'err': 'duplicate value'})
+        return jsonify({"err": "duplicate value"})
 
     # Save updated data to file
-    dummy_data[uname]['uid'] = rec['uid']
-    with open('dummy_data.json', 'w') as outfile:
+    dummy_data[uname]["uid"] = rec["uid"]
+    with open("dummy_data.json", "w") as outfile:
         json.dump(dummy_data, outfile, indent=2, sort_keys=True)
 
     # Success
     return jsonify({})
 
-@app.route('/upd', methods=['POST'])
-def upd():
-    return jsonify({'err': 'unsupported'})
 
-@app.route('/rtagns', methods=['POST'])
+@app.route("/upd", methods=["POST"])
+def upd():
+    return jsonify({"err": "unsupported"})
+
+
+@app.route("/rtagns", methods=["POST"])
 def rtags():
     # Return dummy namespace "rest" and "email", let client check logins by regular expression.
-    return jsonify({'strarr': ['rest', 'email'], 'byteval': base64.b64encode('^[a-z0-9_]{3,8}$')})
+    data = base64.b64encode("^[a-z0-9_]{3,8}$".encode("utf-8")).decode()
+    v = jsonify(
+        {
+            "strarr": ["rest", "email"],
+            "byteval": data,
+        }
+    )
+    print(v)
+    return v
+
 
 @app.errorhandler(404)
 def not_found(error):
-    return make_response(jsonify({'err': 'not found'}), 404)
+    return make_response(jsonify({"err": "not found"}), 404)
+
 
 @app.errorhandler(405)
 def not_found(error):
-    return make_response(jsonify({'err': 'method not allowed'}), 405)
+    return make_response(jsonify({"err": "method not allowed"}), 405)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Load previously saved dummy data. Dummy data contains
     # tinode user id <-> user name mapping and data for account creation.
-    with open('dummy_data.json') as infile:
+    with open("dummy_data.json") as infile:
         dummy_data = json.load(infile)
     app.run(debug=True)
