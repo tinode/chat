@@ -19,12 +19,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
 
-func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
+type fileResponseWriter func(msg *ServerComMessage, err error)
+
+func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.Store.GetMediaHandler()
@@ -142,8 +145,8 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	logs.Info.Println("media serve: OK, uid=", uid)
 }
 
-// largeFileReceive receives files from client over HTTP(S) and passes them to the configured media handler.
-func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
+// largeFileReceiveHTTP receives files from client over HTTP(S) and passes them to the configured media handler.
+func largeFileReceiveHTTP(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.Store.GetMediaHandler()
@@ -314,6 +317,191 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 
 	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
 	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location)
+}
+
+// LargeFileServe is the gRPC equivalent of largeFileServeHTTP.
+func (*grpcNodeServer) LargeFileServe(req *pbx.FileReq, stream pbx.Node_LargeFileServeServer) error {
+	now := types.TimeNow()
+
+	writeResponse := func(msg *ServerComMessage, err error) {
+		stream.Send(msg.Ctrl)
+		if err != nil {
+			logs.Info.Println("media serve:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		}
+	}
+
+	msgID := req.GetId()
+
+	// Check authorization: either auth information or SID must be present
+	uid, challenge, err := authHttpRequest(req)
+	if err != nil {
+		writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		return nil
+	}
+
+	if challenge != nil {
+		writeResponse(InfoChallenge(msgID, now, challenge), nil)
+		return nil
+	}
+
+	if uid.IsZero() {
+		// Not authenticated
+		writeResponse(ErrAuthRequired(msgID, "", now, now), errors.New("user not authenticated"))
+		return nil
+	}
+
+	// Check if media handler redirects or adds headers.
+	mh := store.Store.GetMediaHandler()
+	headers, statusCode, err := mh.Headers(req, true)
+	if err != nil {
+		writeResponse(decodeStoreError(err, "", now, nil), err)
+		return nil
+	}
+
+	for name, values := range headers {
+		for _, value := range values {
+			wrt.Header().Add(name, value)
+		}
+	}
+
+	if statusCode != 0 {
+		// The handler requested to terminate further processing.
+		wrt.WriteHeader(statusCode)
+		if req.Method == http.MethodGet {
+			enc.Encode(&ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Code:      statusCode,
+					Text:      http.StatusText(statusCode),
+					Timestamp: now,
+				},
+			})
+		}
+		logs.Info.Println("media serve: completed with status", statusCode, "uid=", uid)
+	}
+
+	fd, rsc, err := mh.Download(req.URL.String())
+	if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
+		return
+	}
+
+	defer rsc.Close()
+
+	wrt.Header().Set("Content-Type", fd.MimeType)
+	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+		wrt.Header().Set("Content-Disposition", "attachment")
+	}
+	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
+
+	logs.Info.Println("media serve: OK, uid=", uid)
+
+	chunk := &pbx.File{Content: make([]byte, 1024*1024*2)}
+	var n int
+
+	for {
+		n, err = rsc.Read(chunk.Content)
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+		chunk.Content = chunk.Content[:n]
+		if err = stream.Send(chunk); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LargeFileReceive is the gRPC equivalent of LargeFileReceiveHTTP.
+func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) error {
+	now := types.TimeNow()
+
+	writeResponse := func(msg *ServerComMessage, err error) {
+		stream.Send(msg.Ctrl)
+		if err != nil {
+			logs.Info.Println("media receive:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
+		}
+	}
+
+	req, err := stream.Recv()
+	if err == nil {
+	}
+
+	msgID := req.GetId()
+
+	// Check authorization: either auth information or SID must be present
+	uid, challenge, err := authHttpRequest(req)
+	if err != nil {
+		writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		return nil
+	}
+
+	if challenge != nil {
+		writeResponse(InfoChallenge(msgID, now, challenge), nil)
+		return nil
+	}
+
+	if uid.IsZero() {
+		// Not authenticated
+		writeResponse(ErrAuthRequired(msgID, "", now, now), errors.New("user not authenticated"))
+		return nil
+	}
+
+	// Check if uploads are handled elsewhere.
+	headers, statusCode, err := mh.Headers(req, false)
+	if err != nil {
+		logs.Info.Println("media upload: headers check failed", err)
+		writeResponse(decodeStoreError(err, "", now, nil), err)
+		return
+	}
+
+	for name, values := range headers {
+		for _, value := range values {
+			wrt.Header().Add(name, value)
+		}
+	}
+
+	fdef := &types.FileDef{
+		ObjHeader: types.ObjHeader{
+			Id: store.Store.GetUidString(),
+		},
+		User:     uid.String(),
+		MimeType: req.MimeType,
+		Size:     0,
+	}
+	fdef.InitTimes()
+
+	reader, writer := io.Pipe()
+	url, size, err := mh.Upload(fdef, reader)
+	if err != nil {
+		logs.Info.Println("media upload: failed", file, "key", fdef.Location, err)
+		store.Files.FinishUpload(fdef, false, 0)
+		writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		return
+	}
+
+	done := make(chan error)
+	go func() {
+		for {
+			if req, err := stream.Recv(); err == nil {
+				chunk := req.GetContent()
+				if _, err := writer.Write(chunk); err != nil {
+					done <- err
+					break
+				}
+			} else {
+				if err == io.EOF {
+					err = nil
+				}
+				done <- err
+				break
+			}
+		}
+	}()
+	return stream.SendAndClose(&pbx.FileResp{Name: fileName, Size: fileSize})
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
