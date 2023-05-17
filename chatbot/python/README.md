@@ -117,3 +117,14 @@ You may replace the `:latest` with a different tag. See all available tags here:
  * [Chatbot tags](https://hub.docker.com/r/tinode/chatbot/tags/)
 
 In general try to use docker images all with the same tag.
+
+
+## 笔记
+根据脚本`../../pbx/py-generate`生成`../../py_gprc/tinode_grpc`python的pb协议，迁移到当前目录下
+执行启动
+这里的作用是将alice用户设为机器人
+```
+python chatbot.py --login-basic=alice:alice123 
+```
+`http://localhost:6060`登陆用户`alice:alice123`
+登陆其他用户发话给alice，则会通过grpc调用来到当前服务，随机获取`quotes.txt`的文本进行响应,已达到机器的效果

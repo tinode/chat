@@ -38,3 +38,6 @@ Copy `API key` to the client applications:
  * Tinodious: `kApiKey` in [SharedUtils.swift](https://github.com/tinode/ios/blob/master/TinodiosDB/SharedUtils.swift)
 
 Rebuild the clients after changing the API key.
+
+## 笔记
+通过自定义规则key的格式，生成base64编码key，根据解析key可得到相关自定义数据，可以应用在鉴权场景

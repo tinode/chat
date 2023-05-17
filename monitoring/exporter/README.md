@@ -67,3 +67,17 @@ Run Prometheus Exporter as
 
 This exporter will serve data at path /metrics, on port 6222.
 Once running, configure your Prometheus monitoring installation to collect data from this exporter.
+
+
+## 笔记
+启动tinode服务
+启动监控服务./exporter \              
+    --serve_for=prometheus \
+    --tinode_addr=http://localhost:6060/debug/vars \
+    --listen_at=:6222 \
+    --instance=exp-0 \
+    --prom_namespace=tinode \
+    --prom_metrics_path=/metrics \
+    --prom_timeout=15
+localhost:6222 查看信息
+启动prometheus配置localhost:6222/metrics服务,在Prometheus中可以查看监控收集的信息, 后续可以通过grafana配置可视化

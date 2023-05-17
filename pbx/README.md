@@ -21,3 +21,7 @@ To generate `Python` bindings:
 ```
 python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/model.proto
 ```
+
+## 笔记
+`go-generate.sh` 根据proto协议生成对应的go文件
+`py-generate.sh` 根据proto协议生成对应的python文件，并使用`py_fix`修改文件头部信息
