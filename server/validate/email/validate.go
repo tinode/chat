@@ -311,12 +311,9 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, params map[string]interface{}) error {
+func (v *validator) ResetSecret(email, scheme, lang string, code []byte, params map[string]interface{}) error {
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
-
-	token := make([]byte, base64.StdEncoding.EncodedLen(len(tmpToken)))
-	base64.StdEncoding.Encode(token, tmpToken)
 
 	var template *textt.Template
 	if v.langMatcher != nil {
@@ -334,7 +331,8 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 
 	content, err := validate.ExecuteTemplate(template, templateParts, map[string]interface{}{
 		"Login":   login,
-		"Token":   url.QueryEscape(string(token)),
+		"Code":    string(code),
+		"Cred":    email,
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl})
 	if err != nil {
@@ -392,12 +390,11 @@ func (v *validator) Remove(user t.Uid, value string) error {
 
 // TempAuthScheme returns a temporary authentication method used by this validator.
 func (v *validator) TempAuthScheme() (string, error) {
-	return "token", nil
+	return "code", nil
 }
 
 // SendMail replacement
 func (v *validator) sendMail(rcpt []string, msg []byte) error {
-
 	client, err := smtp.Dial(v.SMTPAddr + ":" + v.SMTPPort)
 	if err != nil {
 		return err
