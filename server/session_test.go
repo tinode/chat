@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
@@ -14,6 +16,24 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+func TestXxx(t *testing.T) {
+	ip := net.ParseIP("193.23.1.254")
+	for _, cidr := range []string{
+		// "10.0.0.0/8",     // RFC1918
+		// "172.16.0.0/12",  // RFC1918
+		"0.0.0.0/0", // RFC1918
+		// "fc00::/7",       // RFC4193, IPv6 unique local addr
+	} {
+		_, block, _ := net.ParseCIDR(cidr)
+		privateIPBlocks = append(privateIPBlocks, block)
+	}
+
+	for _, block := range privateIPBlocks {
+		if block.Contains(ip) {
+			fmt.Println(true)
+		}
+	}
+}
 func TestDispatchHello(t *testing.T) {
 	s := &Session{
 		send:    make(chan any, 10),
