@@ -872,7 +872,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 	if !newAcc && msg.Acc.TmpScheme != "" {
 		if !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.Timestamp))
-			logs.Warn.Println("s.acc: got token while already authenticated", s.sid)
+			logs.Warn.Println("s.acc: got temp auth while already authenticated", s.sid)
 			return
 		}
 
@@ -981,7 +981,7 @@ func (s *Session) login(msg *ClientComMessage) {
 // for example: "basic:email:alice@example.com".
 func (s *Session) authSecretReset(params []byte) error {
 	var authScheme, credMethod, credValue string
-	if parts := strings.Split(string(params), ":"); len(parts) == 3 {
+	if parts := strings.Split(string(params), ":"); len(parts) >= 3 {
 		authScheme, credMethod, credValue = parts[0], parts[1], parts[2]
 	} else {
 		return types.ErrMalformed
