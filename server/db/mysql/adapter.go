@@ -3445,7 +3445,7 @@ func (a *adapter) PCacheDelete(key string) error {
 		defer cancel()
 	}
 
-	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key`=?")
+	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key`=?", key)
 	return err
 }
 
