@@ -255,7 +255,7 @@ func (v *validator) TempAuthScheme() (string, error) {
 
 // Implement sending the SMS.
 func (*validator) send(to, body string) error {
-	logs.Info.Println("Send SMS, To:", to, "; Text:", body)
+	logs.Info.Println("Send SMS, To:", to, "\nText:", body)
 	return nil
 }
 

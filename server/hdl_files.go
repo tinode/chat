@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -76,7 +77,8 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check authorization: either auth information or SID must be present
-	uid, challenge, err := authHttpRequest(req)
+	authMethod, secret := getHttpAuth(req)
+	uid, challenge, err := authFileRequest(authMethod, secret, req.FormValue("sid"))
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
@@ -202,7 +204,8 @@ func largeFileReceiveHTTP(wrt http.ResponseWriter, req *http.Request) {
 
 	msgID := req.FormValue("id")
 	// Check authorization: either auth information or SID must be present
-	uid, challenge, err := authHttpRequest(req)
+	authMethod, secret := getHttpAuth(req)
+	uid, challenge, err := authFileRequest(authMethod, secret, req.FormValue("sid"))
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, msgID, now, nil), err)
 		return
@@ -320,11 +323,11 @@ func largeFileReceiveHTTP(wrt http.ResponseWriter, req *http.Request) {
 }
 
 // LargeFileServe is the gRPC equivalent of largeFileServeHTTP.
-func (*grpcNodeServer) LargeFileServe(req *pbx.FileReq, stream pbx.Node_LargeFileServeServer) error {
+func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_LargeFileServeServer) error {
 	now := types.TimeNow()
 
 	writeResponse := func(msg *ServerComMessage, err error) {
-		stream.Send(msg.Ctrl)
+		stream.Send(&pbx.FileDownResp{Ctrl: pbServCtrlSerializeBasic(msg.Ctrl)})
 		if err != nil {
 			logs.Info.Println("media serve:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
 		}
@@ -332,8 +335,9 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileReq, stream pbx.Node_LargeFil
 
 	msgID := req.GetId()
 
-	// Check authorization: either auth information or SID must be present
-	uid, challenge, err := authHttpRequest(req)
+	// Check authorization: auth information must be present (SID is not user for gRPC).
+	authMethod, secret := req.Auth.Method, req.Auth.Secret
+	uid, challenge, err := authFileRequest(authMethod, secret, "")
 	if err != nil {
 		writeResponse(decodeStoreError(err, msgID, now, nil), err)
 		return nil
@@ -379,10 +383,10 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileReq, stream pbx.Node_LargeFil
 		logs.Info.Println("media serve: completed with status", statusCode, "uid=", uid)
 	}
 
-	fd, rsc, err := mh.Download(req.URL.String())
+	fd, rsc, err := mh.Download(req.GetUri())
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
-		return
+		writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		return nil
 	}
 
 	defer rsc.Close()
@@ -418,9 +422,10 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileReq, stream pbx.Node_LargeFil
 // LargeFileReceive is the gRPC equivalent of LargeFileReceiveHTTP.
 func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) error {
 	now := types.TimeNow()
+	mh := store.Store.GetMediaHandler()
 
 	writeResponse := func(msg *ServerComMessage, err error) {
-		stream.Send(msg.Ctrl)
+		stream.SendAndClose(&pbx.FileUpResp{Ctrl: pbServCtrlSerializeBasic(msg.Ctrl)})
 		if err != nil {
 			logs.Info.Println("media receive:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
 		}
@@ -432,8 +437,9 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 
 	msgID := req.GetId()
 
-	// Check authorization: either auth information or SID must be present
-	uid, challenge, err := authHttpRequest(req)
+	// Check authorization: auth information must be present (SID is not user for gRPC).
+	authMethod, secret := req.Auth.Method, req.Auth.Secret
+	uid, challenge, err := authFileRequest(authMethod, secret, "")
 	if err != nil {
 		writeResponse(decodeStoreError(err, msgID, now, nil), err)
 		return nil
@@ -455,13 +461,29 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	if err != nil {
 		logs.Info.Println("media upload: headers check failed", err)
 		writeResponse(decodeStoreError(err, "", now, nil), err)
-		return
+		return nil
 	}
 
 	for name, values := range headers {
 		for _, value := range values {
 			wrt.Header().Add(name, value)
 		}
+	}
+
+	if statusCode != 0 {
+		// The handler requested to terminate further processing.
+		wrt.WriteHeader(statusCode)
+		if req.Method == http.MethodPost || req.Method == http.MethodPut {
+			enc.Encode(&ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Code:      statusCode,
+					Text:      http.StatusText(statusCode),
+					Timestamp: now,
+				},
+			})
+		}
+		logs.Info.Println("media upload: completed with status", statusCode)
+		return
 	}
 
 	fdef := &types.FileDef{
@@ -480,7 +502,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		logs.Info.Println("media upload: failed", file, "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
 		writeResponse(decodeStoreError(err, msgID, now, nil), err)
-		return
+		return nil
 	}
 
 	done := make(chan error)
@@ -501,7 +523,16 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 			}
 		}
 	}()
-	return stream.SendAndClose(&pbx.FileResp{Name: fileName, Size: fileSize})
+
+	return stream.SendAndClose(&pbx.FileUpResp{
+		Ctrl: pbServCtrlSerializeBasic(NoErr(msgID, "", now).Ctrl),
+		Meta: &pbx.FileMeta{
+			Name:     fileName,
+			MimeType: "",
+			Etag:     "",
+			Size:     fileSize,
+		},
+	})
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
@@ -527,4 +558,38 @@ func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- b
 	}()
 
 	return stop
+}
+
+// Authenticate non-websocket HTTP request
+func authFileRequest(authMethod, secret, sid string) (types.Uid, []byte, error) {
+	var uid types.Uid
+	if authMethod != "" {
+		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
+		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
+		if err != nil {
+			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
+			return uid, nil, types.ErrMalformed
+		}
+
+		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
+			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n], getRemoteAddr(req))
+			if err != nil {
+				return uid, nil, err
+			}
+			if challenge != nil {
+				return uid, challenge, nil
+			}
+			uid = rec.Uid
+		} else {
+			logs.Info.Println("media: unknown auth method", authMethod)
+			return uid, nil, types.ErrMalformed
+		}
+	} else {
+		// Find the session, make sure it's appropriately authenticated.
+		sess := globals.sessionStore.Get(sid)
+		if sess != nil {
+			uid = sess.uid
+		}
+	}
+	return uid, nil, nil
 }

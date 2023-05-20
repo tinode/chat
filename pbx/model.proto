@@ -591,6 +591,11 @@ message MessageEvent {
 
 // Large file handling.
 
+message Auth {
+	string method = 1;
+	string secret = 2;
+}
+
 // File description.
 message FileMeta {
 	string name = 1;
@@ -603,12 +608,14 @@ message FileMeta {
 message FileUpReq {
 	// Request ID.
 	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
 	// The topic this upload belongs to.
-	string topic = 2;
+	string topic = 3;
 	// Uploaded metadata.
-	FileMeta meta = 3;
+	FileMeta meta = 4;
 	// File bytes being uploaded.
-	bytes content = 4;
+	bytes content = 5;
 }
 
 // Response to file upload.
@@ -621,10 +628,12 @@ message FileUpResp {
 message FileDownReq {
 	// Request ID
 	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
 	// File URI to download.
-	string uri = 2;
+	string uri = 3;
 	// ETag
-	string if_modified = 3;
+	string if_modified = 4;
 }
 
 // Response to file download.

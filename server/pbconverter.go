@@ -11,7 +11,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
+func pbServCtrlSerializeBasic(ctrl *MsgServerCtrl) *pbx.ServerCtrl {
 	var params map[string][]byte
 	if ctrl.Params != nil {
 		if in, ok := ctrl.Params.(map[string]any); ok {
@@ -19,14 +19,18 @@ func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
 		}
 	}
 
+	return &pbx.ServerCtrl{
+		Id:     ctrl.Id,
+		Topic:  ctrl.Topic,
+		Code:   int32(ctrl.Code),
+		Text:   ctrl.Text,
+		Params: params,
+	}
+}
+
+func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
 	return &pbx.ServerMsg_Ctrl{
-		Ctrl: &pbx.ServerCtrl{
-			Id:     ctrl.Id,
-			Topic:  ctrl.Topic,
-			Code:   int32(ctrl.Code),
-			Text:   ctrl.Text,
-			Params: params,
-		},
+		Ctrl: pbServCtrlSerializeBasic(ctrl),
 	}
 }
 

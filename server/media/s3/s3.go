@@ -157,8 +157,10 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 		return nil, 0, nil
 	}
 
-	if headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve); status != 0 {
-		return headers, status, nil
+	if req.Method == http.MethodOptions {
+		if headers, status := media.CORSHandler(req.Header, ah.conf.CorsOrigins, serve); status != 0 {
+			return headers, status, nil
+		}
 	}
 
 	fid := ah.GetIdFromUrl(req.URL.String())

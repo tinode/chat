@@ -60,7 +60,11 @@ func (fh *fshandler) Init(jsconf string) error {
 
 // Headers is used for serving CORS headers.
 func (fh *fshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-	header, status := media.CORSHandler(req, fh.corsOrigins, serve)
+	if req.Method != http.MethodOptions {
+		// Not an OPTIONS request. No special handling for all other requests.
+		return nil, 0, nil
+	}
+	header, status := media.CORSHandler(req.Header, fh.corsOrigins, serve)
 	return header, status, nil
 }
 
