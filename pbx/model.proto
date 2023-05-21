@@ -620,8 +620,15 @@ message FileUpReq {
 
 // Response to file upload.
 message FileUpResp {
-	ServerCtrl ctrl = 1;
-	FileMeta meta = 2;
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// New upload location.
+	string redir_url = 5;
 }
 
 // File download request.
@@ -638,12 +645,15 @@ message FileDownReq {
 
 // Response to file download.
 message FileDownResp {
-	ServerCtrl ctrl = 1;
-	FileMeta meta = 2;
-	oneof Message {
-		// File bytes.
-		bytes content = 3;
-		// File location.
-		string redir_url = 4;
-	}
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// File location.
+	string redir_url = 5;
+	// File bytes.
+	bytes content = 6;
 }

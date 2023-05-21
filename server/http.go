@@ -347,6 +347,21 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 	return
 }
 
+// Obtain IP address of the client.
+func getRemoteAddr(req *http.Request) string {
+	var addr string
+	if globals.useXForwardedFor {
+		addr = req.Header.Get("X-Forwarded-For")
+		if !isRoutableIP(addr) {
+			addr = ""
+		}
+	}
+	if addr != "" {
+		return addr
+	}
+	return req.RemoteAddr
+}
+
 // debugSession is session debug info.
 type debugSession struct {
 	RemoteAddr string   `json:"remote_addr,omitempty"`
