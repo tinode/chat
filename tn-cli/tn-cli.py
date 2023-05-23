@@ -685,11 +685,19 @@ def fileDownload(id, cmd, args):
 
     # Call the server
     stream = pbx.NodeStub(tn_globals.Connection).LargeFileServe(req)
-    print("got stream:", stream)
     # Read file chunks
+    fd = None
     for chunk in stream:
         if chunk:
-            print("Got chunk", chunk)
+            if chunk.code >= 400:
+                stdoutln("Failed to download '{0}': {1} {2}".format(cmd.filename, chunk.code, chunk.text))
+                break
+            if chunk.code >= 300:
+                stdoutln("Use HTTP {0} to download from {1}".format(chunk.code, chunk.redir_url))
+                break
+            if not fd:
+                fd = open(chunk.meta.name, mode='wb')
+            fd.write(chunk.content)
             continue
 
 # Given an array of parts, parse commands and arguments
