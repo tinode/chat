@@ -13,7 +13,7 @@ USAGE="Usage: $0 [ --config <path_to_tinode.conf> ] {start|stop}"
 
 # Your server binary may have a different name and location.
 SERVER='./server'
-
+# '$#' 标识参数个数 lt=小于
 if [ "$#" -lt "1" ]; then
   echo $USAGE
   exit 1
@@ -21,7 +21,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
   key="$1"
-  shift
+  shift # shift 是 Shell 中的一个命令，它的作用是将命令行参数向左移动一个位置。这意味着原来的 $2 变量现在变成了 $1，原来的 $3 变成了 $2，以此类推。同时，$0 会保持原样，因为它代表了脚本的名称或者命令的名称。当 shift 命令没有参数时，它默认向左移动一个位置。shift 命令通常在 Shell 脚本中用来迭代或遍历所有命令行参数。
   echo "$key"
   case "$key" in
     -c|--config)
