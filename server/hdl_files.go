@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -338,7 +339,7 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 	msgID := req.GetId()
 
 	// Check authorization: auth information must be present (SID is not user for gRPC).
-	authMethod, secret := req.Auth.Method, req.Auth.Secret
+	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -375,6 +376,7 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 		resp.Code = int32(statusCode)
 		resp.Text = http.StatusText(statusCode)
 		resp.RedirUrl = headers.Get("Location")
+		stream.Send(&resp)
 		logs.Info.Println("media serve: completed with status", statusCode, "uid=", uid)
 		return nil
 	}
@@ -430,13 +432,18 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	req, err := stream.Recv()
-	if err == nil {
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			writeResponse(ErrDisconnected("", "", now), err)
+		} else {
+			writeResponse(decodeStoreError(err, "", now, nil), err)
+		}
+		return nil
 	}
 
 	msgID := req.GetId()
-
 	// Check authorization: auth information must be present (SID is not user for gRPC).
-	authMethod, secret := req.Auth.Method, req.Auth.Secret
+	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -448,6 +455,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	if challenge != nil {
+		log.Println("3", err)
 		writeResponse(InfoChallenge(msgID, now, challenge), nil)
 		return nil
 	}
@@ -464,7 +472,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	headers, statusCode, err := mh.Headers(http.MethodPost, nil, http.Header{}, false)
 	if err != nil {
 		logs.Info.Println("media upload: headers check failed", err)
-		writeResponse(decodeStoreError(err, "", now, nil), err)
+		writeResponse(decodeStoreError(err, "", now, nil), nil)
 		return nil
 	}
 
@@ -496,16 +504,9 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	fdef.InitTimes()
 
 	reader, writer := io.Pipe()
-	url, size, err := mh.Upload(fdef, reader)
-	if err != nil {
-		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
-		store.Files.FinishUpload(fdef, false, 0)
-		writeResponse(decodeStoreError(err, msgID, now, nil), err)
-		return nil
-	}
-
-	done := make(chan error)
+	done := make(chan error, 1)
 	go func() {
+		defer writer.Close()
 		for {
 			if req, err := stream.Recv(); err == nil {
 				chunk := req.GetContent()
@@ -523,7 +524,15 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		}
 	}()
 
-	err = <-done
+	url, size, err := mh.Upload(fdef, reader)
+	if err != nil {
+		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
+		store.Files.FinishUpload(fdef, false, 0)
+		writeResponse(decodeStoreError(err, msgID, now, nil), nil)
+		return nil
+	}
+
+	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location)
 
 	return stream.SendAndClose(&pbx.FileUpResp{
 		Id:   msgID,

@@ -592,7 +592,7 @@ message MessageEvent {
 // Large file handling.
 
 message Auth {
-	string method = 1;
+	string scheme = 1;
 	string secret = 2;
 }
 

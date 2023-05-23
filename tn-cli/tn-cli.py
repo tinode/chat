@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "2.0.0b2" # format: 1.9.0b1
+APP_VERSION = "3.0.0b1" # format: 1.9.0b1
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -178,7 +178,7 @@ def attachment(filename):
     try:
         f = open(filename, 'rb')
         # Try to guess the mime type.
-        mimetype = mimetypes.guess_type(filename)
+        mimetype = mimetypes.guess_type(filename)[0]
         data = base64.b64encode(f.read())
         # python3 fix.
         if type(data) is not str:
@@ -651,6 +651,46 @@ def upload(id, cmd, args):
 
     return None
 
+def fileUpload(id, cmd, args):
+    def iter_file(filepath, size=1024*1024):
+        _, name = os.path.split(filepath)
+        mimeType = mimetypes.guess_type(filepath)[0]
+        with open(filepath, mode='rb') as fd:
+            try:
+                yield pb.FileUpReq(id=str(id), auth=pb.Auth(scheme='token', secret=tn_globals.AuthToken),
+                                   topic="", meta=pb.FileMeta(name=name, mime_type=mimeType, size=0))
+                while True:
+                    chunk = fd.read(size)
+                    if chunk:
+                        yield pb.FileUpReq(content=chunk)
+                    else:  # Finished.
+                        break
+            except Exception as ex:
+                stdoutln("Failed to read '{0}':".format(cmd.filename), ex)
+
+    try:
+        response = pbx.NodeStub(tn_globals.Connection).LargeFileReceive(iter_file(cmd.filename))
+        if response.code == 200:
+            stdoutln("Upload OK: '{0}' ({1}), size={2}"
+                     .format(response.meta.name, response.meta.mime_type, response.meta.size))
+        else:
+            stdoutln("Upload failed: {0} {1}".format(response.code, response.text))
+    except Exception as ex:
+        stdoutln("Failed to upload '{0}':".format(cmd.filename), ex)
+
+
+def fileDownload(id, cmd, args):
+    req = pb.FileDownReq(id=str(id), auth=pb.Auth(scheme='token', secret=tn_globals.AuthToken),
+                         uri=cmd.filename, if_modified="")
+
+    # Call the server
+    stream = pbx.NodeStub(tn_globals.Connection).LargeFileServe(req)
+    print("got stream:", stream)
+    # Read file chunks
+    for chunk in stream:
+        if chunk:
+            print("Got chunk", chunk)
+            continue
 
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
@@ -681,6 +721,24 @@ def parse_cmd(parts):
         parser.add_argument('--seq', default=None, help='"all" or a list of comma- and dash-separated message IDs to delete, e.g. "1,2,9-12"')
         parser.add_argument('--hard', action='store_true', help='request to hard-delete')
         parser.add_argument('--cred', help='credential to delete in method:value format, e.g. email:test@example.com, tel:12345')
+    elif parts[0] == "file":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Download or upload a large file')
+        parser.add_argument('--what', default='down', choices=['down', 'up'], help='download \'down\' or upload \'up\'')
+        parser.add_argument('filename', help='name of the file to upload')
+    elif parts[0] == "get":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to query')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to query')
+        parser.add_argument('--desc', action='store_true', help='query topic description')
+        parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
+        parser.add_argument('--tags', action='store_true', help='query topic tags')
+        parser.add_argument('--data', action='store_true', help='query topic messages')
+        parser.add_argument('--cred', action='store_true', help='query account credentials')
+    elif parts[0] == "leave":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to detach from')
+        parser.add_argument('--unsub', action='store_true', help='detach and unsubscribe from topic')
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
         parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='secret for authentication')
@@ -689,25 +747,14 @@ def parse_cmd(parts):
         parser.add_argument('--uname', default=None, help='user name in basic authentication scheme')
         parser.add_argument('--password', default=None, help='password in basic authentication scheme')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value:response format, e.g. email:test@example.com,tel:12345')
-    elif parts[0] == "sub":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Subscribe to topic')
-        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to subscribe to')
-        parser.add_argument('--topic', dest='topic', default=None, help='topic to subscribe to')
-        parser.add_argument('--fn', default=None, help='topic\'s user-visible name')
-        parser.add_argument('--photo', default=None, help='avatar file name')
-        parser.add_argument('--private', default=None, help='topic\'s private info')
-        parser.add_argument('--note', default=None, help='topic\'s description')
-        parser.add_argument('--trusted', default=None, help='trusted markers: verified, staff, danger')
-        parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
-        parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
-        parser.add_argument('--mode', default=None, help='new value of access mode')
-        parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
-        parser.add_argument('--get-query', default=None, help='query for topic metadata or messages, comma separated list without spaces')
-    elif parts[0] == "leave":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
-        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
-        parser.add_argument('--topic', dest='topic', default=None, help='topic to detach from')
-        parser.add_argument('--unsub', action='store_true', help='detach and unsubscribe from topic')
+    elif parts[0] == "note":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
+        parser.add_argument('topic', help='topic to notify')
+        parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['call', 'kp', 'read', 'recv'],
+            help='notification type: kp (key press), recv, read - message received or read receipt')
+        parser.add_argument('--seq', help='message ID being reported')
+        parser.add_argument('--event', help='video call event', choices=['accept', 'answer', 'ice-candidate', 'hang-up', 'offer', 'ringing'])
+        parser.add_argument('--payload', help='video call payload')
     elif parts[0] == "pub":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send message to topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to publish to')
@@ -718,15 +765,6 @@ def parse_cmd(parts):
         parser.add_argument('--drafty', help='structured message to send, e.g. drafty content')
         parser.add_argument('--image', help='image file to insert into message (not implemented yet)')
         parser.add_argument('--attachment', help='file to send as an attachment (not implemented yet)')
-    elif parts[0] == "get":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
-        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to query')
-        parser.add_argument('--topic', dest='topic', default=None, help='topic to query')
-        parser.add_argument('--desc', action='store_true', help='query topic description')
-        parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
-        parser.add_argument('--tags', action='store_true', help='query topic tags')
-        parser.add_argument('--data', action='store_true', help='query topic messages')
-        parser.add_argument('--cred', action='store_true', help='query account credentials')
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
         parser.add_argument('topic', help='topic to update')
@@ -742,16 +780,22 @@ def parse_cmd(parts):
         parser.add_argument('--mode', help='new value of access mode')
         parser.add_argument('--tags', help='tags for topic discovery, comma separated list without spaces')
         parser.add_argument('--cred', help='credential to add in method:value format, e.g. email:test@example.com, tel:12345')
-    elif parts[0] == "note":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
-        parser.add_argument('topic', help='topic to notify')
-        parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['call', 'kp', 'read', 'recv'],
-            help='notification type: kp (key press), recv, read - message received or read receipt')
-        parser.add_argument('--seq', help='message ID being reported')
-        parser.add_argument('--event', help='video call event', choices=['accept', 'answer', 'ice-candidate', 'hang-up', 'offer', 'ringing'])
-        parser.add_argument('--payload', help='video call payload')
+    elif parts[0] == "sub":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Subscribe to topic')
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to subscribe to')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to subscribe to')
+        parser.add_argument('--fn', default=None, help='topic\'s user-visible name')
+        parser.add_argument('--photo', default=None, help='avatar file name')
+        parser.add_argument('--private', default=None, help='topic\'s private info')
+        parser.add_argument('--note', default=None, help='topic\'s description')
+        parser.add_argument('--trusted', default=None, help='trusted markers: verified, staff, danger')
+        parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
+        parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
+        parser.add_argument('--mode', default=None, help='new value of access mode')
+        parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
+        parser.add_argument('--get-query', default=None, help='query for topic metadata or messages, comma separated list without spaces')
     elif parts[0] == "upload":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band')
+        parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band over HTTP(S)')
         parser.add_argument('filename', help='name of the file to upload')
     elif macros:
         parser = macros.parse_macro(parts)
@@ -824,6 +868,7 @@ def parse_input(cmd):
         printout("\t.verbose\t- toggle logging verbosity on/off")
         printout("\tacc\t\t- create or alter an account")
         printout("\tdel\t\t- delete message(s), topic, subscription, or user")
+        printout("\tfile\t\t- download or upload a large file")
         printout("\tget\t\t- query topic for metadata or messages")
         printout("\tleave\t\t- detach or unsubscribe from topic")
         printout("\tlogin\t\t- authenticate current session")
@@ -831,7 +876,7 @@ def parse_input(cmd):
         printout("\tpub\t\t- post message to topic")
         printout("\tset\t\t- update topic metadata")
         printout("\tsub\t\t- subscribe to topic")
-        printout("\tupload\t\t- upload file out of band")
+        printout("\tupload\t\t- upload file out of band over HTTP(S)")
         printout("\tusermod\t\t- modify user account")
         printout("\n\tType <command> -h for help")
 
@@ -875,8 +920,16 @@ def serialize_cmd(string, id, args):
         if cmd == None:
             return None, None
 
+        elif cmd.cmd == "file":
+            # Start async upload
+            target = fileUpload if cmd.what == 'up' else fileDownload
+            upload_thread = threading.Thread(target=target, args=(id, derefVals(cmd), args), name="file_"+cmd.filename)
+            upload_thread.start()
+            cmd.no_yield = True
+            return True, cmd
+
         # Process dictionary
-        if cmd.cmd == ".log":
+        elif cmd.cmd == ".log":
             stdoutln(getVar(cmd.varname))
             return None, None
 
@@ -1050,23 +1103,22 @@ def handle_ctrl(ctrl):
     topic = " (" + str(ctrl.topic) + ")" if ctrl.topic else ""
     stdoutln("\r<= " + str(ctrl.code) + " " + ctrl.text + topic)
 
-
 # The main processing loop: send messages to server, receive responses.
 def run(args, schema, secret):
     failed = False
     try:
         if tn_globals.IsInteractive:
             tn_globals.Prompt = PromptSession()
-        # Create secure channel with default credentials.
-        channel = None
+        # Create channel with default credentials.
+        tn_globals.Connection = None
         if args.ssl:
             opts = (('grpc.ssl_target_name_override', args.ssl_host),) if args.ssl_host else None
-            channel = grpc.secure_channel(args.host, grpc.ssl_channel_credentials(), opts)
+            tn_globals.Connection = grpc.secure_channel(args.host, grpc.ssl_channel_credentials(), opts)
         else:
-            channel = grpc.insecure_channel(args.host)
+            tn_globals.Connection = grpc.insecure_channel(args.host)
 
         # Call the server
-        stream = pbx.NodeStub(channel).MessageLoop(gen_message(schema, secret, args))
+        stream = pbx.NodeStub(tn_globals.Connection).MessageLoop(gen_message(schema, secret, args))
 
         # Read server responses
         for msg in stream:
@@ -1104,7 +1156,7 @@ def run(args, schema, secret):
                 stdoutln(json.loads(msg.data.content))
 
             elif msg.HasField("pres"):
-                # 'ON', 'OFF', 'UA', 'UPD', 'GONE', 'ACS', 'TERM', 'MSG', 'READ', 'RECV', 'DEL', 'TAGS'
+                # 'ON', 'OFF', 'UA', 'UPD', 'GONE', 'ACS', 'TERM', 'MSG', 'READ', 'RECV', 'DEL', 'TAGS', 'AUX'
                 what = pb.ServerPres.What.Name(msg.pres.what)
                 stdoutln("\r<= pres " + what + " " + msg.pres.topic)
 
@@ -1112,7 +1164,8 @@ def run(args, schema, secret):
                 switcher = {
                     pb.READ: 'READ',
                     pb.RECV: 'RECV',
-                    pb.KP: 'KP'
+                    pb.KP: 'KP',
+                    pb.CALL: 'CALL'
                 }
                 stdoutln("\rMessage #" + str(msg.info.seq_id) + " " + switcher.get(msg.info.what, "unknown") +
                     " by " + msg.info.from_user_id + "; topic=" + msg.info.topic + " (" + msg.topic + ")")
@@ -1129,7 +1182,7 @@ def run(args, schema, secret):
         failed = True
     finally:
         printout('Shutting down...')
-        channel.close()
+        tn_globals.Connection.close()
         if tn_globals.InputThread != None:
             tn_globals.InputThread.join(0.3)
 
