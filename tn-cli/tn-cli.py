@@ -699,6 +699,8 @@ def fileDownload(id, cmd, args):
                 fd = open(chunk.meta.name, mode='wb')
             fd.write(chunk.content)
             continue
+    if fd:
+        fd.close()
 
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
