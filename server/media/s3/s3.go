@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -27,10 +29,12 @@ import (
 )
 
 const (
-	defaultServeURL = "/v0/file/s/"
-	handlerName     = "s3"
+	defaultServeURL     = "/v0/file/s/"
+	defaultCacheControl = "no-cache, must-revalidate"
+
+	handlerName = "s3"
 	// Presign GET URLs for this number of seconds.
-	presignDuration = 120
+	defaultPresignDuration = 120
 )
 
 type awsconfig struct {
@@ -43,6 +47,8 @@ type awsconfig struct {
 	BucketName      string   `json:"bucket"`
 	CorsOrigins     []string `json:"cors_origins"`
 	ServeURL        string   `json:"serve_url"`
+	PresignTTL      int      `json:"presign_ttl"`
+	CacheControl    string   `json:"cache_control"`
 }
 
 type awshandler struct {
@@ -83,7 +89,12 @@ func (ah *awshandler) Init(jsconf string) error {
 	if ah.conf.BucketName == "" {
 		return errors.New("missing Bucket")
 	}
-
+	if ah.conf.PresignTTL <= 0 {
+		ah.conf.PresignTTL = defaultPresignDuration
+	}
+	if ah.conf.CacheControl == "" {
+		ah.conf.CacheControl = defaultCacheControl
+	}
 	if ah.conf.ServeURL == "" {
 		ah.conf.ServeURL = defaultServeURL
 	}
@@ -152,20 +163,18 @@ func (ah *awshandler) Init(jsconf string) error {
 	return err
 }
 
-// Headers redirects GET, HEAD requests to the AWS server.
+// Headers manages CORS, checks cache, and redirects GET, HEAD requests to the AWS server.
 func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
 	switch method {
-	case http.MethodOptions, http.MethodHead, http.MethodGet:
-		// Handling these methods.
+	case http.MethodGet, http.MethodHead:
+		// Handling only GET, HEAD & OPTIONS methods.
 		break
-	default:
-		return nil, 0, nil
-	}
-
-	if method == http.MethodOptions {
+	case http.MethodOptions:
 		if headers, status := media.CORSHandler(headers, ah.conf.CorsOrigins, serve); status != 0 {
 			return headers, status, nil
 		}
+	default:
+		return nil, 0, nil
 	}
 
 	fid := ah.GetIdFromUrl(url.String())
@@ -173,9 +182,19 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 		return nil, 0, types.ErrNotFound
 	}
 
-	fd, err := ah.getFileRecord(fid)
+	fdef, err := ah.getFileRecord(fid)
 	if err != nil {
 		return nil, 0, err
+	}
+
+	log.Println(fdef.ETag, headers)
+
+	if fdef.ETag != "" && headers.Get("If-None-Match") == `"`+fdef.ETag+`"` {
+		return http.Header{
+				"ETag":          {`"` + fdef.ETag + `"`},
+				"Cache-Control": {ah.conf.CacheControl},
+			},
+			http.StatusNotModified, nil
 	}
 
 	var awsReq *request.Request
@@ -187,7 +206,8 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 		awsReq, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
 			Bucket:                     aws.String(ah.conf.BucketName),
 			Key:                        aws.String(fid.String32()),
-			ResponseContentType:        aws.String(fd.MimeType),
+			ResponseCacheControl:       aws.String(ah.conf.CacheControl),
+			ResponseContentType:        aws.String(fdef.MimeType),
 			ResponseContentDisposition: contentDisposition,
 		})
 	} else if method == http.MethodHead {
@@ -198,13 +218,17 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 	}
 
 	if awsReq != nil {
-		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
+		// Return presigned URL with 308 Permanent redirect. Let the client cache the response.
+		// The original URL will stop working after a short period of time to prevent use of Tinode
 		// as a free file server.
-		url, err := awsReq.Presign(time.Second * presignDuration)
+		url, err := awsReq.Presign(time.Second * time.Duration(ah.conf.PresignTTL))
 		return http.Header{
-			"Location":      {url},
-			"Content-Type":  {"application/json; charset=utf-8"},
-			"Cache-Control": {"no-cache, no-store, must-revalidate"}}, http.StatusTemporaryRedirect, err
+				"Location":      {url},
+				"ETag":          {`"` + fdef.ETag + `"`},
+				"Content-Type":  {"application/json; charset=utf-8"},
+				"Cache-Control": {ah.conf.CacheControl},
+			},
+			http.StatusPermanentRedirect, err
 	}
 	return nil, 0, nil
 }
@@ -215,7 +239,6 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64
 
 	// Using String32 just for consistency with the file handler.
 	key := fdef.Uid().String32()
-	fdef.Location = key
 
 	uploader := s3manager.NewUploaderWithClient(ah.svc)
 
@@ -225,10 +248,11 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64
 	}
 
 	rc := readerCounter{reader: file}
-	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(ah.conf.BucketName),
-		Key:    aws.String(key),
-		Body:   &rc,
+	result, err := uploader.Upload(&s3manager.UploadInput{
+		CacheControl: aws.String(ah.conf.CacheControl),
+		Bucket:       aws.String(ah.conf.BucketName),
+		Key:          aws.String(key),
+		Body:         &rc,
 	})
 
 	if err != nil {
@@ -241,6 +265,10 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64
 		fname += ext[0]
 	}
 
+	fdef.Location = key
+	if result.ETag != nil {
+		fdef.ETag = strings.Trim(*result.ETag, "\"")
+	}
 	return ah.conf.ServeURL + fname, rc.count, nil
 }
 

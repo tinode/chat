@@ -44,7 +44,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 114
+	adpVersion = 115
 
 	adapterName = "mysql"
 
@@ -531,6 +531,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
+			etag      VARCHAR(128),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
 			INDEX fileuploads_status(status)
@@ -784,6 +785,18 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 114); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 114 {
+		// Perform database upgrade from version 114 to version 115.
+
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD etag VARCHAR(128) AFTER size"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
@@ -3216,10 +3229,10 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 		user = 0
 	}
 	_, err := a.db.ExecContext(ctx,
-		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+
-			"VALUES(?,?,?,?,?,?,?,?)",
+		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,etag,location) "+
+			"VALUES(?,?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
-		fd.Status, fd.MimeType, fd.Size, fd.Location)
+		fd.Status, fd.MimeType, fd.Size, fd.ETag, fd.Location)
 	return err
 }
 
@@ -3241,8 +3254,8 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 
 	now := t.TimeNow()
 	if success {
-		_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
-			now, t.UploadCompleted, size, store.DecodeUid(fd.Uid()))
+		_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=?,etag=?,location=? WHERE id=?",
+			now, t.UploadCompleted, size, fd.ETag, fd.Location, store.DecodeUid(fd.Uid()))
 		if err != nil {
 			return nil, err
 		}
@@ -3276,7 +3289,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		defer cancel()
 	}
 	var fd t.FileDef
-	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
+	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,etag,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
 	if err == sql.ErrNoRows {
 		return nil, nil

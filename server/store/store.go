@@ -8,10 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/logs"
-
 	"github.com/tinode/chat/server/auth"
 	adapter "github.com/tinode/chat/server/db"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store/types"
 	"github.com/tinode/chat/server/validate"

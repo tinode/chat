@@ -34,7 +34,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 113
+	adpVersion = 115
 
 	adapterName = "rethinkdb"
 
@@ -553,6 +553,15 @@ func (a *adapter) UpgradeDb() error {
 		// Secondary indexes cannot store NULLs, consequently no useful indexes can be created.
 		// Just bump the version.
 		if err := bumpVersion(a, 113); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 113 {
+		// Version 114: topics.aux added (never released to public).
+		// Version 115: fileuploads.etag added
+		// Just bump the version.
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
@@ -2574,6 +2583,8 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 				"UpdatedAt": now,
 				"Status":    t.UploadCompleted,
 				"Size":      size,
+				"ETag":      fd.ETag,
+				"Location":  fd.Location,
 			}).RunWrite(a.conn); err != nil {
 
 			return nil, err

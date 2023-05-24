@@ -133,7 +133,7 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fd, rsc, err := mh.Download(req.URL.String())
+	fdef, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
@@ -141,11 +141,11 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 
 	defer rsc.Close()
 
-	wrt.Header().Set("Content-Type", fd.MimeType)
 	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
 		wrt.Header().Set("Content-Disposition", "attachment")
 	}
-	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
+
+	http.ServeContent(wrt, req, "", fdef.UpdatedAt, rsc)
 
 	logs.Info.Println("media serve: OK, uid=", uid)
 }
