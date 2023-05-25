@@ -51,8 +51,6 @@ const (
 	ErrInvalidResponse = StoreError("invalid response")
 	// ErrRedirected means the subscription request was redirected to another topic.
 	ErrRedirected = StoreError("redirected")
-	// ErrAlreadySatisfied means the desired result, such as subscription, is already satisfied.
-	ErrAlreadySatisfied = StoreError("already satisfied")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.

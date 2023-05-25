@@ -334,6 +334,12 @@ func (t *Topic) registerSession(msg *ClientComMessage) {
 	// Request to add a connection to this topic
 	if t.isInactive() {
 		msg.sess.queueOut(ErrLockedReply(msg, types.TimeNow()))
+	} else if msg.sess.getSub(t.name) != nil {
+		// Session is already subscribed to topic. Subscription is checked in session.go,
+		// but there is a gap between topic creation/un-pausing and processing the
+		// first subscription request, before the topic is linked to session: a client
+		// may send several subscription requests in that gap.
+		msg.sess.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 	} else {
 		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 		// while processing the call.
@@ -1329,16 +1335,6 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 // subscriptionReply generates a response to a subscription request
 func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 	// The topic is already initialized by the Hub
-
-	// Check if the session is already subscribed to topic.
-	// Subscription is checked in session.go, but there is a gap between topic
-	// creation + un-pausing and processing the first subscription request,
-	// before the topic is linked to session: a client may send several subscription
-	// requests in that gap.
-	if msg.sess.getSub(t.name) != nil {
-		msg.sess.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
-		return types.ErrAlreadySatisfied
-	}
 
 	msgsub := msg.Sub
 
