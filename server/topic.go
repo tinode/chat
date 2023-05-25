@@ -1331,6 +1331,10 @@ func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 	// The topic is already initialized by the Hub
 
 	// Check if the session is already subscribed to topic.
+	// Subscription is checked in session.go, but there is a gap between topic
+	// creation + un-pausing and processing the first subscription request,
+	// before the topic is linked to session: a client may send several subscription
+	// requests in that gap.
 	if msg.sess.getSub(t.name) != nil {
 		msg.sess.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 		return types.ErrAlreadySatisfied
