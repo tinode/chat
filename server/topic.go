@@ -1330,6 +1330,12 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 	// The topic is already initialized by the Hub
 
+	// Check if the session is already subscribed to topic.
+	if msg.sess.getSub(t.name) != nil {
+		msg.sess.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
+		return types.ErrAlreadySatisfied
+	}
+
 	msgsub := msg.Sub
 
 	// For newly created topics report topic creation time.
