@@ -418,8 +418,8 @@ func (n *ClusterNode) route(msg *ClusterRoute) error {
 // Cluster is the representation of the cluster.
 type Cluster struct {
 	// Cluster nodes with RPC endpoints (excluding current node).
-	nodes map[string]*ClusterNode
 	// Name of the local node
+	nodes        map[string]*ClusterNode
 	thisNodeName string
 	// Fingerprint of the local node
 	fingerprint int64

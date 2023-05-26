@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"testing"
+	"time"
 )
 
 func slicesEqual(expected, gotten []string) bool {
@@ -56,5 +59,28 @@ func TestStringSliceDelta(t *testing.T) {
 		expectSlicesEqual(t, "removed", tc[3], removed)
 		expectSlicesEqual(t, "both", tc[4], both)
 
+	}
+}
+
+func TestIp(t *testing.T) {
+	_, block, _ := net.ParseCIDR("192.168.0.0/24")
+	ip := net.ParseIP("192.168.1.1")
+	fmt.Printf("block.Contains(ip): %v\n", block.Contains(ip))
+}
+
+func TestTim(t *testing.T) {
+	killTimer1 := time.NewTimer(time.Second * 6)
+	killTimer := time.NewTimer(time.Hour)
+	killTimer.Stop()
+
+	for {
+		select {
+		case <-killTimer1.C:
+			killTimer.Reset(time.Second * 2)
+			fmt.Println("6s")
+		case <-killTimer.C:
+			fmt.Println("被激活")
+			return
+		}
 	}
 }
