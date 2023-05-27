@@ -772,8 +772,10 @@ func pbCallEventSerialize(event string) pbx.CallEvent {
 		out = pbx.CallEvent_OFFER
 	case "ringing":
 		out = pbx.CallEvent_RINGING
+	case "":
+		out = pbx.CallEvent_X2
 	default:
-		logs.Info.Println("unknown info-note.event", event)
+		logs.Info.Println("unknown call event", event)
 	}
 	return out
 }
