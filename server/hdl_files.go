@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -455,7 +454,6 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	if challenge != nil {
-		log.Println("3", err)
 		writeResponse(InfoChallenge(msgID, now, challenge), nil)
 		return nil
 	}
