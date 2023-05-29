@@ -502,6 +502,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	fdef.InitTimes()
 
 	reader, writer := io.Pipe()
+	// Create a non-blocking channel to collect errors from the inbound IO process.
 	done := make(chan error, 1)
 	go func() {
 		defer writer.Close()
@@ -523,6 +524,10 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}()
 
 	url, size, err := mh.Upload(fdef, reader)
+	if err == nil {
+		// No outbound IO error. Maybe we have an inbound one?
+		err = <-done
+	}
 	if err != nil {
 		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
