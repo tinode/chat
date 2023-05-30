@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -59,13 +60,17 @@ func (fh *fshandler) Init(jsconf string) error {
 }
 
 // Headers is used for serving CORS headers.
-func (fh *fshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-	header, status := media.CORSHandler(req, fh.corsOrigins, serve)
+func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
+	if method != http.MethodOptions {
+		// Not an OPTIONS request. No special handling for all other requests.
+		return nil, 0, nil
+	}
+	header, status := media.CORSHandler(headers, fh.corsOrigins, serve)
 	return header, status, nil
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
-func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
+func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64, error) {
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
 

@@ -70,10 +70,11 @@ python tn-cli.py < sample-script.txt
 * `set` - update topic metadata
 * `del` - delete message(s), topic, subscription, or user
 * `note` - send notification
+* `file` - upload or download large file out of band
 
 ### HTTP requests
 
-* `upload` - upload file out of band
+* `upload` - (deprecated, use `file`) upload file out of band
 
 ### Macros
 

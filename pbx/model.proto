@@ -2,10 +2,16 @@ syntax = "proto3";
 package pbx;
 option go_package = "github.com/tinode/chat/pbx";
 
-// This is the single method that needs to be implemented by a gRPC client.
+// This is the methods that needs to be implemented by a gRPC client.
 service Node {
 	// Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
   rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+
+	// Large file upload: a request with a stream of chunks.
+	rpc LargeFileReceive(stream FileUpReq) returns (FileUpResp) {}
+
+	// Large file file download: a response with a stream of chunks.
+	rpc LargeFileServe(FileDownReq) returns (stream FileDownResp) {}
 }
 
 // Plugin interface.
@@ -581,4 +587,73 @@ message SubscriptionEvent {
 message MessageEvent {
 	Crud action = 1;
 	ServerData msg = 2;
+}
+
+// Large file handling.
+
+message Auth {
+	string scheme = 1;
+	string secret = 2;
+}
+
+// File description.
+message FileMeta {
+	string name = 1;
+	string mime_type = 2;
+	string etag = 3;
+	int64 size = 4;
+}
+
+// File upload request.
+message FileUpReq {
+	// Request ID.
+	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
+	// The topic this upload belongs to.
+	string topic = 3;
+	// Uploaded metadata.
+	FileMeta meta = 4;
+	// File bytes being uploaded.
+	bytes content = 5;
+}
+
+// Response to file upload.
+message FileUpResp {
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// New upload location.
+	string redir_url = 5;
+}
+
+// File download request.
+message FileDownReq {
+	// Request ID
+	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
+	// File URI to download.
+	string uri = 3;
+	// ETag
+	string if_modified = 4;
+}
+
+// Response to file download.
+message FileDownResp {
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// File location.
+	string redir_url = 5;
+	// File bytes.
+	bytes content = 6;
 }

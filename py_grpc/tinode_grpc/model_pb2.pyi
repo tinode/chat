@@ -752,3 +752,79 @@ class MessageEvent(_message.Message):
     action: Crud
     msg: ServerData
     def __init__(self, action: _Optional[_Union[Crud, str]] = ..., msg: _Optional[_Union[ServerData, _Mapping]] = ...) -> None: ...
+
+class Auth(_message.Message):
+    __slots__ = ["scheme", "secret"]
+    SCHEME_FIELD_NUMBER: _ClassVar[int]
+    SECRET_FIELD_NUMBER: _ClassVar[int]
+    scheme: str
+    secret: str
+    def __init__(self, scheme: _Optional[str] = ..., secret: _Optional[str] = ...) -> None: ...
+
+class FileMeta(_message.Message):
+    __slots__ = ["name", "mime_type", "etag", "size"]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ETAG_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    mime_type: str
+    etag: str
+    size: int
+    def __init__(self, name: _Optional[str] = ..., mime_type: _Optional[str] = ..., etag: _Optional[str] = ..., size: _Optional[int] = ...) -> None: ...
+
+class FileUpReq(_message.Message):
+    __slots__ = ["id", "auth", "topic", "meta", "content"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    AUTH_FIELD_NUMBER: _ClassVar[int]
+    TOPIC_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    auth: Auth
+    topic: str
+    meta: FileMeta
+    content: bytes
+    def __init__(self, id: _Optional[str] = ..., auth: _Optional[_Union[Auth, _Mapping]] = ..., topic: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., content: _Optional[bytes] = ...) -> None: ...
+
+class FileUpResp(_message.Message):
+    __slots__ = ["id", "code", "text", "meta", "redir_url"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    REDIR_URL_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    code: int
+    text: str
+    meta: FileMeta
+    redir_url: str
+    def __init__(self, id: _Optional[str] = ..., code: _Optional[int] = ..., text: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., redir_url: _Optional[str] = ...) -> None: ...
+
+class FileDownReq(_message.Message):
+    __slots__ = ["id", "auth", "uri", "if_modified"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    AUTH_FIELD_NUMBER: _ClassVar[int]
+    URI_FIELD_NUMBER: _ClassVar[int]
+    IF_MODIFIED_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    auth: Auth
+    uri: str
+    if_modified: str
+    def __init__(self, id: _Optional[str] = ..., auth: _Optional[_Union[Auth, _Mapping]] = ..., uri: _Optional[str] = ..., if_modified: _Optional[str] = ...) -> None: ...
+
+class FileDownResp(_message.Message):
+    __slots__ = ["id", "code", "text", "meta", "redir_url", "content"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    REDIR_URL_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    code: int
+    text: str
+    meta: FileMeta
+    redir_url: str
+    content: bytes
+    def __init__(self, id: _Optional[str] = ..., code: _Optional[int] = ..., text: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., redir_url: _Optional[str] = ..., content: _Optional[bytes] = ...) -> None: ...

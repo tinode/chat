@@ -11,7 +11,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net"
@@ -26,7 +25,6 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -349,38 +347,19 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 	return
 }
 
-// Authenticate non-websocket HTTP request
-func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
-	var uid types.Uid
-	if authMethod, secret := getHttpAuth(req); authMethod != "" {
-		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
-		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
-		if err != nil {
-			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
-			return uid, nil, types.ErrMalformed
-		}
-
-		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
-			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n], getRemoteAddr(req))
-			if err != nil {
-				return uid, nil, err
-			}
-			if challenge != nil {
-				return uid, challenge, nil
-			}
-			uid = rec.Uid
-		} else {
-			logs.Info.Println("media: unknown auth method", authMethod)
-			return uid, nil, types.ErrMalformed
-		}
-	} else {
-		// Find the session, make sure it's appropriately authenticated.
-		sess := globals.sessionStore.Get(req.FormValue("sid"))
-		if sess != nil {
-			uid = sess.uid
+// Obtain IP address of the client.
+func getRemoteAddr(req *http.Request) string {
+	var addr string
+	if globals.useXForwardedFor {
+		addr = req.Header.Get("X-Forwarded-For")
+		if !isRoutableIP(addr) {
+			addr = ""
 		}
 	}
-	return uid, nil, nil
+	if addr != "" {
+		return addr
+	}
+	return req.RemoteAddr
 }
 
 // debugSession is session debug info.

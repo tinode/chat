@@ -4,6 +4,7 @@ package media
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -26,10 +27,10 @@ type Handler interface {
 	// Headers checks if the handler wants to provide additional HTTP headers for the request.
 	// It could be CORS headers, redirect to serve files from another URL, cache-control headers.
 	// It returns headers as a map, HTTP status code to stop processing or 0 to continue, error.
-	Headers(req *http.Request, serve bool) (http.Header, int, error)
+	Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error)
 
 	// Upload processes request for file upload. Returns file URL, file size, error.
-	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error)
+	Upload(fdef *types.FileDef, file io.Reader) (string, int64, error)
 
 	// Download processes request for file download.
 	Download(url string) (*types.FileDef, ReadSeekCloser, error)
@@ -97,12 +98,7 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 }
 
 // CORSHandler is the default preflight OPTIONS processor for use by media handlers.
-func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.Header, int) {
-	if req.Method != http.MethodOptions {
-		// Not an OPTIONS request. No special handling for all other requests.
-		return nil, 0
-	}
-
+func CORSHandler(req http.Header, allowedOrigins []string, serve bool) (http.Header, int) {
 	var allowMethods []string
 	if serve {
 		allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
@@ -110,7 +106,7 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 		allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
 	}
 
-	headers := map[string][]string{
+	headers := http.Header{
 		// Always add Vary because of possible intermediate caches.
 		"Vary":                             {"Origin", "Access-Control-Request-Method"},
 		"Access-Control-Allow-Headers":     {"*"},
@@ -119,12 +115,12 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 		"Access-Control-Allow-Methods":     {strings.Join(allowMethods, ", ")},
 	}
 
-	if !matchCORSMethod(allowMethods, req.Header.Get("Access-Control-Request-Method")) {
+	if !matchCORSMethod(allowMethods, req.Get("Access-Control-Request-Method")) {
 		// CORS policy does not allow this method.
 		return headers, http.StatusNoContent
 	}
 
-	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Header.Get("Origin"))
+	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Get("Origin"))
 	if allowedOrigin == "" {
 		// CORS policy does not match the origin.
 		return headers, http.StatusNoContent

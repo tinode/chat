@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -152,16 +153,22 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Headers redirects GET, HEAD requests to the AWS server.
-func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-	if req.Method == http.MethodPut || req.Method == http.MethodPost {
+func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
+	switch method {
+	case http.MethodOptions, http.MethodHead, http.MethodGet:
+		// Handling these methods.
+		break
+	default:
 		return nil, 0, nil
 	}
 
-	if headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve); status != 0 {
-		return headers, status, nil
+	if method == http.MethodOptions {
+		if headers, status := media.CORSHandler(headers, ah.conf.CorsOrigins, serve); status != 0 {
+			return headers, status, nil
+		}
 	}
 
-	fid := ah.GetIdFromUrl(req.URL.String())
+	fid := ah.GetIdFromUrl(url.String())
 	if fid.IsZero() {
 		return nil, 0, types.ErrNotFound
 	}
@@ -172,9 +179,9 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 	}
 
 	var awsReq *request.Request
-	if req.Method == http.MethodGet {
+	if method == http.MethodGet {
 		var contentDisposition *string
-		if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+		if isAttachment, _ := strconv.ParseBool(url.Query().Get("asatt")); isAttachment {
 			contentDisposition = aws.String("attachment")
 		}
 		awsReq, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
@@ -183,7 +190,7 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 			ResponseContentType:        aws.String(fd.MimeType),
 			ResponseContentDisposition: contentDisposition,
 		})
-	} else if req.Method == http.MethodHead {
+	} else if method == http.MethodHead {
 		awsReq, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
 			Bucket: aws.String(ah.conf.BucketName),
 			Key:    aws.String(fid.String32()),
@@ -194,18 +201,16 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
 		// as a free file server.
 		url, err := awsReq.Presign(time.Second * presignDuration)
-		headers := map[string][]string{
+		return http.Header{
 			"Location":      {url},
 			"Content-Type":  {"application/json; charset=utf-8"},
-			"Cache-Control": {"no-cache, no-store, must-revalidate"},
-		}
-		return headers, http.StatusTemporaryRedirect, err
+			"Cache-Control": {"no-cache, no-store, must-revalidate"}}, http.StatusTemporaryRedirect, err
 	}
 	return nil, 0, nil
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.
-func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
+func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64, error) {
 	var err error
 
 	// Using String32 just for consistency with the file handler.
