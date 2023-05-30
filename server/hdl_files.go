@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -455,7 +454,6 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	if challenge != nil {
-		log.Println("3", err)
 		writeResponse(InfoChallenge(msgID, now, challenge), nil)
 		return nil
 	}
@@ -504,6 +502,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	fdef.InitTimes()
 
 	reader, writer := io.Pipe()
+	// Create a non-blocking channel to collect errors from the inbound IO process.
 	done := make(chan error, 1)
 	go func() {
 		defer writer.Close()
@@ -525,6 +524,10 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}()
 
 	url, size, err := mh.Upload(fdef, reader)
+	if err == nil {
+		// No outbound IO error. Maybe we have an inbound one?
+		err = <-done
+	}
 	if err != nil {
 		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
@@ -532,9 +535,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		return nil
 	}
 
-	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location)
-
-	return stream.SendAndClose(&pbx.FileUpResp{
+	err = stream.SendAndClose(&pbx.FileUpResp{
 		Id:   msgID,
 		Code: http.StatusOK,
 		Text: http.StatusText(http.StatusOK),
@@ -545,6 +546,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 			Size:     size,
 		},
 	})
+	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location, err)
+	return err
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
