@@ -535,9 +535,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		return nil
 	}
 
-	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location)
-
-	return stream.SendAndClose(&pbx.FileUpResp{
+	err = stream.SendAndClose(&pbx.FileUpResp{
 		Id:   msgID,
 		Code: http.StatusOK,
 		Text: http.StatusText(http.StatusOK),
@@ -548,6 +546,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 			Size:     size,
 		},
 	})
+	logs.Info.Println("media upload: ok", fdef.Id, fdef.Location, err)
+	return err
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
