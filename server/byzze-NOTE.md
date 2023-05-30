@@ -30,7 +30,7 @@ init.topic.go     # topic 初始化
 main.go           # 程序主入口
 pbconverter.go    # pb协议和go结构体转换
 plugins.go        # 插件相关
-pres.go           #
+pres.go           # 用户订阅, 通知相关
 push.go           # 订阅推送通知
 session.go        # 会话管理，一个用户可以拥有多个会话，一个会话拥有多个topic
 sessionstore.go   # 会话存储
@@ -38,6 +38,6 @@ stats.go          # 服务状态
 topic_proxy.go    # topic代理
 topic.go          # topic，用户，房间会话，通信
 user.go           # 用户信息
-utils.go
+utils.go          # 字符串, 数组, IP等操作工具集
 
 
