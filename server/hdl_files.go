@@ -337,7 +337,7 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	msgID := req.GetId()
 
-	// Check authorization: auth information must be present (SID is not user for gRPC).
+	// Check authorization: auth information must be present (SID is not used for gRPC).
 	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
@@ -441,7 +441,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	msgID := req.GetId()
-	// Check authorization: auth information must be present (SID is not user for gRPC).
+	// Check authorization: auth information must be present (SID is not used for gRPC).
 	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
@@ -542,7 +542,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		Meta: &pbx.FileMeta{
 			Name:     url,
 			MimeType: mimeType,
-			Etag:     "",
+			Etag:     fdef.ETag,
 			Size:     size,
 		},
 	})
