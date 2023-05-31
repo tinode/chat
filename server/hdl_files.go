@@ -132,7 +132,7 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fd, rsc, err := mh.Download(req.URL.String())
+	fdef, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
@@ -140,11 +140,11 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 
 	defer rsc.Close()
 
-	wrt.Header().Set("Content-Type", fd.MimeType)
 	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
 		wrt.Header().Set("Content-Disposition", "attachment")
 	}
-	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
+
+	http.ServeContent(wrt, req, "", fdef.UpdatedAt, rsc)
 
 	logs.Info.Println("media serve: OK, uid=", uid)
 }
@@ -337,7 +337,7 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	msgID := req.GetId()
 
-	// Check authorization: auth information must be present (SID is not user for gRPC).
+	// Check authorization: auth information must be present (SID is not used for gRPC).
 	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
@@ -441,7 +441,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	msgID := req.GetId()
-	// Check authorization: auth information must be present (SID is not user for gRPC).
+	// Check authorization: auth information must be present (SID is not used for gRPC).
 	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
@@ -542,7 +542,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		Meta: &pbx.FileMeta{
 			Name:     url,
 			MimeType: mimeType,
-			Etag:     "",
+			Etag:     fdef.ETag,
 			Size:     size,
 		},
 	})
