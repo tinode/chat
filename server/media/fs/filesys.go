@@ -85,15 +85,13 @@ func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, s
 			return nil, 0, err
 		}
 
-		if etag := strings.Trim(headers.Get("If-None-Match"), "\""); etag != "" {
-			if etag == fdef.ETag {
-				return http.Header{
-						"Last-Modified": {fdef.UpdatedAt.Format(http.TimeFormat)},
-						"ETag":          {`"` + fdef.ETag + `"`},
-						"Cache-Control": {fh.cacheControl},
-					},
-					http.StatusNotModified, nil
-			}
+		if etag := strings.Trim(headers.Get("If-None-Match"), "\""); etag != "" && etag == fdef.ETag {
+			return http.Header{
+					"Last-Modified": {fdef.UpdatedAt.Format(http.TimeFormat)},
+					"ETag":          {`"` + fdef.ETag + `"`},
+					"Cache-Control": {fh.cacheControl},
+				},
+				http.StatusNotModified, nil
 		}
 
 		return http.Header{

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -186,8 +185,6 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 	if err != nil {
 		return nil, 0, err
 	}
-
-	log.Println(fdef.ETag, headers)
 
 	if fdef.ETag != "" && headers.Get("If-None-Match") == `"`+fdef.ETag+`"` {
 		return http.Header{
