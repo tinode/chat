@@ -1004,6 +1004,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 
 	if userFound {
 		pud.readID = t.lastID
+		pud.recvID = t.lastID
 		t.perUser[asUid] = pud
 	}
 
