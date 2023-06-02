@@ -142,10 +142,8 @@ func newHub() *Hub {
 
 	go h.run()
 
-	if !globals.cluster.isRemoteTopic("sys") {
-		// Initialize system 'sys' topic. There is only one sys topic per cluster.
-		h.join <- &ClientComMessage{RcptTo: "sys", Original: "sys"}
-	}
+	// Initialize 'sys' topic. It will be initialized either as master or proxy.
+	h.join <- &ClientComMessage{RcptTo: "sys", Original: "sys"}
 
 	return h
 }

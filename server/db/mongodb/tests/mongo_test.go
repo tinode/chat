@@ -523,7 +523,7 @@ func TestSubsForTopic(t *testing.T) {
 
 func TestFindUsers(t *testing.T) {
 	reqTags := [][]string{{"alice", "bob", "carol"}}
-	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil)
+	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -534,7 +534,7 @@ func TestFindUsers(t *testing.T) {
 
 func TestFindTopics(t *testing.T) {
 	reqTags := [][]string{{"travel", "qwer", "asdf", "zxcv"}}
-	gotSubs, err := adp.FindTopics(reqTags, nil)
+	gotSubs, err := adp.FindTopics(reqTags, nil, true)
 	if err != nil {
 		t.Error(err)
 	}
