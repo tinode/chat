@@ -14,7 +14,8 @@ func TestHashing(t *testing.T) {
 	// Ring with 3 elements hashed by crc32.ChecksumIEEE
 	ring := ringhash.New(3, crc32.ChecksumIEEE)
 	ring.Add("A", "B", "C")
-
+	fmt.Println(ring.Len())
+	fmt.Println(ring.Signature())
 	// The ring contains:
 	// B0 =  105710768 -> B
 	// B1 =  525743601 -> B

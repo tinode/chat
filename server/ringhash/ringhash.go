@@ -76,7 +76,6 @@ func (ring *Ring) Add(keys ...string) {
 		}
 	}
 	sort.Sort(sortable(ring.keys))
-
 	// Calculate signature
 	hash := fnv.New128a()
 	b := make([]byte, 4)

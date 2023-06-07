@@ -27,7 +27,6 @@ import (
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 
-	backend "github.com/tinode/chat/server/db/mongodb"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -523,7 +522,7 @@ func TestSubsForTopic(t *testing.T) {
 
 func TestFindUsers(t *testing.T) {
 	reqTags := [][]string{{"alice", "bob", "carol"}}
-	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil)
+	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -534,7 +533,7 @@ func TestFindUsers(t *testing.T) {
 
 func TestFindTopics(t *testing.T) {
 	reqTags := [][]string{{"travel", "qwer", "asdf", "zxcv"}}
-	gotSubs, err := adp.FindTopics(reqTags, nil)
+	gotSubs, err := adp.FindTopics(reqTags, nil, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1205,7 +1204,7 @@ func initConnectionToDb() {
 
 func init() {
 	logs.Init(os.Stderr, "stdFlags")
-	adp = backend.GetTestAdapter()
+	// adp = backend.GetTestAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
 	if file, err := os.Open(*conffile); err != nil {
