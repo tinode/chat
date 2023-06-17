@@ -3,7 +3,7 @@
 This is a simple chatbot for Tinode using [gRPC API](../../pbx/). It's written in Python as a demonstration
 that the API is language-independent.
 
-The chat bot subscribes to events stream using Plugin API and logs in as a regular user. The event stream API is used to listen for creation of new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
+The chat bot subscribes to events stream using Plugin API and logs in to Tinode server as a regular user over gRPC interface (see `grpc_listen` in [tinode.conf](../../server/tinode.conf) file). The event stream API is used to listen for creation of new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
 
 Generated files are provided for convenience in a [separate folder](../../py_grpc/tinode_grpc). You may re-generate them if needed:
 ```
@@ -76,7 +76,7 @@ python chatbot.py
 
 If the server is configured to use TLS, i.e. running as `httpS://my-server.example.com/`, the gRPC endpoint also uses the same SSL certificate. In that case add the `--ssl` option when starting the chatbot. If you want the chatbot to connect to the secure server over a local network or under a different name rather than the `my-server.example.com`, for instance as `localhost`, you must specify the SSL domain name to use, otherwise the server will not be able to find the right SSL certificate:
 ```
-python chatbot.py --host=localhost:6001 --ssl --ssl-host=my-server.example.com
+python chatbot.py --host=localhost:16060 --ssl --ssl-host=my-server.example.com
 ```
 
 Quotes are read from `quotes.txt` by default. The file is plain text with one quote per line.

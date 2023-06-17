@@ -1024,6 +1024,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 
 	if userFound {
 		pud.readID = t.lastID
+		pud.recvID = t.lastID
 		t.perUser[asUid] = pud
 	}
 
@@ -1142,17 +1143,18 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		mode = types.ModeInvalid
 	}
 
-	// Filter out "kp" from users with no 'W' permission (or people without a subscription).
-	if msg.Note.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
-		return
-	}
-
-	// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
-	if (msg.Note.What == "read" || msg.Note.What == "recv") && !mode.IsReader() {
-		return
-	}
-
-	if msg.Note.What == "call" {
+	switch msg.Note.What {
+	case "kp", "kpa", "kpv":
+		// Filter out "kp*" from users with no 'W' permission (or people without a subscription).
+		if !mode.IsWriter() || t.isReadOnly() {
+			return
+		}
+	case "read", "recv":
+		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
+		if !mode.IsReader() {
+			return
+		}
+	case "call":
 		// Handle calls separately.
 		t.handleCallEvent(msg)
 		return
