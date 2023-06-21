@@ -8,7 +8,7 @@ server
 ├── drafty                      # 转换文本工具, 转换json文本等
 ├── logs                        # 日志记录
 ├── media                       # 上传/下载媒体
-├── push                        # 推送相关工具（tnpg,fcm）
+├── push                        # 推送相关工具（tnpg, fcm）
 ├── ringhash                    # 一致性hash
 ├── store                       # 注册和访问数据库的方法
 ├── templ                       # 模板文件
