@@ -2393,7 +2393,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	var topicTags t.StringSlice
 	var id int
 	var ignored int
-	var isChan int
+	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
@@ -2403,7 +2403,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 			break
 		}
 
-		if isChan != 0 {
+		if isChan {
 			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 		sub.SetPublic(public)
