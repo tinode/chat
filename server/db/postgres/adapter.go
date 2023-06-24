@@ -250,7 +250,7 @@ func (adapter) Version() int {
 }
 
 // DB connection stats object.
-func (a *adapter) Stats() interface{} {
+func (a *adapter) Stats() any {
 	if a.db == nil {
 		return nil
 	}
@@ -643,7 +643,7 @@ func createSystemTopic(tx pgx.Tx) error {
 	return err
 }
 
-func addTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {
+func addTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal any, tags []string, ignoreDups bool) error {
 	if len(tags) == 0 {
 		return nil
 	}
@@ -665,7 +665,7 @@ func addTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal inter
 	return nil
 }
 
-func removeTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+func removeTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal any, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
@@ -770,7 +770,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	secret []byte, expires time.Time) error {
 
 	parapg := []string{"authLvl=?"}
-	args := []interface{}{authLvl}
+	args := []any{authLvl}
 	if unique != "" {
 		parapg = append(parapg, "uname=?")
 		args = append(args, unique)
@@ -896,7 +896,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 }
 
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	uids := make([]interface{}, len(ids))
+	uids := make([]any, len(ids))
 	for i, id := range ids {
 		uids[i] = store.DecodeUid(id)
 	}
@@ -1066,7 +1066,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 }
 
 // topicStateForUser is called by UserUpdate when the update contains state change.
-func (a *adapter) topicStateForUser(ctx context.Context, tx pgx.Tx, decoded_uid int64, now time.Time, update interface{}) error {
+func (a *adapter) topicStateForUser(ctx context.Context, tx pgx.Tx, decoded_uid int64, now time.Time, update any) error {
 	var err error
 
 	state, ok := update.(t.ObjState)
@@ -1099,7 +1099,7 @@ func (a *adapter) topicStateForUser(ctx context.Context, tx pgx.Tx, decoded_uid 
 }
 
 // UserUpdate updates user object.
-func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
+func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -1234,7 +1234,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // the R permission. If read fails, the counts are still returned with the original
 // user IDs but with the unread count undefined and non-nil error.
 func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
-	uids := make([]interface{}, len(ids))
+	uids := make([]any, len(ids))
 	counts := make(map[t.Uid]int, len(ids))
 	for i, id := range ids {
 		uids[i] = store.DecodeUid(id)
@@ -1460,7 +1460,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	// We are going to use these subscriptions to fetch topics and users which may have been modified recently.
 	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
-	args := []interface{}{store.DecodeUid(uid)}
+	args := []any{store.DecodeUid(uid)}
 	if !keepDeleted {
 		// Filter out deleted rows.
 		q += " AND deletedat IS NULL"
@@ -1509,8 +1509,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
 	// Prepare a list of separate subscriptions to users vs topics
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
-	topq := make([]interface{}, 0, 16)
-	usrq := make([]interface{}, 0, 16)
+	topq := make([]any, 0, 16)
+	usrq := make([]any, 0, 16)
 	for rows.Next() {
 		var sub t.Subscription
 		var modeWant, modeGiven []byte
@@ -1567,7 +1567,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if len(topq) > 0 {
 		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,trusted,tags " +
 			"FROM topics WHERE name IN (?)"
-		newargs := []interface{}{topq}
+		newargs := []any{topq}
 
 		if !keepDeleted {
 			// Optionally skip deleted topics.
@@ -1632,7 +1632,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if len(usrq) > 0 {
 		q = "SELECT id,createdat,updatedat,state,stateat,access,lastseen,useragent,public,trusted,tags " +
 			"FROM users WHERE id IN (?)"
-		newargs := []interface{}{usrq}
+		newargs := []any{usrq}
 
 		if !keepDeleted {
 			// Optionally skip deleted users.
@@ -1703,7 +1703,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		s.readseqid,s.modewant,s.modegiven,u.public,u.trusted,u.lastseen,u.useragent,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id
 		WHERE s.topic=?`
-	args := []interface{}{topic}
+	args := []any{topic}
 	if !keepDeleted {
 		// Filter out rows with users deleted
 		q += " AND u.state!=?"
@@ -1756,7 +1756,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var modeWant, modeGiven []byte
 	var lastSeen *time.Time = nil
 	var userAgent string
-	var public, trusted interface{}
+	var public, trusted any
 	for rows.Next() {
 		if err = rows.Scan(
 			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
@@ -1898,7 +1898,7 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	}()
 
 	// If the topic is a channel, must try to delete subscriptions under both grpXXX and chnXXX names.
-	args := []interface{}{topic}
+	args := []any{topic}
 	if isChan {
 		args = append(args, t.GrpToChn(topic))
 	}
@@ -1948,7 +1948,7 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	return err
 }
 
-func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
+func (a *adapter) TopicUpdate(topic string, update map[string]any) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -2038,7 +2038,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 func (a *adapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven FROM subscriptions WHERE userid=$1 AND deletedat IS NULL`
-	args := []interface{}{store.DecodeUid(forUser)}
+	args := []any{store.DecodeUid(forUser)}
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -2079,7 +2079,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
 
-	args := []interface{}{topic}
+	args := []any{topic}
 
 	if !keepDeleted {
 		// Filter out deleted rows.
@@ -2136,7 +2136,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 }
 
 // SubsUpdate updates one or multiple subscriptions to a topic.
-func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
+func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]any) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -2255,7 +2255,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var args []interface{}
+	var args []any
 	stateConstraint := ""
 	if activeOnly {
 		args = append(args, t.StateOK)
@@ -2301,7 +2301,7 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 	defer rows.Close()
 
 	var userId int64
-	var public, trusted interface{}
+	var public, trusted any
 	var access t.DefaultAccess
 	var userTags t.StringSlice
 	var ignored int
@@ -2344,7 +2344,7 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var args []interface{}
+	var args []any
 	stateConstraint := ""
 	if activeOnly {
 		args = append(args, t.StateOK)
@@ -2389,7 +2389,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	defer rows.Close()
 
 	var access t.DefaultAccess
-	var public, trusted interface{}
+	var public, trusted any
 	var topicTags t.StringSlice
 	var id int
 	var ignored int
@@ -2616,7 +2616,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 		if err == nil && toDel.DeletedFor == "" {
 			// Hard-deleting messages requires updates to the messages table
 			where := "m.topic=? AND "
-			args := []interface{}{topic}
+			args := []any{topic}
 			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
 				seqRange := []int{}
 				for _, r := range toDel.SeqIdRanges {
@@ -2723,7 +2723,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 }
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
-	var unupg []interface{}
+	var unupg []any
 	for _, uid := range uids {
 		unupg = append(unupg, store.DecodeUid(uid))
 	}
@@ -2907,7 +2907,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 // 2.2 In that case mark it as soft-deleted.
 func credDel(ctx context.Context, tx pgx.Tx, uid t.Uid, method, value string) error {
 	constraints := " WHERE userid=?"
-	args := []interface{}{store.DecodeUid(uid)}
+	args := []any{store.DecodeUid(uid)}
 
 	if method != "" {
 		constraints += " AND method=?"
@@ -3041,7 +3041,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 // CredGetAll returns credential records for the given user and method, all or validated only.
 func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
 	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=$1 AND deletedat IS NULL"
-	args := []interface{}{store.DecodeUid(uid)}
+	args := []any{store.DecodeUid(uid)}
 	if method != "" {
 		query += " AND method=$2"
 		args = append(args, method)
@@ -3087,7 +3087,7 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	if cancel != nil {
 		defer cancel()
 	}
-	var user interface{}
+	var user any
 	if fd.User != "" {
 		user = store.DecodeUid(t.ParseUid(fd.User))
 	}
@@ -3189,7 +3189,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	// Garbage collecting entries which as either marked as deleted, or lack message references, or have no user assigned.
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
 		"WHERE fml.id IS NULL"
-	var args []interface{}
+	var args []any
 
 	if !olderThan.IsZero() {
 		query += " AND fu.updatedat<?"
@@ -3207,7 +3207,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 
 	var locations []string
-	var ids []interface{}
+	var ids []any
 	for rows.Next() {
 		var id int
 		var loc string
@@ -3246,8 +3246,8 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	}
 	now := t.TimeNow()
 
-	var args []interface{}
-	var linkId interface{}
+	var args []any
+	var linkId any
 	var linkBy string
 	if !msgId.IsZero() {
 		linkBy = "msgid"
@@ -3265,7 +3265,7 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	}
 
 	// Decoded ids
-	var dids []interface{}
+	var dids []any
 	for _, fid := range fids {
 		id := t.ParseUid(fid)
 		if id.IsZero() {
@@ -3413,7 +3413,7 @@ func isMissingDb(err error) bool {
 }
 
 // Convert to JSON before storing to JSON field.
-func toJSON(src interface{}) []byte {
+func toJSON(src any) []byte {
 	if src == nil {
 		return nil
 	}
@@ -3423,12 +3423,12 @@ func toJSON(src interface{}) []byte {
 }
 
 // Deserialize JSON data from DB.
-func fromJSON(src interface{}) interface{} {
+func fromJSON(src any) any {
 	if src == nil {
 		return nil
 	}
 	if bb, ok := src.([]byte); ok {
-		var out interface{}
+		var out any
 		json.Unmarshal(bb, &out)
 		return out
 	}
@@ -3447,7 +3447,7 @@ func decodeUidString(str string) int64 {
 }
 
 // Convert update to a list of columns and arguments.
-func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
+func updateByMap(update map[string]any) (cols []string, args []any) {
 	for col, arg := range update {
 		col = strings.ToLower(col)
 		if col == "public" || col == "trusted" || col == "private" {
@@ -3460,7 +3460,7 @@ func updateByMap(update map[string]interface{}) (cols []string, args []interface
 }
 
 // If Tags field is updated, get the tags so tags table cab be updated too.
-func extractTags(update map[string]interface{}) []string {
+func extractTags(update map[string]any) []string {
 	var tags []string
 
 	if val := update["Tags"]; val != nil {
@@ -3487,8 +3487,8 @@ func setConnStr(c configType) (string, error) {
 	return connStr, nil
 }
 
-func expandQuery(query string, args ...interface{}) (string, []interface{}) {
-	var expandedArgs []interface{}
+func expandQuery(query string, args ...any) (string, []any) {
+	var expandedArgs []any
 	var expandedQuery string
 
 	if len(args) != strings.Count(query, "?") {
@@ -3506,8 +3506,8 @@ func expandQuery(query string, args ...interface{}) (string, []interface{}) {
 	return expandedQuery, expandedArgs
 }
 
-func flatMap(slice []interface{}) []interface{} {
-	var result []interface{}
+func flatMap(slice []any) []any {
+	var result []any
 	for _, v := range slice {
 		switch reflect.TypeOf(v).Kind() {
 		case reflect.Slice:
