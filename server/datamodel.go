@@ -519,7 +519,13 @@ type MsgTopicSub struct {
 	// Other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 
-	LastMessage string `json:"last_message,omitempty"`
+	LastMessage *MsgLastMessageInfo `json:"last_message,omitempty"`
+}
+
+type MsgLastMessageInfo struct {
+	Content string `json:"content,omitempty"`
+	From    string `json:"from,omitempty"`
+	Seq     int    `json:"seq,omitempty"`
 }
 
 func (src *MsgTopicSub) describe() string {

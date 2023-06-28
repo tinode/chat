@@ -2426,6 +2426,21 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							UserAgent: sub.GetUserAgent(),
 						}
 					}
+
+					// get last message
+					msgs, _ := store.Messages.GetAll(sub.Topic, asUid, &types.QueryOpt{Limit: 1})
+					if len(msgs) > 0 {
+						content, ok := msgs[0].Content.(string)
+
+						if ok {
+							var mtsLastMsg MsgLastMessageInfo
+							mtsLastMsg.From = msgs[0].From
+							mtsLastMsg.Seq = msgs[0].SeqId
+							mtsLastMsg.Content = content
+							mts.LastMessage = &mtsLastMsg
+						}
+
+					}
 				}
 			} else {
 				// Mark subscriptions that the user does not care about.
@@ -2504,7 +2519,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			}
 
-			mts.LastMessage = "1xinternet"
 			meta.Sub = append(meta.Sub, mts)
 		}
 		sess.queueOut(&ServerComMessage{Meta: meta})
