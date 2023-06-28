@@ -2504,6 +2504,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			}
 
+			mts.LastMessage = "1xinternet"
 			meta.Sub = append(meta.Sub, mts)
 		}
 		sess.queueOut(&ServerComMessage{Meta: meta})
