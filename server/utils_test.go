@@ -5,6 +5,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	sf "github.com/tinode/snowflake"
 )
 
 func slicesEqual(expected, gotten []string) bool {
@@ -82,5 +84,30 @@ func TestTim(t *testing.T) {
 			fmt.Println("被激活")
 			return
 		}
+	}
+}
+
+func TestNext(t *testing.T) {
+	sf, err := sf.NewSnowFlake(1)
+	if err != nil {
+		t.Error(err)
+	}
+
+	id, err := sf.Next()
+	if err != nil {
+		t.Error(err)
+	}
+
+	id2, err := sf.Next()
+	if err != nil {
+		t.Error(err)
+	}
+	id3, err := sf.Next()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(id, id2, id3)
+	if id >= id2 {
+		t.Errorf("id %v is smaller or equal to previous one %v", id2, id)
 	}
 }
