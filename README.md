@@ -147,12 +147,12 @@ All client software has support for [internationalization](docs/translations.md)
 | Hindi |   |   | &check; |   |
 | Korean |   | &check; | &check; |   |
 | Portugese | &check; |   | &check; |   |
-| Romanian |   | &check; |   |   |
+| Romanian |   | &check; | &check; |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
-More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Vietnamese, Persian.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
 
 ## Third-Party
 
