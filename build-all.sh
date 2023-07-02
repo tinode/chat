@@ -5,10 +5,10 @@
 # copied and archived.
 
 # Supported OSs: mac (darwin), windows, linux.
-goplat=( darwin darwin windows linux )
+goplat=( darwin darwin windows linux linux )
 
 # CPUs architectures: amd64 and arm64. The same order as OSs.
-goarc=( amd64 arm64 amd64 amd64 )
+goarc=( amd64 arm64 amd64 amd64 arm64 )
 
 # Number of platform+architectures.
 buildCount=${#goplat[@]}
