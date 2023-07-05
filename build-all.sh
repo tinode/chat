@@ -115,7 +115,7 @@ do
 
     env GOOS="${plat}" GOARCH="${arc}" go build \
       -ldflags "-s -w -X main.buildstamp=`git describe --tags`" -tags "${buildtag}" \
-      -o ./releases/tmp/tinode${ext} ./server > /dev/null
+      -o ./releases/tmp/tinode${ext} ./server/cmd > /dev/null
     env GOOS="${plat}" GOARCH="${arc}" go build \
       -ldflags "-s -w" -tags "${buildtag}" -o ./releases/tmp/init-db${ext} ./tinode-db > /dev/null
 

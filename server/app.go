@@ -6,7 +6,7 @@
  *
  *****************************************************************************/
 
-package main
+package server
 
 //go:generate protoc --go_out=../pbx --go_opt=paths=source_relative --go-grpc_out=../pbx --go-grpc_opt=paths=source_relative ../pbx/model.proto
 
@@ -304,7 +304,10 @@ type configType struct {
 	WebRTC    json.RawMessage             `json:"webrtc"`
 }
 
-func main() {
+type App struct {
+}
+
+func (a *App) Run() {
 	executable, _ := os.Executable()
 
 	logFlags := flag.String("log_flags", "stdFlags",

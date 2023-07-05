@@ -4,7 +4,7 @@
  *    topic hosted at another node.
  *****************************************************************************/
 
-package main
+package server
 
 import (
 	"net/http"

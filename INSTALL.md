@@ -41,27 +41,27 @@ See [instructions](./docker/README.md)
 4. Fetch, build Tinode server and tinode-db database initializer:
   - **MySQL**:
 	```
-	go install -tags mysql github.com/tinode/chat/server@latest
+	go install -tags mysql github.com/tinode/chat/server/cmd@latest
 	go install -tags mysql github.com/tinode/chat/tinode-db@latest
 	```
 	- **PostgreSQL**:
 	```
-	go install -tags postgres github.com/tinode/chat/server@latest
+	go install -tags postgres github.com/tinode/chat/server/cmd@latest
 	go install -tags postgres github.com/tinode/chat/tinode-db@latest
 	```
   - **MongoDB**:
 	```
-	go install -tags mongodb github.com/tinode/chat/server@latest
+	go install -tags mongodb github.com/tinode/chat/server/cmd@latest
 	go install -tags mongodb github.com/tinode/chat/tinode-db@latest
 	```
   - **RethinkDb**:
 	```
-	go install -tags rethinkdb github.com/tinode/chat/server@latest
+	go install -tags rethinkdb github.com/tinode/chat/server/cmd@latest
 	go install -tags rethinkdb github.com/tinode/chat/tinode-db@latest
 	```
   - **All** (bundle all of the above DB adapters):
 	```
-	go install -tags "mysql rethinkdb mongodb postgres" github.com/tinode/chat/server@latest
+	go install -tags "mysql rethinkdb mongodb postgres" github.com/tinode/chat/server/cmd@latest
 	go install -tags "mysql rethinkdb mongodb postgres" github.com/tinode/chat/tinode-db@latest
 	```
 
@@ -71,13 +71,13 @@ See [instructions](./docker/README.md)
 
     You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
     ```
-    go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" github.com/tinode/chat/server@latest
+    go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" github.com/tinode/chat/server/cmd@latest
     ```
     The value of `buildstamp` will be sent by the server to the clients.
 
     Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
     ```
-    go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
+    go get -tags mysql github.com/tinode/chat/server/cmd && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server/cmd
     ```
     Building with Go 1.13 or below **will fail**!
 

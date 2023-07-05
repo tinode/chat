@@ -6,7 +6,7 @@
  *
  *****************************************************************************/
 
-package main
+package server
 
 import (
 	"errors"
@@ -18,6 +18,7 @@ import (
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/vc"
 )
 
 // Topic is an isolated communication channel
@@ -302,21 +303,21 @@ func (t *Topic) computePerUserAcsUnion() {
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(msg *ClientComMessage) {
 	if t.currentCall != nil {
-		shouldTerminateCall := false
+		shouldDetachFromCall := false
 		if msg.sess.isMultiplex() {
 			// Check if any of the call party sessions is multiplexed over msg.sess.
 			for _, p := range t.currentCall.parties {
 				if p.sess.isProxy() && p.sess.multi == msg.sess {
-					shouldTerminateCall = true
+					shouldDetachFromCall = true
 					break
 				}
 			}
 		} else if _, found := t.currentCall.parties[msg.sess.sid]; found {
-			// Normal session disconnecting from topic. Just terminate the call.
-			shouldTerminateCall = true
+			// Normal session disconnecting from topic. Detach from call too.
+			shouldDetachFromCall = true
 		}
-		if shouldTerminateCall {
-			t.terminateCallInProgress(false)
+		if shouldDetachFromCall {
+			t.detachPartyFromCall(msg)
 		}
 	}
 	t.handleLeaveRequest(msg, msg.sess)
@@ -979,7 +980,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // Saves a new message (defined by head, content and attachments) in the topic
 // in response to a client request (msg, asUid) and broadcasts it to the attached sessions.
-func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]any, content any) error {
+func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, noEcho bool, attachments []string, head map[string]any, content any, isCall bool) error {
 	pud, userFound := t.perUser[asUid]
 	// Anyone is allowed to post to 'sys' topic.
 	if t.cat != types.TopicCatSys {
@@ -1030,7 +1031,17 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 
 	if msg.Id != "" && msg.sess != nil {
 		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-		reply.Ctrl.Params = map[string]any{"seq": t.lastID}
+		params := map[string]any{"seq": t.lastID}
+
+		if isCall {
+			callParams := t.handleCallInvite(msg, asUid)
+			// Merge params and callParams.
+			for k, v := range callParams {
+				params[k] = v
+			}
+		}
+
+		reply.Ctrl.Params = params
 		msg.sess.queueOut(reply)
 	}
 
@@ -1091,7 +1102,8 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 			msg.sess.queueOut(ErrNotImplementedReply(msg, types.TimeNow()))
 			return
 		}
-		if t.cat != types.TopicCatP2P {
+		if t.cat != types.TopicCatP2P && !vc.VideoConferencing.IsAvailable() {
+			// Group calls aren't supported.
 			msg.sess.queueOut(ErrPermissionDeniedReply(msg, types.TimeNow()))
 			return
 		}
@@ -1107,13 +1119,9 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		attachments = msg.Extra.Attachments
 	}
 
-	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content); err != nil {
+	if err := t.saveAndBroadcastMessage(msg, asUid, msg.Pub.NoEcho, attachments, msg.Pub.Head, msg.Pub.Content, isCall); err != nil {
 		logs.Err.Printf("topic[%s]: failed to save messagge - %s", t.name, err)
 		return
-	}
-
-	if isCall {
-		t.handleCallInvite(msg, asUid)
 	}
 }
 
