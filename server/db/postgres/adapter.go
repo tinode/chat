@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -45,10 +46,7 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10"
-	defaultDatabase = "tinode"
-
-	adpVersion  = 114
+	adpVersion  = 115
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -69,8 +67,7 @@ type configType struct {
 	Port   string `json:"port,omitempty"`
 	DBName string `json:"dbname,omitempty"`
 	// Deprecated.
-	DSN      string `json:"dsn,omitempty"`
-	Database string `json:"database,omitempty"`
+	DSN string `json:"dsn,omitempty"`
 
 	// Connection pool settings.
 	//
@@ -107,7 +104,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if len(jsonconfig) < 2 {
-		return errors.New("adapter postgres missing config")
+		return errors.New("postgres adapter missing config")
 	}
 
 	var err error
@@ -119,22 +116,16 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if config.DSN != "" {
 		a.dsn = config.DSN
-		a.dbName = config.Database
-	} else {
-		dsn, err := setConnStr(config)
-		if err != nil {
+		if uri, err := url.Parse(a.dsn); err == nil {
+			a.dbName = strings.TrimPrefix(uri.Path, "/")
+		} else {
 			return err
 		}
-		a.dsn = dsn
+	} else {
+		if a.dsn, err = setConnStr(config); err != nil {
+			return err
+		}
 		a.dbName = config.DBName
-	}
-
-	if a.dsn == "" {
-		a.dsn = defaultDSN
-	}
-
-	if a.dbName == "" {
-		a.dbName = defaultDatabase
 	}
 
 	if a.maxResults <= 0 {
@@ -145,9 +136,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxMessageResults = defaultMaxMessageResults
 	}
 
-	a.poolConfig, err = pgxpool.ParseConfig(a.dsn)
-	if err != nil {
-		return errors.New("adapter postgres failed to parse config: " + err.Error())
+	if a.poolConfig, err = pgxpool.ParseConfig(a.dsn); err != nil {
+		return errors.New("postgres adapter failed to parse DSN: " + err.Error())
 	}
 
 	// ConnectConfig creates a new Pool and immediately establishes one connection.
@@ -535,7 +525,6 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Records of uploaded files.
 	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
-	// Using INDEX rather than FK on topic because it's either 'topics' or 'users' reference.
 	if _, err = tx.Exec(ctx,
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
@@ -545,6 +534,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
+			etag      VARCHAR(128),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id)
 		);
@@ -646,6 +636,18 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 114); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 114 {
+		// Perform database upgrade from version 114 to version 115.
+
+		if _, err := a.db.Exec(ctx, "ALTER TABLE fileuploads ADD COLUMN etag VARCHAR(128)"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
@@ -2416,7 +2418,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	var topicTags t.StringSlice
 	var id int
 	var ignored int
-	var isChan int
+	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
@@ -2426,7 +2428,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 			break
 		}
 
-		if isChan != 0 {
+		if isChan {
 			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 		sub.SetPublic(public)
@@ -3115,10 +3117,10 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 		user = store.DecodeUid(t.ParseUid(fd.User))
 	}
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+
-			"VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,etag,location) "+
+			"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
-		fd.Status, fd.MimeType, fd.Size, fd.Location)
+		fd.Status, fd.MimeType, fd.Size, fd.ETag, fd.Location)
 	return err
 }
 
@@ -3140,8 +3142,8 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 
 	now := t.TimeNow()
 	if success {
-		_, err = tx.Exec(ctx, "UPDATE fileuploads SET updatedat=$1,status=$2,size=$3 WHERE id=$4",
-			now, t.UploadCompleted, size, store.DecodeUid(fd.Uid()))
+		_, err = tx.Exec(ctx, "UPDATE fileuploads SET updatedat=$1,status=$2,size=$3,etag=$4,location=$5 WHERE id=$6",
+			now, t.UploadCompleted, size, fd.ETag, fd.Location, store.DecodeUid(fd.Uid()))
 		if err != nil {
 			return nil, err
 		}
@@ -3177,8 +3179,9 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	var fd t.FileDef
 	var ID int64
 	var userId int64
-	err := a.db.QueryRow(ctx, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
-		"FROM fileuploads WHERE id=$1", store.DecodeUid(id)).Scan(&ID, &fd.CreatedAt, &fd.UpdatedAt, &userId, &fd.Status, &fd.MimeType, &fd.Size, &fd.Location)
+	err := a.db.QueryRow(ctx, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,etag,location "+
+		"FROM fileuploads WHERE id=$1", store.DecodeUid(id)).Scan(&ID, &fd.CreatedAt, &fd.UpdatedAt, &userId, &fd.Status,
+		&fd.MimeType, &fd.Size, &fd.ETag, &fd.Location)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

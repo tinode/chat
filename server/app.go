@@ -62,7 +62,7 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.22"
+	currentVersion = "0.23"
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.19"
 
@@ -416,10 +416,10 @@ func (a *App) Run() {
 	}
 
 	err = store.Store.Open(workerId, config.Store)
+	logs.Info.Println("DB adapter", store.Store.GetAdapterName(), store.Store.GetAdapterVersion())
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
-	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
 		store.Store.Close()
 		logs.Info.Println("Closed database connection(s)")
@@ -726,9 +726,9 @@ func (a *App) Run() {
 	mux.Handle(config.ApiPath+"v0/channels/lp", gh.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	if config.Media != nil {
 		// Handle uploads of large files.
-		mux.Handle(config.ApiPath+"v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileReceive)))
+		mux.Handle(config.ApiPath+"v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileReceiveHTTP)))
 		// Serve large files.
-		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
+		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServeHTTP)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
 

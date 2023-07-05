@@ -15,8 +15,7 @@
     },
     "tags": [
       "email:alice@example.com"
-    ],
-    "uid": "QVuwC5jz9o4"
+    ]
   },
   "bob": {
     "anon": "N",
@@ -34,8 +33,7 @@
     },
     "tags": [
       "email:bob@example.com"
-    ],
-    "uid": "Pp-n0RjGm8s"
+    ]
   },
   "carol": {
     "anon": "N",

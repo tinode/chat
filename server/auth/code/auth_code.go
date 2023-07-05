@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -124,7 +125,9 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 	}
 
 	// Success. Remove no longer needed entry. The error is ignored here.
-	store.PCache.Delete(key)
+	if err = store.PCache.Delete(key); err != nil {
+		logs.Warn.Println("code_auth: error deleting key", key, err)
+	}
 
 	return &auth.Rec{
 		Uid:        types.ParseUid(parts[2]),

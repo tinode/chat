@@ -338,6 +338,12 @@ func (t *Topic) registerSession(msg *ClientComMessage) {
 	// Request to add a connection to this topic
 	if t.isInactive() {
 		msg.sess.queueOut(ErrLockedReply(msg, types.TimeNow()))
+	} else if msg.sess.getSub(t.name) != nil {
+		// Session is already subscribed to topic. Subscription is checked in session.go,
+		// but there is a gap between topic creation/un-pausing and processing the
+		// first subscription request, before the topic is linked to session: a client
+		// may send several subscription requests in that gap.
+		msg.sess.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 	} else {
 		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 		// while processing the call.
@@ -1019,6 +1025,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 
 	if userFound {
 		pud.readID = t.lastID
+		pud.recvID = t.lastID
 		t.perUser[asUid] = pud
 	}
 
@@ -1144,17 +1151,18 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		mode = types.ModeInvalid
 	}
 
-	// Filter out "kp" from users with no 'W' permission (or people without a subscription).
-	if msg.Note.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
-		return
-	}
-
-	// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
-	if (msg.Note.What == "read" || msg.Note.What == "recv") && !mode.IsReader() {
-		return
-	}
-
-	if msg.Note.What == "call" {
+	switch msg.Note.What {
+	case "kp", "kpa", "kpv":
+		// Filter out "kp*" from users with no 'W' permission (or people without a subscription).
+		if !mode.IsWriter() || t.isReadOnly() {
+			return
+		}
+	case "read", "recv":
+		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
+		if !mode.IsReader() {
+			return
+		}
+	case "call":
 		// Handle calls separately.
 		t.handleCallEvent(msg)
 		return

@@ -51,7 +51,7 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	2. **PostgreSQL**:
 	```
-	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-postgresql:latest
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-postgres:latest
 	```
 
 	3. **MongoDB**:

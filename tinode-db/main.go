@@ -344,10 +344,11 @@ func main() {
 			log.Fatalln("Failed to create ROOT user:", err)
 		}
 
-		adapter := store.Store.GetAdapter()
-		if err := adapter.AuthUpdRecord(user.Uid(), "basic", "", auth.LevelRoot, nil, time.Time{}); err != nil {
+		authHandler := store.Store.GetAuthHandler("basic")
+		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid(), AuthLevel: auth.LevelRoot},
+			[]byte(uname+":"+password), ""); err != nil {
 			store.Users.Delete(user.Uid(), true)
-			log.Fatalln("Failed to create ROOT user:", err)
+			log.Fatalln("Failed to add ROOT auth record:", err)
 		}
 		log.Printf("ROOT user created: '%s:%s'", uname, password)
 	}

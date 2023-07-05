@@ -1444,7 +1444,23 @@ func ErrInvalidResponse(id, topic string, serverTs, incomingReqTs time.Time) *Se
 	}
 }
 
-// ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
+// ErrDisconnected indicates that client disconnected or failed to send data in a timely
+// manner (408).
+func ErrDisconnected(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{
+		Ctrl: &MsgServerCtrl{
+			Id:        id,
+			Code:      http.StatusRequestTimeout, // 408
+			Text:      "disconnected",
+			Topic:     topic,
+			Timestamp: ts,
+		},
+		Id:        id,
+		Timestamp: ts,
+	}
+}
+
+// ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session.
 // Switching users is not supported (409).
 func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{
@@ -1690,8 +1706,8 @@ func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(id, topic, ts, ts)
 }
 
-// ErrLockedReply operation rejected because the topic is being deleted with explicit server and
-// incoming request timestamps in response to a client request (503).
+// ErrLockedReply operation rejected because the topic is being deleted in response
+// to a client request (503).
 func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }

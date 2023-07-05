@@ -168,12 +168,13 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	})
 	validated, _, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
 	if err != nil {
-		// Delete incomplete user record.
 		logs.Warn.Println("create user: failed to save or validate credential", err, "sid=", s.sid)
+		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
+
+		// Delete incomplete user record.
 		if err = store.Users.Delete(user.Uid(), true); err != nil {
 			logs.Warn.Println("create user: failed to delete incomplete user record", err, "sid=", s.sid)
 		}
-		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		return
 	}
 

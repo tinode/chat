@@ -41,7 +41,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 113
+	adpVersion  = 115
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -527,6 +527,14 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 113); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 113 {
+		// Version 114: topics.aux added (never released to public).
+		// Version 115: fileuploads.etag added.
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
@@ -2506,6 +2514,8 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 				"updatedat": now,
 				"status":    t.UploadCompleted,
 				"size":      size,
+				"etag":      fd.ETag,
+				"location":  fd.Location,
 			}}); err != nil {
 
 			return nil, err
