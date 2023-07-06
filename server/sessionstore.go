@@ -21,6 +21,34 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+type boundedWaitGroup struct {
+	wg  sync.WaitGroup
+	sem chan struct{}
+}
+
+func newBoundedWaitGroup(capacity int) *boundedWaitGroup {
+	return &boundedWaitGroup{sem: make(chan struct{}, capacity)}
+}
+
+func (w *boundedWaitGroup) Add(delta int) {
+	if delta <= 0 {
+		return
+	}
+	for i := 0; i < delta; i++ {
+		w.sem <- struct{}{}
+	}
+	w.wg.Add(delta)
+}
+
+func (w *boundedWaitGroup) Done() {
+	<-w.sem
+	w.wg.Done()
+}
+
+func (w *boundedWaitGroup) Wait() {
+	w.wg.Wait()
+}
+
 // SessionStore holds live sessions. Long polling sessions are stored in a linked list with
 // most recent sessions on top. In addition all sessions are stored in a map indexed by session ID.
 type SessionStore struct {
@@ -76,7 +104,8 @@ func (ss *SessionStore) NewSession(conn any, sid string) (*Session, int) {
 	s.bkgTimer = time.NewTimer(time.Hour)
 	s.bkgTimer.Stop()
 
-	s.inflightReqs = &sync.WaitGroup{}
+	// TODO: use Mutex & CondVar?
+	s.inflightReqs = newBoundedWaitGroup(1)
 
 	s.lastTouched = time.Now()
 
