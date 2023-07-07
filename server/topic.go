@@ -719,6 +719,9 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 
 	// User wants to leave without unsubscribing.
 	if pssd, _ := t.remSession(sess, asUid); pssd != nil {
+		if !sess.isProxy() {
+			sess.delSub(t.name)
+		}
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
 			if msg.init {
