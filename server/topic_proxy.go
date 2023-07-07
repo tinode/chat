@@ -139,7 +139,7 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 	// and we won't be able to find and remove it by its sid.
 	pssd, result := t.remSession(msg.sess, asUid)
 	if result {
-		msg.sess.detach <- t.name
+		msg.sess.delSub(t.name)
 	}
 	if !msg.init {
 		// Explicitly specify the uid because the master multiplex session needs to know which
