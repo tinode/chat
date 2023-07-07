@@ -117,7 +117,7 @@ type Session struct {
 	bkgTimer *time.Timer
 
 	// Number of subscribe/unsubscribe requests in flight.
-	inflightReqs *sync.WaitGroup
+	inflightReqs *boundedWaitGroup
 	// Synchronizes access to session store in cluster mode:
 	// subscribe/unsubscribe replies are asynchronous.
 	sessionStoreLock sync.Mutex
@@ -628,11 +628,12 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	}
 
+	s.inflightReqs.Add(1)
 	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
+		s.inflightReqs.Done()
 	} else {
-		s.inflightReqs.Add(1)
 		select {
 		case globals.hub.join <- msg:
 		default:
@@ -655,18 +656,21 @@ func (s *Session) leave(msg *ClientComMessage) {
 		return
 	}
 
+	s.inflightReqs.Add(1)
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Session is attached to the topic.
 		if (msg.Original == "me" || msg.Original == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
+			s.inflightReqs.Done()
 		} else {
 			// Unlink from topic, topic will send a reply.
-			s.delSub(msg.RcptTo)
-			s.inflightReqs.Add(1)
 			sub.done <- msg
 		}
-	} else if !msg.Leave.Unsub {
+		return
+	}
+	s.inflightReqs.Done()
+	if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
 		s.queueOut(InfoNotJoined(msg.Id, msg.Original, msg.Timestamp))
 	} else {
