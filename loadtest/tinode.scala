@@ -29,7 +29,7 @@ class TinodeBase extends Simulation {
   val hello = exitBlockOnFail {
     exec {
       ws("hi").sendText(
-        """{"hi":{"id":"afabb3","ver":"0.18.1","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
+        """{"hi":{"id":"afabb3","ver":"0.22.8","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
       )
       .await(15 seconds)(
         ws.checkTextMessage("hi")

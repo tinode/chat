@@ -138,6 +138,9 @@ func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.T
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
 	pssd, result := t.remSession(msg.sess, asUid)
+	if result {
+		msg.sess.delSub(t.name)
+	}
 	if !msg.init {
 		// Explicitly specify the uid because the master multiplex session needs to know which
 		// of its multiple hosted sessions to delete.
