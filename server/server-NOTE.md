@@ -1,11 +1,14 @@
 # server 笔记
 熟悉的功能：
-[] websocket
-[] 集群选举
-[] 一致性hash
-[] 雪花算法
-[] 文件上传/下载
-## 项目文件夹
+[x] websocket
+[x] 集群选举
+[x] 一致性hash
+[x] 雪花算法
+[x] 文件上传/下载
+[x] Topic处理数据流程
+[] 视频通话
+## 文件夹说明
+```
 server
 ├── auth                        # 认证，身份验证器
 ├── concurrency                 # 协程池，锁
@@ -18,7 +21,9 @@ server
 ├── store                       # 注册和访问数据库的方法
 ├── templ                       # 模板文件
 └── validate                    # 验证数据（手机号，email）
-
+```
+## 文件说明
+```
 apikey.go         # 校验key, 该key使用apikeyVersion + apikeyAppID + apikeySequence + apikeyWho + apikeySignature规则和盐算法计算得出, 主要用于用户,客户端等与服务器做验证
 calls.go          # 视频调用
 cluster_leader.go # 集群leader，raft协议
@@ -44,6 +49,7 @@ topic_proxy.go    # topic代理
 topic.go          # topic，用户，房间会话，通信，使用channle用于传递用户消息
 user.go           # 用户信息
 utils.go          # 字符串, 数组, IP等操作工具集
+```
 
 
 ## raft
