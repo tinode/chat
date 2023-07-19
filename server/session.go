@@ -704,7 +704,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		select {
-		case sub.broadcast <- msg:
+		case sub.broadcast <- msg: // 这里放入数据之后会被topic的clientMsg属性监听处理
 		default:
 			// Reply with a 503 to the user.
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))

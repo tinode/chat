@@ -1,6 +1,7 @@
 # 熟悉tinode项目笔记
 
-## 文件夹
+## 项目文件夹
+```
 ├── chatbot                     # 对话机器人
 ├── docker                      # docker部署配置
 ├── docs                        # 文档
@@ -15,6 +16,8 @@
 ├── tinode-db                   # 初始化数据库
 ├── tn-client                   # 命令行终端客户端
 └── uploads                     # 上传文件位置
+```
 
-
+## server记录
+[server记录](./server/server-NOTE.md)
 
