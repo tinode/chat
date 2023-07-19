@@ -117,10 +117,14 @@ Raft一共分为三种角色，leader，follower，candidate，字如其名
 读取获取文件流
 响应文件流
 
-## Topic 和 Group Topic
-每一个用户都有自己的Topic（channel实现），用于处理数据{me},{pres},{note}等，希望和默认聊天，则只需要往指定对象的topic放入数据即可
-当用户发起视频通话时，需要开启一个新的topic用于单独处理p2p，topic的名字是用户的名字
+## Topic， Group Topic， Topic TO Topic，find Topic
+每一个用户都有自己的Topic（channel实现），用于处理数据{me},{pres},{note}等, 同时使用同一个hub模块用于初始化用户的topic，聊天时，需要用户订阅对方的频道，即将topic放入对方topic下的一个map结构体，当Websocket监听到数据时，解析对应的case，从map中取出topic想client端写回数据。
 
+group topic有两种类型常规topic和只读channel
+
+p2p 当用户发起视频通话时，需要开启一个新的topic用于单独处理p2p，topic的名字是用户的名字
+
+find Topic 使用内置查询方式查找相关的topic信息
 
 ## topic处理流程
 topic处理数据流程：websocket读取数据{me},{pub},{sub}等->dispatch->session-放入hub：join-> 取出hub：join数据，初始化topic,并放入注册数据->topic启动run->读取注册数据->处理sub订阅数据，放入session:map存储订阅者
