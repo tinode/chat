@@ -1,6 +1,6 @@
 # server 笔记
 熟悉的功能：
-[x] websocket
+- [x] websocket
 [x] 集群选举
 [x] 一致性hash
 [x] 雪花算法
