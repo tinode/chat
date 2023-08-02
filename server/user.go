@@ -622,7 +622,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	// Disable all authenticators
 	authnames := store.Store.GetAuthNames()
 	for _, name := range authnames {
-		hdl := store.Store.GetAuthHandler(name)
+		hdl := store.Store.GetLogicalAuthHandler(name)
 		if !hdl.IsInitialized() {
 			continue
 		}
