@@ -44,7 +44,7 @@ See [instructions](./docker/README.md)
 	go install -tags mysql github.com/tinode/chat/server@latest
 	go install -tags mysql github.com/tinode/chat/tinode-db@latest
 	```
-	- **PostgreSQL**:
+  - **PostgreSQL**:
 	```
 	go install -tags postgres github.com/tinode/chat/server@latest
 	go install -tags postgres github.com/tinode/chat/tinode-db@latest
