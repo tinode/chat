@@ -57,7 +57,7 @@ func (ca *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	}
 
 	if config.MaxRetries < 1 {
-		return errors.New("auth_code: invalid reties count")
+		return errors.New("auth_code: invalid retries count")
 	}
 
 	ca.name = name

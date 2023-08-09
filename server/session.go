@@ -1019,7 +1019,13 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	code, _, err := store.Store.GetLogicalAuthHandler(tempScheme).GenSecret(&auth.Rec{
+	tempAuth := store.Store.GetLogicalAuthHandler(tempScheme)
+	if tempAuth == nil || !tempAuth.IsInitialized() {
+		logs.Err.Println("s.authSecretReset: validator with missing temp auth", credMethod, tempScheme, s.sid)
+		return types.ErrInternal
+	}
+
+	code, _, err := tempAuth.GenSecret(&auth.Rec{
 		Uid:        uid,
 		AuthLevel:  auth.LevelAuth,
 		Features:   auth.FeatureNoLogin,
