@@ -150,6 +150,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Romanian |   | &check; | &check; |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
+| Ukrainian | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
 More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
