@@ -1,0 +1,9 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+/py_grpc/build/
+/py_grpc/dist/
+/py_grpc/tinode_grpc/GIT_VERSION
+*.egg-info/
