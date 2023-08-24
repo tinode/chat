@@ -28,7 +28,7 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-1. Install [Go environment](https://golang.org/doc/install). The installation instructions below are for Go 1.16 and newer.
+1. Install [Go environment](https://golang.org/doc/install). The installation instructions below are for Go 1.18 and newer.
 
 2. OPTIONAL only if you intend to modify the code: Install [protobuf](https://developers.google.com/protocol-buffers/) and [gRPC](https://grpc.io/docs/languages/go/quickstart/) including [code generator](https://developers.google.com/protocol-buffers/docs/reference/go-generated) for Go.
 
@@ -75,11 +75,7 @@ See [instructions](./docker/README.md)
     ```
     The value of `buildstamp` will be sent by the server to the clients.
 
-    Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
-    ```
-    go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
-    ```
-    Building with Go 1.13 or below **will fail**!
+    Building with Go 1.17 or below **will fail**!
 
 5. Open `tinode.conf` (located at `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/server/`). Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
 ```js
