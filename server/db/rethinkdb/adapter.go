@@ -856,6 +856,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
+		// Must use GetAll to produce array result expected by decFileUseCounter.
 		q := rdb.DB(a.dbName).Table("users").GetAll(uid.String())
 
 		// Unlink user's attachment.
@@ -1567,7 +1568,8 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 		}
 	}
 
-	q := rdb.DB(a.dbName).Table("topics").Get(topic)
+	// Must use GetAll to produce array result expected by decFileUseCounter.
+	q := rdb.DB(a.dbName).Table("topics").GetAll(topic)
 	if hard {
 		if err = a.decFileUseCounter(q); err == nil {
 			_, err = q.Delete().RunWrite(a.conn)
