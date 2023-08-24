@@ -35,7 +35,7 @@ type Adapter interface {
 	// Version returns adapter version
 	Version() int
 	// DB connection stats object.
-	Stats() interface{}
+	Stats() any
 
 	// User management
 
@@ -48,7 +48,7 @@ type Adapter interface {
 	// UserDelete deletes user record
 	UserDelete(uid t.Uid, hard bool) error
 	// UserUpdate updates user record
-	UserUpdate(uid t.Uid, update map[string]interface{}) error
+	UserUpdate(uid t.Uid, update map[string]any) error
 	// UserUpdateTags adds, removes, or resets user's tags
 	UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error)
 	// UserGetByCred returns user ID for the given validated credential.
@@ -122,7 +122,7 @@ type Adapter interface {
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	// TopicUpdate updates topic record.
-	TopicUpdate(topic string, update map[string]interface{}) error
+	TopicUpdate(topic string, update map[string]any) error
 	// TopicOwnerChange updates topic's owner
 	TopicOwnerChange(topic string, newOwner t.Uid) error
 	// Topic subscriptions
@@ -135,7 +135,7 @@ type Adapter interface {
 	// SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
 	SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
-	SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error
+	SubsUpdate(topic string, user t.Uid, update map[string]any) error
 	// SubsDelete deletes a single subscription
 	SubsDelete(topic string, user t.Uid) error
 
