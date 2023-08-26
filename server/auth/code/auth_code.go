@@ -195,7 +195,7 @@ func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, erro
 	return nil, nil
 }
 
-// Replace all occurences of % with / to ensure SQL LIKE query works correctly.
+// Replace all occurrences of '%' with '/' to ensure SQL LIKE query works correctly.
 func sanitizeKey(key string) string {
 	return strings.ReplaceAll(key, "%", "/")
 }

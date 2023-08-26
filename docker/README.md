@@ -9,7 +9,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker network create tinode-net
 	```
 
-3. Decide which database backend you want to use: RethinkDB, MySQL or MongoDB. Run the selected database container, attaching it to `tinode-net` network:
+3. Decide which database backend you want to use: MySQL, PostgreSQL, MongoDB or RethinkDB. Run the selected database container, attaching it to `tinode-net` network:
 
 	1. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```

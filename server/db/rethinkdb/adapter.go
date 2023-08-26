@@ -2734,8 +2734,9 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	return locations, err
 }
 
-// Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
-func (a *adapter) decFileUseCounter(msgQuery rdb.Term) error {
+// Given a select query, decrement corresponding use counter in 'fileuploads' table.
+// The 'query' must return an array, i.e. GetAll, not Get.
+func (a *adapter) decFileUseCounter(query rdb.Term) error {
 	/*
 		r.db("test").table("one")
 			.getAll(
@@ -2753,7 +2754,7 @@ func (a *adapter) decFileUseCounter(msgQuery rdb.Term) error {
 	*/
 	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAll(
 		rdb.Args(
-			msgQuery.
+			query.
 				// Fetch messages with attachments only
 				Filter(rdb.Row.HasFields("Attachments")).
 				// Flatten arrays
