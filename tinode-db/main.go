@@ -78,6 +78,8 @@ type User struct {
 	CreatedAt   string      `json:"createdAt"`
 	Email       string      `json:"email"`
 	Tel         string      `json:"tel"`
+	Address     string      `json:"address"`
+	Diagnosis   string      `json:"diagnosis"`
 	AuthLevel   string      `json:"authLevel"`
 	Username    string      `json:"username"`
 	Password    string      `json:"passhash"`

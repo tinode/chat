@@ -59,6 +59,12 @@ func genDb(data *Data) {
 		if uu.Tel != "" {
 			user.Tags = append(user.Tags, "tel:"+uu.Tel)
 		}
+		if uu.Address != "" {
+			user.Tags = append(user.Tags, "address:"+uu.Address)
+		}
+		if uu.Diagnosis != "" {
+			user.Tags = append(user.Tags, "diagnosis:"+uu.Diagnosis)
+		}
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
 		if _, err := store.Users.Create(&user, uu.Private); err != nil {
