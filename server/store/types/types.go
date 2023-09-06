@@ -491,6 +491,33 @@ func (os ObjState) Value() (driver.Value, error) {
 	return int64(os), nil
 }
 
+type Diagnosys int
+
+const (
+	Depression Diagnosys = iota
+	Anxieties
+	ManicDepression
+	BorderlinePersonality
+	Schizophrenia
+	EatingDisorders
+	Ocd
+	DoubleMorbidity
+	other
+)
+
+type Address int
+
+const (
+	North Address = iota
+	HaderaZichronAndTheValleys
+	Sharon
+	Center
+	JerusalemArea
+	ShfellaAndMishorHachofSouth
+	JudeaSamariaAndJordanValley
+	South
+)
+
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader `bson:",inline"`
