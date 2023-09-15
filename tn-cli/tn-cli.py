@@ -232,6 +232,10 @@ def parse_trusted(trusted):
 
     return result
 
+# Create proto for ClientExtra
+def pack_extra(cmd):
+    return pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser, auth_level=pb.ROOT if cmd.as_root else pb.NONE)
+
 # Read a value in the server response using dot notation, i.e.
 # $user.params.token or $meta.sub[1].user
 def getVar(path):
@@ -362,7 +366,7 @@ def accMsg(id, cmd, ignored):
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
             public=cmd.public, private=cmd.private, trusted=encode_to_bytes(parse_trusted(cmd.trusted))),
         cred=parse_cred(cmd.cred)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {login}
 def loginMsg(id, cmd, args):
@@ -406,14 +410,14 @@ def subMsg(id, cmd, ignored):
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
         get_query=cmd.get_query),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
     if not cmd.topic:
         cmd.topic = tn_globals.DefaultTopic
     return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {pub}
 def pubMsg(id, cmd, ignored):
@@ -440,7 +444,7 @@ def pubMsg(id, cmd, ignored):
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
         head=head, content=encode_to_bytes(content)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {get}
 def getMsg(id, cmd, ignored):
@@ -460,7 +464,7 @@ def getMsg(id, cmd, ignored):
         what.append("cred")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
         query=pb.GetQuery(what=" ".join(what))),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {set}
 def setMsg(id, cmd, ignored):
@@ -486,7 +490,7 @@ def setMsg(id, cmd, ignored):
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None,
         cred=cred)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {del}
 def delMsg(id, cmd, ignored):
@@ -573,7 +577,7 @@ def delMsg(id, cmd, ignored):
         stdoutln("Unrecognized delete option '", cmd.what, "'")
         return None
 
-    msg = pb.ClientMsg(extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+    msg = pb.ClientMsg(extra=pack_extra(cmd))
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
@@ -631,7 +635,7 @@ def noteMsg(id, cmd, ignored):
 
     return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what,
         seq_id=cmd.seq, event=enum_event, payload=cmd.payload),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # Upload file out of band over HTTP(S) (not gRPC).
 def upload(id, cmd, args):
@@ -757,6 +761,9 @@ def parse_cmd(parts):
         parser.add_argument('filename', help='name of the file to upload')
     elif macros:
         parser = macros.parse_macro(parts)
+
+    if parser:
+        parser.add_argument('--as_root', action='store_true', help='execute command at ROOT auth level')
     return parser
 
 # Parses command line into command and parameters.
