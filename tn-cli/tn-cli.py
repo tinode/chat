@@ -360,7 +360,7 @@ def accMsg(id, cmd, ignored):
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-            public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
+            public=cmd.public, private=cmd.private, trusted=encode_to_bytes(parse_trusted(cmd.trusted))),
         cred=parse_cred(cmd.cred)),
         extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
@@ -400,8 +400,9 @@ def subMsg(id, cmd, ignored):
     cmd.private = TINODE_DEL if cmd.private == DELETE_MARKER else encode_to_bytes(cmd.private)
     return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
         set_query=pb.SetQuery(
-            desc=pb.SetDesc(public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted),
-                default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
+            desc=pb.SetDesc(public=cmd.public, private=cmd.private,
+                            trusted=encode_to_bytes(parse_trusted(cmd.trusted)),
+                            default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
         get_query=cmd.get_query),
@@ -480,7 +481,8 @@ def setMsg(id, cmd, ignored):
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-                public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
+                public=cmd.public, private=cmd.private,
+                trusted=encode_to_bytes(parse_trusted(cmd.trusted))),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None,
         cred=cred)),

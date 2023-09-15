@@ -49,7 +49,7 @@ class Macro:
 class Usermod(Macro):
     """Modifies user account. The following modes are available:
     * suspend/unsuspend account.
-    * change user's theCard (public name, description, avatar, private comment).
+    * change user's theCard (public name, description, avatar), private comment, trusted values.
 
     This macro requires root privileges."""
 
