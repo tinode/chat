@@ -226,7 +226,7 @@ def parse_trusted(trusted):
         for t in trusted.split(","):
             t = t.strip()
             if t.startswith("rm-"):
-                result[t[3:]] = TINODE_DEL
+                result[t[3:]] = False
             else:
                 result[t] = True
 
@@ -763,7 +763,11 @@ def parse_cmd(parts):
         parser = macros.parse_macro(parts)
 
     if parser:
-        parser.add_argument('--as_root', action='store_true', help='execute command at ROOT auth level')
+        try:
+            parser.add_argument('--as_root', action='store_true', help='execute command at ROOT auth level')
+        except Exception:
+            # Ignore exception here: --as_root has been added already, maco parser is persistent.
+            pass
     return parser
 
 # Parses command line into command and parameters.
@@ -944,7 +948,7 @@ def serialize_cmd(string, id, args):
             return None, None
 
     except Exception as err:
-        stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
+        stdoutln("Error in '{0}': {1}".format(string, err))
         return None, None
 
 def pop_from_output_queue():
