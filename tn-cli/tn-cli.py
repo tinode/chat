@@ -766,7 +766,7 @@ def parse_cmd(parts):
         try:
             parser.add_argument('--as_root', action='store_true', help='execute command at ROOT auth level')
         except Exception:
-            # Ignore exception here: --as_root has been added already, maco parser is persistent.
+            # Ignore exception here: --as_root has been added already, macro parser is persistent.
             pass
     return parser
 
