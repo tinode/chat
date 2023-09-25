@@ -140,8 +140,8 @@ All client software has support for [internationalization](docs/translations.md)
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
-| Chinese (simplified) | &check; | &check; | &check; | &check; |
-| Chinese (traditional) |   | &check; | &check; | &check; |
+| Chinese simplified | &check; | &check; | &check; | &check; |
+| Chinese traditional |   | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
@@ -150,6 +150,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Romanian |   | &check; | &check; |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
+| Thai |   | &check; |   |   |
 | Ukrainian | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
