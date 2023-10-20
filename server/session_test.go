@@ -370,6 +370,8 @@ func TestDispatchLeave(t *testing.T) {
 		if req != msg {
 			t.Error("Leave request: leave message expected to be the original leave message.")
 		}
+		// leave request handler is expected to clean up subs.
+		s.delSub(topicName)
 	} else {
 		t.Errorf("Unsub messages: expected 1, received %d.", len(leave))
 	}
