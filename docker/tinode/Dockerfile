@@ -114,10 +114,6 @@ ENV ICE_SERVERS_FILE=
 # to set STORE_USE_ADAPTER to the desired db adapter correctly.
 ENV STORE_USE_ADAPTER=$TARGET_DB
 
-# Number of the goroutines processing topic master responses to the topic proxies.
-# If 0, default value wll be used: # of nodes x 5.
-ENV CLUSTER_NUM_PROXY_EVENT_GOROUTINES=0
-
 # Url path for exposing the server's internal status. E.g. '/status'
 ENV SERVER_STATUS_PATH=''
 

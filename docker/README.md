@@ -185,8 +185,8 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `CLUSTER_SELF` | string |  | Node name if the server is running in a Tinode cluster |
-| `CLUSTER_NUM_PROXY_EVENT_GOROUTINES` | int | 0 | Number of goroutines used for processing topic master to proxy responses |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
+| `DEFAULT_COUNTRY_CODE` | string | `"US"` | 2-letter country code to assign to sessions by default when the country isn't specified by the client explicitly and it's impossible to infer it. |
 | `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
 | `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files) |
 | `FCM_CRED_FILE` | string |  | Path to JSON file with FCM server-side service account credentials which will be used to send push notifications. |
@@ -197,6 +197,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
 | `FCM_MEASUREMENT_ID` | string |  | Google Analytics ID of the form `G-123ABCD789`. |
+| `FS_CORS_ORIGINS` | string | `["*"]` | Cors origins when media is served from the file system. See `AWS_CORS_ORIGINS` for details. |
 | `ICE_SERVERS_FILE` | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
@@ -204,7 +205,9 @@ You can specify the following environment variables when issuing `docker run` co
 | `POSTGRES_DSN` | string | `'postgresql://postgres:postgres@localhost:5432/tinode'` |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
 | `SAMPLE_DATA` | string |  _see comment →_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `` (empty string) to disable |
+| `SMTP_AUTH_MECHANISM` | string | `"plain"` | SMTP authentication mechanism to use; one of "login", "cram-md5", "plain". |
 | `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
+| `SMTP_HELO_HOST` | string | _see comment →_ | FQDN to use in SMTP HELO/EHLO command; if missing, the hostname from `SMTP_HOST_URL` is used. |
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
 | `SMTP_LOGIN` | string |  | Optional login to use for authentication with the SMTP server (email verification). |
 | `SMTP_PASSWORD` | string |  | Optional password to use for authentication with the SMTP server (email verification). |
@@ -212,6 +215,8 @@ You can specify the following environment variables when issuing `docker run` co
 | `SMTP_SENDER` | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails, e.g. `'"John Doe" <jdoe@example.com>'`. |
 | `SMTP_SERVER` | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
 | `STORE_USE_ADAPTER` | string |  | DB adapter name (specify with `tinode/tinode` container only) |
+| `TEL_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (phone verification).  |
+| `TEL_SENDER` | string |  | Sender name to pass to SMS sending service. |
 | `TLS_CONTACT_ADDRESS` | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
 | `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
