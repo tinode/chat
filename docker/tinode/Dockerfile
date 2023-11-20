@@ -47,6 +47,9 @@ ENV NO_DB_INIT=false
 ARG SAMPLE_DATA=data.json
 ENV SAMPLE_DATA=$SAMPLE_DATA
 
+# Default country code to use in communication.
+ENV DEFAULT_COUNTRY_CODE=US
+
 # The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'
 
@@ -59,11 +62,28 @@ ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 # Default handler for large files
 ENV MEDIA_HANDLER=fs
 
-# Whitelisted domains for S3 large media handler.
+# Whitelisted domains for file and S3 large media handler.
+ENV FS_CORS_ORIGINS='["*"]'
 ENV AWS_CORS_ORIGINS='["*"]'
+
+# AWS S3 parameters
+ENV AWS_ACCESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
+ENV AWS_REGION=
+ENV AWS_S3_BUCKET=
 
 # Default externally-visible hostname for email verification.
 ENV SMTP_HOST_URL='http://localhost:6060'
+# Email parameters decalarations.
+ENV SMTP_SERVER=
+ENV SMTP_PORT=
+ENV SMTP_SENDER=
+ENV SMTP_LOGIN=
+ENV SMTP_PASSWORD=
+ENV SMTP_AUTH_MECHANISM=
+ENV SMTP_HELO_HOST=
+ENV EMAIL_VERIFICATION_REQUIRED=
+ENV DEBUG_EMAIL_VERIFICATION_CODE=
 
 # Whitelist of permitted email domains for email verification (empty list means all domains are permitted)
 ENV SMTP_DOMAINS=''
@@ -82,6 +102,8 @@ ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
 
 # Disable TLS by default.
 ENV TLS_ENABLED=false
+ENV TLS_DOMAIN_NAME=
+ENV TLS_CONTACT_ADDRESS=
 
 # Disable push notifications by default.
 ENV FCM_PUSH_ENABLED=false
@@ -116,6 +138,9 @@ ENV STORE_USE_ADAPTER=$TARGET_DB
 
 # Url path for exposing the server's internal status. E.g. '/status'
 ENV SERVER_STATUS_PATH=''
+
+# Garbage collection of unfinished account registrations.
+ENV ACC_GC_ENABLED=false
 
 # Install root certificates, they are needed for email validator to work
 # with the TLS SMTP servers like Gmail or Mailjet. Also add bash and grep.
