@@ -140,7 +140,7 @@
 			"config": {
 				"enabled": $TNPG_PUSH_ENABLED,
 				"token": "$TNPG_AUTH_TOKEN",
-				"org": "$TNPG_USER"
+				"org": "$TNPG_ORG"
 			}
 		},
 		{
