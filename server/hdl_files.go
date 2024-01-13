@@ -134,7 +134,10 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	defer rsc.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
-	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+	asAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt"))
+	// Force download for html files as a security measure.
+	asAttachment = asAttachment || strings.Contains(fd.MimeType, "html")
+	if asAttachment {
 		wrt.Header().Set("Content-Disposition", "attachment")
 	}
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
