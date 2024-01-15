@@ -136,7 +136,11 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", fd.MimeType)
 	asAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt"))
 	// Force download for html files as a security measure.
-	asAttachment = asAttachment || strings.Contains(fd.MimeType, "html")
+	asAttachment = asAttachment ||
+		strings.Contains(fd.MimeType, "html") ||
+		strings.Contains(fd.MimeType, "xml") ||
+		strings.HasPrefix(fd.MimeType, "application/") ||
+		strings.HasPrefix(fd.MimeType, "text/")
 	if asAttachment {
 		wrt.Header().Set("Content-Disposition", "attachment")
 	}
@@ -274,7 +278,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	// If DetectContentType fails, use client-provided content type.
 	if mimeType == "application/octet-stream" {
 		if contentType := header.Header.Get("Content-Type"); contentType != "" {
-			mimeType = contentType
+			mimeType = strings.ToLower(contentType)
 		}
 	}
 
