@@ -28,7 +28,7 @@ import (
 // Allowed mime types for user-provided Content-type field. Must be alphabetically sorted.
 // Types not in the list are converted to "application/octet-stream".
 // See https://www.iana.org/assignments/media-types/media-types.xhtml
-var allowedMimeTypes = []string{"application", "audio", "font", "image", "text", "video"}
+var allowedMimeTypes = []string{"application/", "audio/", "font/", "image/", "text/", "video/"}
 
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
