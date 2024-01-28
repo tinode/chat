@@ -59,6 +59,10 @@ See more info at https://github.com/tinode/ios/#push_notifications
 * If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../server/auth/rest/).
 
 
+### Q: How do I make my installation private?<br/>
+**A**: If you want to restrict registrations to only those people whom you approve, then the simplest way is to restrict Tinode registrations to an email domain you control: register a custom domain, set up a catch-all email forwarding service at your domain registrar (usually free). Then use your domain name in Tinode config (`"acc_validation" -> "email" -> "domains"`, for example `"domains": ["my-domain.com"]`). You will receive registration emails at your catch-all email box and you will be able to forward validation codes to your users manually. Alternatively, if you have a lot of users, you can use [rest authenticator](../server/auth/rest/).
+
+
 ### Q: How to create a `root` user?<br/>
 **A**: Starting with Tinode version 0.18 the `root` access can be granted to a user by running the following command:
 ```sh
