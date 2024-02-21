@@ -71,6 +71,7 @@ ENV AWS_ACCESS_KEY_ID=
 ENV AWS_SECRET_ACCESS_KEY=
 ENV AWS_REGION=
 ENV AWS_S3_BUCKET=
+ENV AWS_S3_ENDPOINT=
 
 # Default externally-visible hostname for email verification.
 ENV SMTP_HOST_URL='http://localhost:6060'

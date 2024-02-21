@@ -30,6 +30,7 @@
 				"secret_access_key": "$AWS_SECRET_ACCESS_KEY",
 				"region": "$AWS_REGION",
 				"bucket": "$AWS_S3_BUCKET",
+				"endpoint": "$AWS_S3_ENDPOINT",
 				"presign_ttl": 3600,
 				"cache_control": "max-age=86400",
 				"cors_origins": $AWS_CORS_ORIGINS

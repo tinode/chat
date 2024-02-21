@@ -184,6 +184,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_CORS_ORIGINS` | string | `["*"]` | Allowed origins ([CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin)) URL for downloads. Generally use your server URL and its aliases. |
 | `AWS_REGION` | string |  | AWS Region when using `s3` media handler |
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler. |
+| `AWS_S3_ENDPOINT` | string |  | An endpoint URL (hostname only or fully qualified URI) to override the default endpoint; can be of any S3-compatible service, such as `minio-api.x.io` |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler. |
 | `CLUSTER_SELF` | string |  | Node name if the server is running in a Tinode cluster. |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
