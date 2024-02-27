@@ -510,7 +510,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	var uaRefresh bool
 
 	// Check if s.ver is defined
-	checkVers := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
+	checkVers := func(handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if s.ver == 0 {
 				logs.Warn.Println("s.dispatch: {hi} is missing", s.sid)
@@ -522,7 +522,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	}
 
 	// Check if user is logged in
-	checkUser := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
+	checkUser := func(handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if msg.AsUser == "" {
 				logs.Warn.Println("s.dispatch: authentication required", s.sid)
@@ -535,19 +535,19 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	switch {
 	case msg.Pub != nil:
-		handler = checkVers(msg, checkUser(msg, s.publish))
+		handler = checkVers(checkUser(s.publish))
 		msg.Id = msg.Pub.Id
 		msg.Original = msg.Pub.Topic
 		uaRefresh = true
 
 	case msg.Sub != nil:
-		handler = checkVers(msg, checkUser(msg, s.subscribe))
+		handler = checkVers(checkUser(s.subscribe))
 		msg.Id = msg.Sub.Id
 		msg.Original = msg.Sub.Topic
 		uaRefresh = true
 
 	case msg.Leave != nil:
-		handler = checkVers(msg, checkUser(msg, s.leave))
+		handler = checkVers(checkUser(s.leave))
 		msg.Id = msg.Leave.Id
 		msg.Original = msg.Leave.Topic
 
@@ -556,28 +556,28 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.Id = msg.Hi.Id
 
 	case msg.Login != nil:
-		handler = checkVers(msg, s.login)
+		handler = checkVers(s.login)
 		msg.Id = msg.Login.Id
 
 	case msg.Get != nil:
-		handler = checkVers(msg, checkUser(msg, s.get))
+		handler = checkVers(checkUser(s.get))
 		msg.Id = msg.Get.Id
 		msg.Original = msg.Get.Topic
 		uaRefresh = true
 
 	case msg.Set != nil:
-		handler = checkVers(msg, checkUser(msg, s.set))
+		handler = checkVers(checkUser(s.set))
 		msg.Id = msg.Set.Id
 		msg.Original = msg.Set.Topic
 		uaRefresh = true
 
 	case msg.Del != nil:
-		handler = checkVers(msg, checkUser(msg, s.del))
+		handler = checkVers(checkUser(s.del))
 		msg.Id = msg.Del.Id
 		msg.Original = msg.Del.Topic
 
 	case msg.Acc != nil:
-		handler = checkVers(msg, s.acc)
+		handler = checkVers(s.acc)
 		msg.Id = msg.Acc.Id
 
 	case msg.Note != nil:
