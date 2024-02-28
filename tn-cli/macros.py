@@ -2,7 +2,9 @@
 
 import argparse
 import tn_globals
+import json
 from tn_globals import stdoutln
+import random
 
 
 class Macro:
@@ -326,6 +328,63 @@ class Thecard(Macro):
                 '.use --user "%s"' % old_user,
                 '.log %s' % varname]
 
+class Subsuserstogroup(Macro):
+    """Subscribe multiple user to one group."""
+
+    def name(self):
+        return "substogroup"
+
+    def description(self):
+        return "Subscribe multiple user to one group. (requires root privileges)"
+
+    def add_parser_args(self):
+        self.parser.add_argument('userids', help='User ids split by (,)')
+        self.parser.add_argument('--groupid', required=True, help='group id')
+
+    def expand(self, id, cmd, args):
+        if not cmd.userids:
+            return None
+
+        users = cmd.userids.split(',')
+        script = []
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
+
+        for user in users:
+            script.append('.use --user %s' % user)
+            script.append('.must sub me')
+            script.append('.must sub %s' % cmd.groupid)
+            script.append('.must leave me')
+            script.append('.must leave %s' % cmd.groupid)
+            script.append('.sleep 500')
+
+        return script
+
+class Creategroup(Macro):
+    """Create group on behalf this user."""
+
+    def name(self):
+        return "crgroup"
+
+    def description(self):
+        return "Create group on behalf this user."
+
+    def add_parser_args(self):
+        self.parser.add_argument('userid', help='Group owner User id')
+        self.parser.add_argument('--name', required=True, help='Group Name')
+
+    def expand(self, id, cmd, args):
+        if not cmd.userid:
+            return None
+        
+        tnGroupId = random.randrange(100000, 999999)
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
+        return ['.use --user %s' % cmd.userid,
+                '.log %s' % tn_globals.Variables,
+                '.must %s sub "new%s" --fn "%s" --auth JRWPSD' % (varname, tnGroupId, cmd.name),
+                '.must leave me',
+        ]
 
 def parse_macro(parts):
     """Attempts to find a parser for the provided sequence of tokens."""
@@ -337,4 +396,4 @@ def parse_macro(parts):
     return macro.parser
 
 
-Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs(), Userdel(), Chcred(), Thecard()]}
+Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs(), Userdel(), Chcred(), Thecard(), Creategroup(), Subsuserstogroup()]}
