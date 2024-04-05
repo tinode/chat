@@ -98,11 +98,6 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 
 // CORSHandler is the default preflight OPTIONS processor for use by media handlers.
 func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.Header, int) {
-	if req.Method != http.MethodOptions {
-		// Not an OPTIONS request. No special handling for all other requests.
-		return nil, 0
-	}
-
 	var allowMethods []string
 	if serve {
 		allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
