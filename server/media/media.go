@@ -109,6 +109,8 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 	allowedOrigin := matchCORSOrigin(allowedOrigins, origin)
 	requestMethod := req.Header.Get("Access-Control-Request-Method")
 	if req.Method == http.MethodOptions && requestMethod != "" {
+		// Preflight request.
+
 		if allowedOrigin == "" {
 			return headers, http.StatusNoContent
 		}
