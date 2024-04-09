@@ -319,18 +319,15 @@ func plainTextFormatter(n *node, ctx interface{}) error {
 		state.txt += text
 	case "BR":
 		state.txt += "\n"
-	case "IM":
+	case "AU", "EX", "IM", "VD":
 		name, ok := nullableMapGet(n.sp.data, "name")
 		if !ok || name == "" {
 			name = "?"
 		}
-		state.txt += "[IMAGE '" + name + "']"
-	case "EX":
-		name, ok := nullableMapGet(n.sp.data, "name")
-		if !ok || name == "" {
-			name = "?"
-		}
-		state.txt += "[FILE '" + name + "']"
+		expand := map[string]string{"AU": "AUDIO", "EX": "FILE", "IM": "IMAGE", "VD": "VIDEO"}
+		state.txt += "[" + expand[n.sp.tp] + "'" + name + "']"
+	case "VC":
+		state.txt += "[CALL]"
 	default:
 		state.txt += text
 	}
