@@ -2894,7 +2894,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 	return nil
 }
 
-// replySetCreds adds or validates user credentials such as email and phone numbers.
+// replySetCred adds or validates user credentials such as email and phone numbers.
 func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	set := msg.Set

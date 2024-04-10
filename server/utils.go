@@ -103,7 +103,7 @@ func normalizeTags(src []string) types.StringSlice {
 	return types.StringSlice(dst)
 }
 
-// stringDelta extracts the slices of added and removed strings from two slices:
+// stringSliceDelta extracts the slices of added and removed strings from two slices:
 //
 //	added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
 //	removed := oldSlice - (oldSlice & newSlice) -- present in old but missing in new
@@ -424,7 +424,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	return out
 }
 
-// rewriteToken attempts to match the original token against the email, telephone number and optionally login patterns.
+// rewriteTag attempts to match the original token against the email, telephone number and optionally login patterns.
 // The tag is expected to be converted to lowercase.
 // On success, it prepends the token with the corresponding prefix. It returns an empty string if the tag is invalid.
 // TODO: consider inferring country code from user location.
