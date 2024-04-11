@@ -153,7 +153,8 @@ func (ah *awshandler) Init(jsconf string) error {
 
 // Headers redirects to the AWS server.
 func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-	if headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve); status != 0 {
+	headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve)
+	if status != 0 || req.Method == http.MethodPost || req.Method == http.MethodPut {
 		return headers, status, nil
 	}
 
