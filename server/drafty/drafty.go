@@ -233,8 +233,8 @@ func toTree(drafty *document) (*node, error) {
 	return &node{children: children}, nil
 }
 
-// given a grapheme iterator, start and end pos, returns a new grapheme iterator
-// containing a slice of graphemes(start->end) from input interator
+// Given a grapheme iterator, start and end pos, returns a new grapheme iterator
+// containing a slice of graphemes(start->end) from input interator.
 func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Graphemes {
 	if g == nil {
 		return uniseg.NewGraphemes("")
@@ -242,12 +242,9 @@ func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Grapheme
 
 	g.Reset()
 
-	i := 0
-	j := -1
-
 	output := ""
 
-	for g.Next() {
+	for i, j := 0, -1; g.Next(); {
 		if j > 0 {
 			if j < end {
 				output = output + g.Str()
@@ -271,7 +268,7 @@ func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Grapheme
 	return uniseg.NewGraphemes(output)
 }
 
-// given a grapheme iterator, returns the original string from which it was created from
+// Given a grapheme iterator, returns the original string from which it was created from.
 func graphemeToString(g *uniseg.Graphemes) string {
 	if g == nil {
 		return ""
@@ -287,7 +284,7 @@ func graphemeToString(g *uniseg.Graphemes) string {
 	return output
 }
 
-// returns the number of grapheme cluster found in iterator
+// Returns the number of grapheme cluster found in iterator.
 func getGraphemeLength(g *uniseg.Graphemes) int {
 	if g == nil {
 		return 0
@@ -305,7 +302,7 @@ func getGraphemeLength(g *uniseg.Graphemes) int {
 	return output
 }
 
-// given two grapheme iterators g1 and g2, appends g2 to g1
+// Given two grapheme iterators g1 and g2,returns a grapheme iterator with string value equal to s1 + s2.
 func appendGraphemes(g1 *uniseg.Graphemes, g2 *uniseg.Graphemes) *uniseg.Graphemes {
 	g1.Reset()
 	g2.Reset()
@@ -319,12 +316,7 @@ func appendGraphemes(g1 *uniseg.Graphemes, g2 *uniseg.Graphemes) *uniseg.Graphem
 		output += g2.Str()
 	}
 
-	g1.Reset()
-	g2.Reset()
-
-	g1 = uniseg.NewGraphemes(output)
-
-	return g1
+	return uniseg.NewGraphemes(output)
 }
 
 // forEach recursively iterates nested spans to form a tree.
@@ -522,15 +514,13 @@ func decodeAsDrafty(content interface{}) (*document, error) {
 
 	switch tmp := content.(type) {
 	case string:
-		g := uniseg.NewGraphemes(tmp)
-		drafty = &document{txt: g}
+		drafty = &document{txt: uniseg.NewGraphemes(tmp)}
 	case map[string]interface{}:
 		drafty = &document{}
 		correct := 0
 		if txt, ok := tmp["txt"].(string); ok {
-			g := uniseg.NewGraphemes(txt)
 			drafty.Txt = txt
-			drafty.txt = g
+			drafty.txt = uniseg.NewGraphemes(txt)
 			correct++
 		}
 		if ifmt, ok := tmp["fmt"].([]interface{}); ok {
