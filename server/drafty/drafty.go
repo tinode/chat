@@ -236,10 +236,6 @@ func toTree(drafty *document) (*node, error) {
 // Given a grapheme iterator, start and end pos, returns a new grapheme iterator
 // containing a slice of graphemes(start->end) from input interator.
 func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Graphemes {
-	if g == nil {
-		return uniseg.NewGraphemes("")
-	}
-
 	g.Reset()
 
 	output := ""
@@ -270,9 +266,6 @@ func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Grapheme
 
 // Given a grapheme iterator, returns the original string from which it was created from.
 func graphemeToString(g *uniseg.Graphemes) string {
-	if g == nil {
-		return ""
-	}
 	g.Reset()
 
 	output := ""
@@ -286,9 +279,6 @@ func graphemeToString(g *uniseg.Graphemes) string {
 
 // Returns the number of grapheme cluster found in iterator.
 func getGraphemeLength(g *uniseg.Graphemes) int {
-	if g == nil {
-		return 0
-	}
 	g.Reset()
 
 	output := 0
