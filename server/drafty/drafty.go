@@ -259,8 +259,6 @@ func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Grapheme
 
 	}
 
-	g.Reset()
-
 	return uniseg.NewGraphemes(output)
 }
 
@@ -286,8 +284,6 @@ func getGraphemeLength(g *uniseg.Graphemes) int {
 	for g.Next() {
 		output++
 	}
-
-	g.Reset()
 
 	return output
 }
