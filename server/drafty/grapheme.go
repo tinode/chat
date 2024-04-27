@@ -4,7 +4,7 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-// graphemes is a container holding lengths of graphemes in a string.
+// graphemes is a container holding lengths of grapheme clusters in a string.
 type graphemes struct {
 	// The original string.
 	original string
@@ -13,7 +13,7 @@ type graphemes struct {
 	sizes []byte
 }
 
-// prepareGraphemes returns a parsed grapheme container by splitting the string into grapheme clusters
+// prepareGraphemes returns a parsed grapheme cluster container by splitting the string into grapheme clusters
 // and saving their lengths.
 func prepareGraphemes(str string) *graphemes {
 	// Split the string into grapheme clusters and save the size of each cluster.
@@ -37,7 +37,7 @@ func (g *graphemes) length() int {
 	return len(g.sizes)
 }
 
-// string returns the original string from which the grapheme was created from.
+// string returns the original string from which the grapheme cluster container was created.
 func (g *graphemes) string() string {
 	if g == nil {
 		return ""
@@ -45,7 +45,7 @@ func (g *graphemes) string() string {
 	return g.original
 }
 
-// slice returns a new grapheme iterator containing graphemes from 'start' to 'end'.
+// slice returns a new grapheme cluster container with grapheme clusters from 'start' to 'end'.
 func (g *graphemes) slice(start, end int) *graphemes {
 
 	// Convert grapheme offsets to string offsets.
@@ -64,8 +64,8 @@ func (g *graphemes) slice(start, end int) *graphemes {
 	}
 }
 
-// append appends 'other' grapheme iterator to 'g' iterator and returns g.
-// If g is nil, 'other' is returned.
+// append appends 'other' grapheme cluster container to 'g' container and returns g.
+// If g is nil, the 'other' is returned.
 func (g *graphemes) append(other *graphemes) *graphemes {
 	if g == nil {
 		return other
