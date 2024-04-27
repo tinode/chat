@@ -113,7 +113,7 @@ func TestPlainText(t *testing.T) {
 	}
 
 	for i := range validInputs {
-		var val interface{}
+		var val any
 		if err := json.Unmarshal([]byte(validInputs[i]), &val); err != nil {
 			t.Errorf("Failed to parse input %d '%s': %s", i, validInputs[i], err)
 		}
@@ -126,7 +126,7 @@ func TestPlainText(t *testing.T) {
 	}
 
 	for i := range invalidInputs {
-		var val interface{}
+		var val any
 		if err := json.Unmarshal([]byte(invalidInputs[i]), &val); err != nil {
 			// Don't make it an error: we are not testing validity of json.Unmarshal.
 			t.Logf("Failed to parse input %d '%s': %s", i, invalidInputs[i], err)
@@ -155,7 +155,7 @@ func TestPreview(t *testing.T) {
 		`{"txt":"Hi 🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿 🏴󠁧󠁢󠁳󠁣󠁴󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿","fmt":[{"tp":"ST","at":3,"len":4},{"tp":"ST","at":8,"len":4}]}`,
 	}
 	for i := range validInputs {
-		var val interface{}
+		var val any
 		if err := json.Unmarshal([]byte(validInputs[i]), &val); err != nil {
 			t.Errorf("Failed to parse input %d '%s': %s", i, validInputs[i], err)
 		}
@@ -170,7 +170,7 @@ func TestPreview(t *testing.T) {
 	// Only some invalid input should fail these tests.
 	testsToFail := []int{3, 4, 5, 6}
 	for _, i := range testsToFail {
-		var val interface{}
+		var val any
 		if err := json.Unmarshal([]byte(invalidInputs[i]), &val); err != nil {
 			// Don't make it an error: we are not testing validity of json.Unmarshal.
 			t.Logf("Failed to parse input %d '%s': %s", i, invalidInputs[i], err)
