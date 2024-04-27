@@ -58,10 +58,6 @@ func (g *graphemes) slice(start, end int) *graphemes {
 		e += int(g.sizes[i])
 	}
 
-	if e == 0 {
-		println("G= ", g)
-	}
-
 	return &graphemes{
 		original: g.original[s:e],
 		sizes:    g.sizes[start:end],
