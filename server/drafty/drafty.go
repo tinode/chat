@@ -6,6 +6,8 @@ import (
 	"errors"
 	"sort"
 	"strings"
+
+	"github.com/rivo/uniseg"
 )
 
 const (
@@ -34,7 +36,7 @@ type entity struct {
 
 type document struct {
 	Txt string `json:"txt,omitempty"`
-	txt []rune
+	txt *uniseg.Graphemes
 	Fmt []style  `json:"fmt,omitempty"`
 	Ent []entity `json:"ent,omitempty"`
 }
@@ -48,7 +50,7 @@ type span struct {
 }
 
 type node struct {
-	txt      []rune
+	txt      *uniseg.Graphemes
 	sp       *span
 	children []*node
 }
@@ -59,7 +61,7 @@ type previewState struct {
 	keymap    map[int]int
 }
 
-// Preview shortens Drafty to the specified length (in runes), removes quoted text, leading line breaks,
+// Preview shortens Drafty to the specified length (in graphemes), removes quoted text, leading line breaks,
 // and large content from entities making them suitable for a one-line preview,
 // for example for showing in push notifications.
 // The return value is a Drafty document encoded as JSON string.
@@ -93,7 +95,7 @@ func Preview(content interface{}, length int) (string, error) {
 		return "", err
 	}
 
-	state.drafty.Txt = string(state.drafty.txt)
+	state.drafty.Txt = graphemeToString(state.drafty.txt)
 	data, err := json.Marshal(state.drafty)
 	return string(data), err
 }
@@ -173,7 +175,7 @@ func toTree(drafty *document) (*node, error) {
 		return &node{txt: drafty.txt}, nil
 	}
 
-	textLen := len(drafty.txt)
+	textLen := getGraphemeLength(drafty.txt)
 
 	var spans []*span
 	for i := range drafty.Fmt {
@@ -231,8 +233,80 @@ func toTree(drafty *document) (*node, error) {
 	return &node{children: children}, nil
 }
 
+// Given a grapheme iterator, start and end pos, returns a new grapheme iterator
+// containing a slice of graphemes(start->end) from input interator.
+func sliceGraphemeClusters(g *uniseg.Graphemes, start, end int) *uniseg.Graphemes {
+	g.Reset()
+
+	output := ""
+
+	for i, j := 0, -1; g.Next(); {
+		if j > 0 {
+			if j < end {
+				output = output + g.Str()
+				j++
+			} else {
+				// end pos found, stop collecting string
+				break
+			}
+		} else if i < start {
+			i++
+		} else if i == start {
+			// starting pos found, start collecting string
+			output = output + g.Str()
+			j = i + 1
+		}
+
+	}
+
+	return uniseg.NewGraphemes(output)
+}
+
+// Given a grapheme iterator, returns the original string from which it was created from.
+func graphemeToString(g *uniseg.Graphemes) string {
+	g.Reset()
+
+	output := ""
+
+	for g.Next() {
+		output += g.Str()
+	}
+
+	return output
+}
+
+// Returns the number of grapheme cluster found in iterator.
+func getGraphemeLength(g *uniseg.Graphemes) int {
+	g.Reset()
+
+	output := 0
+
+	for g.Next() {
+		output++
+	}
+
+	return output
+}
+
+// Given two grapheme iterators g1 and g2,returns a grapheme iterator with string value equal to s1 + s2.
+func appendGraphemes(g1 *uniseg.Graphemes, g2 *uniseg.Graphemes) *uniseg.Graphemes {
+	g1.Reset()
+	g2.Reset()
+	output := ""
+
+	for g1.Next() {
+		output += g1.Str()
+	}
+
+	for g2.Next() {
+		output += g2.Str()
+	}
+
+	return uniseg.NewGraphemes(output)
+}
+
 // forEach recursively iterates nested spans to form a tree.
-func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
+func forEach(g *uniseg.Graphemes, start, end int, spans []*span) ([]*node, error) {
 	var result []*node
 
 	// Process ranges calling iterator for each range.
@@ -244,10 +318,9 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 			result = append(result, &node{sp: sp})
 			continue
 		}
-
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			result = append(result, &node{txt: line[start:sp.at]})
+			result = append(result, &node{txt: sliceGraphemeClusters(g, start, sp.at)})
 			start = sp.at
 		}
 
@@ -261,7 +334,7 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 		if tags[sp.tp].isVoid {
 			result = append(result, &node{sp: sp})
 		} else {
-			children, err := forEach(line, start, sp.end, subspans)
+			children, err := forEach(g, start, sp.end, subspans)
 			if err != nil {
 				return nil, err
 			}
@@ -272,7 +345,7 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 
 	// Add the remaining unformatted range.
 	if start < end {
-		result = append(result, &node{txt: line[start:end]})
+		result = append(result, &node{txt: sliceGraphemeClusters(g, start, end)})
 	}
 
 	return result, nil
@@ -294,7 +367,7 @@ func plainTextFormatter(n *node, ctx interface{}) error {
 		}
 		text = string(state.txt)
 	} else {
-		text = string(n.txt)
+		text = graphemeToString(n.txt)
 	}
 
 	state := ctx.(*plainTextState)
@@ -338,7 +411,7 @@ func plainTextFormatter(n *node, ctx interface{}) error {
 func previewFormatter(n *node, ctx interface{}) error {
 
 	state := ctx.(*previewState)
-	at := len(state.drafty.txt)
+	at := getGraphemeLength(state.drafty.txt)
 	if at >= state.maxLength {
 		// Maximum doc length reached.
 		return nil
@@ -362,14 +435,17 @@ func previewFormatter(n *node, ctx interface{}) error {
 			}
 		}
 	} else {
-		increment := len(n.txt)
+		increment := getGraphemeLength(n.txt)
 		if at+increment > state.maxLength {
 			increment = state.maxLength - at
 		}
-		state.drafty.txt = append(state.drafty.txt, n.txt[:increment]...)
+		if state.drafty.txt == nil {
+			state.drafty.txt = uniseg.NewGraphemes("")
+		}
+		state.drafty.txt = appendGraphemes(state.drafty.txt, sliceGraphemeClusters(n.txt, 0, increment))
 	}
 
-	end := len(state.drafty.txt)
+	end := getGraphemeLength(state.drafty.txt)
 
 	if n.sp != nil {
 		fmt := style{}
@@ -421,13 +497,13 @@ func decodeAsDrafty(content interface{}) (*document, error) {
 
 	switch tmp := content.(type) {
 	case string:
-		drafty = &document{txt: []rune(tmp)}
+		drafty = &document{txt: uniseg.NewGraphemes(tmp)}
 	case map[string]interface{}:
 		drafty = &document{}
 		correct := 0
 		if txt, ok := tmp["txt"].(string); ok {
 			drafty.Txt = txt
-			drafty.txt = []rune(txt)
+			drafty.txt = uniseg.NewGraphemes(txt)
 			correct++
 		}
 		if ifmt, ok := tmp["fmt"].([]interface{}); ok {
