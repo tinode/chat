@@ -11,14 +11,14 @@ import (
 	"net/url"
 	"strings"
 
+	fbmsg "firebase.google.com/go/v4/messaging"
+
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/push/fcm"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
-
-	fcmv1 "google.golang.org/api/fcm/v1"
 )
 
 const (
@@ -58,19 +58,6 @@ type subUnsubReq struct {
 	Unsub    bool     `json:"unsub"`
 }
 
-type tnpgResponse struct {
-	// Push message response only.
-	MessageID string `json:"msg_id,omitempty"`
-	// Server response HTTP code.
-	Code int `json:"code,omitempty"`
-	// FCM response code. Both push and sub/unsub response.
-	ErrorCode     string `json:"errcode,omitempty"`
-	ExtendedError string `json:"exerr,omitempty"`
-	ErrorMessage  string `json:"errmsg,omitempty"`
-	// Channel sub/unsub response only.
-	Index int `json:"index,omitempty"`
-}
-
 type batchResponse struct {
 	// Number of successfully sent messages.
 	SuccessCount int `json:"sent_count"`
@@ -80,25 +67,12 @@ type batchResponse struct {
 	FatalCode    string `json:"errcode,omitempty"`
 	FatalMessage string `json:"errmsg,omitempty"`
 	// Individual reponses in the same order as messages. Could be nil if the entire batch failed.
-	Responses []*tnpgResponse `json:"resp,omitempty"`
+	Responses []*common.TNPGResponse `json:"resp,omitempty"`
 
 	// Local values
 	httpCode   int
 	httpStatus string
 }
-
-// Error codes copied from https://github.com/firebase/firebase-admin-go/blob/master/messaging/messaging.go
-const (
-	internalError                  = "internal-error"
-	invalidAPNSCredentials         = "invalid-apns-credentials"
-	invalidArgument                = "invalid-argument"
-	messageRateExceeded            = "message-rate-exceeded"
-	mismatchedCredential           = "mismatched-credential"
-	registrationTokenNotRegistered = "registration-token-not-registered"
-	serverUnavailable              = "server-unavailable"
-	tooManyTopics                  = "too-many-topics"
-	unknownError                   = "unknown-error"
-)
 
 // Init initializes the handler
 func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
@@ -205,7 +179,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages, uids := fcm.PrepareV1Notifications(rcpt, nil)
+	messages, uids := fcm.PrepareNotifications(rcpt, nil)
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
@@ -275,7 +249,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
-func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []types.Uid) {
+func handlePushResponse(batch *batchResponse, messages []*fbmsg.Message, uids []types.Uid) {
 	if batch.FailureCount <= 0 {
 		return
 	}

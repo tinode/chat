@@ -1,13 +1,9 @@
 package common
 
 import (
-	"fmt"
-	"net/http"
 	"reflect"
-	"strings"
 
 	"github.com/tinode/chat/server/push"
-	"google.golang.org/api/googleapi"
 )
 
 // Payload to be sent for a specific notification type.
@@ -36,6 +32,20 @@ type Payload struct {
 	Subtitle        string   `json:"subtitle,omitempty"`
 	SummaryArg      string   `json:"summary_arg,omitempty"`
 	SummaryArgCount int      `json:"summary_arg_count,omitempty"`
+}
+
+// TNPGResponse is the response from the TNPG server.
+type TNPGResponse struct {
+	// Push message response only.
+	MessageID string `json:"msg_id,omitempty"`
+	// Server response HTTP code.
+	Code int `json:"code,omitempty"`
+	// FCM response code. Both push and sub/unsub response.
+	ErrorCode     string `json:"errcode,omitempty"`
+	ExtendedError string `json:"exerr,omitempty"`
+	ErrorMessage  string `json:"errmsg,omitempty"`
+	// Channel sub/unsub response only.
+	Index int `json:"index,omitempty"`
 }
 
 // Config is the configuration of a Notification payload.
@@ -96,65 +106,16 @@ func (cc *Config) GetIntField(what, field string) int {
 	return val
 }
 
-// AndroidVisibilityType defines notification visibility constants
-// https://developer.android.com/reference/android/app/Notification.html#visibility
-type AndroidVisibilityType string
-
-const (
-	// AndroidVisibilityUnspecified if unspecified, default to `Visibility.PRIVATE`.
-	AndroidVisibilityUnspecified AndroidVisibilityType = "VISIBILITY_UNSPECIFIED"
-
-	// AndroidVisibilityPrivate show this notification on all lockscreens, but conceals
-	// sensitive or private information on secure lockscreens.
-	AndroidVisibilityPrivate AndroidVisibilityType = "PRIVATE"
-
-	// AndroidVisibilityPublic show this notification in its entirety on all lockscreens.
-	AndroidVisibilityPublic AndroidVisibilityType = "PUBLIC"
-
-	// AndroidVisibilitySecret do not reveal any part of this notification on a secure lockscreen.
-	AndroidVisibilitySecret AndroidVisibilityType = "SECRET"
-)
-
-// AndroidNotificationPriorityType defines notification priority consumeed by the client
-// after it receives the notification. Does not affect FCM sending.
-type AndroidNotificationPriorityType string
-
-const (
-	// If priority is unspecified, notification priority is set to `PRIORITY_DEFAULT`.
-	AndroidNotificationPriorityUnspecified AndroidNotificationPriorityType = "PRIORITY_UNSPECIFIED"
-
-	// Lowest notification priority. Notifications with this `PRIORITY_MIN` might not be
-	// shown to the user except under special circumstances, such as detailed notification logs.
-	AndroidNotificationPriorityMin AndroidNotificationPriorityType = "PRIORITY_MIN"
-
-	// Lower notification priority. The UI may choose to show the notifications smaller,
-	// or at a different position in the list, compared with notifications with `PRIORITY_DEFAULT`.
-	AndroidNotificationPriorityLow AndroidNotificationPriorityType = "PRIORITY_LOW"
-
-	// Default notification priority. If the application does not prioritize its own notifications,
-	// use this value for all notifications.
-	AndroidNotificationPriorityDefault AndroidNotificationPriorityType = "PRIORITY_DEFAULT"
-
-	// Higher notification priority. Use this for more important notifications or alerts.
-	// The UI may choose to show these notifications larger, or at a different position in the notification
-	// lists, compared with notifications with `PRIORITY_DEFAULT`.
-	AndroidNotificationPriorityHigh AndroidNotificationPriorityType = "PRIORITY_HIGH"
-
-	// Highest notification priority. Use this for the application's most important items that
-	// require the user's prompt attention or input.
-	AndroidNotificationPriorityMax AndroidNotificationPriorityType = "PRIORITY_MAX"
-)
-
 // AndroidPriorityType defines the server-side priorities https://goo.gl/GjONJv. It affects how soon
 // FCM sends the push.
-type AndroidPriorityType string
+type AndroidSendingPriorityType string
 
 const (
 	// Default priority for data messages. Normal priority messages won't open network
 	// connections on a sleeping device, and their delivery may be delayed to conserve
 	// the battery. For less time-sensitive messages, such as notifications of new email
 	// or other data to sync, choose normal delivery priority.
-	AndroidPriorityNormal AndroidPriorityType = "NORMAL"
+	AndroidSendingPriorityNormal AndroidSendingPriorityType = "normal"
 
 	// Default priority for notification messages. FCM attempts to deliver high priority
 	// messages immediately, allowing the FCM service to wake a sleeping device when possible
@@ -163,7 +124,7 @@ const (
 	// sure FCM delivers the message to the device without delay. Set high priority if the message
 	// is time-critical and requires the user's immediate interaction, but beware that setting
 	// your messages to high priority contributes more to battery drain compared with normal priority messages.
-	AndroidPriorityHigh AndroidPriorityType = "HIGH"
+	AndroidSendingPriorityHigh AndroidSendingPriorityType = "high"
 )
 
 // InterruptionLevelType defines the values for the APNS payload.aps.InterruptionLevel.
@@ -263,37 +224,6 @@ const (
 	// For more information, see Using Push Notifications to Signal Changes.
 	ApnsPushTypeFileprovider ApnsPushTypeType = "fileprovider"
 )
-
-// Aps is the APNS payload. See explanation here:
-// https://developer.apple.com/documentation/usernotifications/setting_up_a_remote_notification_server/generating_a_remote_notification#2943363
-type Aps struct {
-	Alert             *ApsAlert             `json:"alert,omitempty"`
-	Badge             int                   `json:"badge,omitempty"`
-	Category          string                `json:"category,omitempty"`
-	ContentAvailable  int                   `json:"content-available,omitempty"`
-	InterruptionLevel InterruptionLevelType `json:"interruption-level,omitempty"`
-	MutableContent    int                   `json:"mutable-content,omitempty"`
-	RelevanceScore    interface{}           `json:"relevance-score,omitempty"`
-	Sound             interface{}           `json:"sound,omitempty"`
-	ThreadID          string                `json:"thread-id,omitempty"`
-	URLArgs           []string              `json:"url-args,omitempty"`
-}
-
-// ApsAlert is the content of the aps.Alert field.
-type ApsAlert struct {
-	Action          string   `json:"action,omitempty"`
-	ActionLocKey    string   `json:"action-loc-key,omitempty"`
-	Body            string   `json:"body,omitempty"`
-	LaunchImage     string   `json:"launch-image,omitempty"`
-	LocArgs         []string `json:"loc-args,omitempty"`
-	LocKey          string   `json:"loc-key,omitempty"`
-	Title           string   `json:"title,omitempty"`
-	Subtitle        string   `json:"subtitle,omitempty"`
-	TitleLocArgs    []string `json:"title-loc-args,omitempty"`
-	TitleLocKey     string   `json:"title-loc-key,omitempty"`
-	SummaryArg      string   `json:"summary-arg,omitempty"`
-	SummaryArgCount int      `json:"summary-arg-count,omitempty"`
-}
 
 // FCM error codes
 const (
@@ -462,85 +392,3 @@ const (
 	// The server is shutting down (HTTP error code = 503).
 	ErrorApnsShutdown = "Shutdown"
 )
-
-// GApiError stores a simplified representation of an error returned by a call to Google API.
-type GApiError struct {
-	HttpCode int
-	// This one is not informative, but can be logged for user consideration.
-	ErrMessage string
-	// FCM error code, informative but may be missing.
-	FcmErrCode string
-	// Extended error info dependent on the fcmErrCode.
-	ExtendedInfo string
-}
-
-// DecodeGoogleApiError converts very complex googleapi.Error to a bit more manageable structure.
-func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
-	decoded = &GApiError{}
-	if gerr, ok := err.(*googleapi.Error); ok {
-		// HTTP status code.
-		decoded.HttpCode = gerr.Code
-		decoded.ErrMessage = gerr.Message
-		if len(gerr.Errors) > 0 {
-			for _, errInfo := range gerr.Errors {
-				decoded.ErrMessage += "; " + errInfo.Reason + "/" + errInfo.Message
-			}
-		}
-
-		// Decode the FCM error.
-		for _, iface := range gerr.Details {
-			details, ok := iface.(map[string]interface{})
-			if !ok {
-				errs = append(errs, fmt.Errorf("error.Details unrecognized format %T", iface))
-				continue
-			}
-			switch details["@type"] {
-			case "type.googleapis.com/google.firebase.fcm.v1.FcmError":
-				if errCode, ok := details["errorCode"].(string); ok {
-					if decoded.FcmErrCode != "" {
-						// This has not been observed but FCM is uncler if it can happen.
-						errs = append(errs, fmt.Errorf("multiple FcmError codes '%s', '%s'", errCode, decoded.FcmErrCode))
-					} else {
-						decoded.FcmErrCode = errCode
-					}
-				} else {
-					errs = append(errs, fmt.Errorf("error.Details errorCode is not a string: %T", details["errorCode"]))
-				}
-			case "type.googleapis.com/google.rpc.BadRequest":
-				// dst.fcmErrCode == INVALID_ARGUMENT
-				if fieldViolations, ok := details["fieldViolations"].([]interface{}); !ok {
-					errs = append(errs, fmt.Errorf("wrong type of error.Details 'fieldViolations': %T", details["fieldViolations"]))
-				} else {
-					var fields []string
-					for _, violationIface := range fieldViolations {
-						if violation, ok := violationIface.(map[string]interface{}); !ok {
-							errs = append(errs, fmt.Errorf("wrong type of error.Details.fieldViolations item: %T", iface))
-						} else if field, ok := violation["field"].(string); ok && field != "" {
-							fields = append(fields, field)
-						} else {
-							errs = append(errs, fmt.Errorf("error.Details 'fieldViolation' has no 'field': %T, %s", violation["field"], violation["description"]))
-						}
-					}
-					decoded.ExtendedInfo = strings.Join(fields, ",")
-				}
-			case "type.googleapis.com/google.rpc.QuotaFailure":
-				// dst.fcmErrCode == QUOTA_EXCEEDED
-				// TODO: this error has not been observed, don't know how to handle it.
-				errs = append(errs, fmt.Errorf("quota exceeded %v", details))
-			default:
-				errs = append(errs, fmt.Errorf("unknown error '@type': %v", details))
-			}
-		}
-
-		if decoded.FcmErrCode == "" {
-			decoded.FcmErrCode = string(ErrorUnspecified)
-		}
-	} else {
-		decoded.HttpCode = http.StatusBadRequest
-		decoded.FcmErrCode = string(ErrorUnspecified)
-		decoded.ErrMessage = err.Error()
-		errs = append(errs, fmt.Errorf("not googleapi.Error %w", err))
-	}
-
-	return
-}

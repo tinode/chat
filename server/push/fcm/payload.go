@@ -1,12 +1,11 @@
 package fcm
 
 import (
-	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
 
-	fcmv1 "google.golang.org/api/fcm/v1"
+	fbmsg "firebase.google.com/go/v4/messaging"
 
 	"github.com/tinode/chat/server/drafty"
 	"github.com/tinode/chat/server/logs"
@@ -96,9 +95,9 @@ func clonePayload(src map[string]string) map[string]string {
 	return dst
 }
 
-// PrepareV1Notifications creates notification payloads ready to be posted
+// PrepareNotifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
-func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Message, []t.Uid) {
+func PrepareNotifications(rcpt *push.Receipt, config *configType) ([]*fbmsg.Message, []t.Uid) {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
 		logs.Warn.Println("fcm push: could not parse payload:", err)
@@ -139,7 +138,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Me
 		config = &configType{}
 	}
 
-	var messages []*fcmv1.Message
+	var messages []*fbmsg.Message
 	var uids []t.Uid
 	for uid, devList := range devices {
 		topic := rcpt.Payload.Topic
@@ -161,7 +160,7 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Me
 		for i := range devList {
 			d := &devList[i]
 			if _, ok := skipDevices[d.DeviceId]; !ok && d.DeviceId != "" {
-				msg := fcmv1.Message{
+				msg := fbmsg.Message{
 					Token: d.DeviceId,
 					Data:  userData,
 				}
@@ -170,10 +169,10 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Me
 				case "android":
 					msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
 				case "ios":
-					msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
+					msg.APNS = apnsNotificationConfig(rcpt.Payload.What, topic, userData, rcpt.To[uid].Unread, config)
 				case "web":
 					if config != nil && config.Webpush != nil && config.Webpush.Enabled {
-						msg.Webpush = &fcmv1.WebpushConfig{}
+						msg.Webpush = &fbmsg.WebpushConfig{}
 					}
 				case "":
 					// ignore
@@ -193,14 +192,14 @@ func PrepareV1Notifications(rcpt *push.Receipt, config *configType) ([]*fcmv1.Me
 		userData["topic"] = topic
 		// Channel receiver should not know the ID of the message sender.
 		delete(userData, "xfrom")
-		msg := fcmv1.Message{
+		msg := fbmsg.Message{
 			Topic: topic,
 			Data:  userData,
 		}
 
 		// We don't know the platform of the receiver, must provide payload for all platforms.
 		msg.Android = androidNotificationConfig(rcpt.Payload.What, topic, userData, config)
-		msg.Apns = apnsNotificationConfig(rcpt.Payload.What, topic, userData, 0, config)
+		msg.APNS = apnsNotificationConfig(rcpt.Payload.What, topic, userData, 0, config)
 		// TODO: add webpush payload.
 		messages = append(messages, &msg)
 		// UID is not used in handling Topic pushes, but should keep the same count as messages.
@@ -239,30 +238,31 @@ func ChannelsForUser(uid t.Uid) []string {
 	return channels
 }
 
-func androidNotificationConfig(what, topic string, data map[string]string, config *configType) *fcmv1.AndroidConfig {
-	timeToLive := strconv.Itoa(defaultTimeToLive) + "s"
+func androidNotificationConfig(what, topic string, data map[string]string, config *configType) *fbmsg.AndroidConfig {
+	timeToLive := time.Second * defaultTimeToLive
 	if config != nil && config.TimeToLive > 0 {
-		timeToLive = strconv.Itoa(config.TimeToLive) + "s"
+		timeToLive = time.Second * time.Duration(config.TimeToLive)
 	}
+	timeToLive *= time.Second
 
 	if what == push.ActRead {
-		return &fcmv1.AndroidConfig{
-			Priority:     string(common.AndroidPriorityNormal),
+		return &fbmsg.AndroidConfig{
+			Priority:     string(common.AndroidSendingPriorityNormal),
 			Notification: nil,
-			Ttl:          timeToLive,
+			TTL:          &timeToLive,
 		}
 	}
 
 	_, videoCall := data["webrtc"]
 	if videoCall {
-		timeToLive = "0s"
+		timeToLive = 0
 	}
 
 	// Sending priority.
-	priority := string(common.AndroidPriorityHigh)
-	ac := &fcmv1.AndroidConfig{
-		Priority: priority,
-		Ttl:      timeToLive,
+	spriority := string(common.AndroidSendingPriorityHigh)
+	ac := &fbmsg.AndroidConfig{
+		Priority: spriority,
+		TTL:      &timeToLive,
 	}
 
 	// When this notification type is included and the app is not in the foreground
@@ -278,24 +278,24 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	}
 
 	// Client-side display priority.
-	priority = string(common.AndroidNotificationPriorityHigh)
+	npriority := fbmsg.PriorityHigh
 	if videoCall {
-		priority = string(common.AndroidNotificationPriorityMax)
+		npriority = fbmsg.PriorityMax
 	}
 
-	ac.Notification = &fcmv1.AndroidNotification{
+	ac.Notification = &fbmsg.AndroidNotification{
 		// Android uses Tag value to group notifications together:
 		// show just one notification per topic.
-		Tag:                  topic,
-		NotificationPriority: priority,
-		Visibility:           string(common.AndroidVisibilityPrivate),
-		TitleLocKey:          config.Android.GetStringField(what, "TitleLocKey"),
-		Title:                config.Android.GetStringField(what, "Title"),
-		BodyLocKey:           config.Android.GetStringField(what, "BodyLocKey"),
-		Body:                 body,
-		Icon:                 config.Android.GetStringField(what, "Icon"),
-		Color:                config.Android.GetStringField(what, "Color"),
-		ClickAction:          config.Android.GetStringField(what, "ClickAction"),
+		Tag:         topic,
+		Priority:    npriority,
+		Visibility:  fbmsg.VisibilityPrivate,
+		TitleLocKey: config.Android.GetStringField(what, "TitleLocKey"),
+		Title:       config.Android.GetStringField(what, "Title"),
+		BodyLocKey:  config.Android.GetStringField(what, "BodyLocKey"),
+		Body:        body,
+		Icon:        config.Android.GetStringField(what, "Icon"),
+		Color:       config.Android.GetStringField(what, "Color"),
+		ClickAction: config.Android.GetStringField(what, "ClickAction"),
 	}
 
 	return ac
@@ -305,11 +305,11 @@ func apnsShouldPresentAlert(what, callStatus, isSilent string, config *configTyp
 	return config.Apns != nil && config.Apns.Enabled && what != push.ActRead && callStatus == "" && isSilent == ""
 }
 
-func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
+func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fbmsg.APNSConfig {
 	callStatus := data["webrtc"]
-	expires := time.Now().UTC().Add(time.Duration(defaultTimeToLive) * time.Second)
+	expires := t.TimeNow().Add(time.Duration(defaultTimeToLive) * time.Second)
 	if config.TimeToLive > 0 {
-		expires = time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
+		expires = t.TimeNow().Add(time.Duration(config.TimeToLive) * time.Second)
 	}
 	bundleId := config.ApnsBundleID
 	pushType := common.ApnsPushTypeAlert
@@ -322,22 +322,22 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		// Using normal pushes as a poor-man's replacement for VOIP pushes.
 		// Uncomment the following two lines when FCM fixes its problem or when we switch to
 		// a different adapter.
-		// pushType = common.ApnsPushTypeVoip
-		// bundleId += ".voip"
-		expires = time.Now().UTC().Add(time.Duration(voipTimeToLive) * time.Second)
+		pushType = common.ApnsPushTypeVoip
+		bundleId += ".voip"
+		expires = t.TimeNow().Add(time.Duration(voipTimeToLive) * time.Second)
 	} else if what == push.ActRead {
 		priority = 5
 		interruptionLevel = common.InterruptionLevelPassive
 		pushType = common.ApnsPushTypeBackground
 	}
 
-	apsPayload := common.Aps{
-		Badge:             unread,
-		ContentAvailable:  1,
-		MutableContent:    1,
-		InterruptionLevel: interruptionLevel,
-		Sound:             "default",
-		ThreadID:          topic,
+	apsPayload := fbmsg.Aps{
+		Badge:            &unread,
+		ContentAvailable: true,
+		MutableContent:   true,
+		Sound:            "default",
+		ThreadID:         topic,
+		CustomData:       map[string]any{"interruption-level": interruptionLevel},
 	}
 
 	// Do not present alert for read notifications and video calls.
@@ -347,24 +347,18 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 			body = data["content"]
 		}
 
-		apsPayload.Alert = &common.ApsAlert{
-			Action:          config.Apns.GetStringField(what, "Action"),
-			ActionLocKey:    config.Apns.GetStringField(what, "ActionLocKey"),
-			Body:            body,
-			LaunchImage:     config.Apns.GetStringField(what, "LaunchImage"),
-			LocKey:          config.Apns.GetStringField(what, "LocKey"),
-			Title:           config.Apns.GetStringField(what, "Title"),
-			Subtitle:        config.Apns.GetStringField(what, "Subtitle"),
-			TitleLocKey:     config.Apns.GetStringField(what, "TitleLocKey"),
-			SummaryArg:      config.Apns.GetStringField(what, "SummaryArg"),
-			SummaryArgCount: config.Apns.GetIntField(what, "SummaryArgCount"),
+		apsPayload.Alert = &fbmsg.ApsAlert{
+			Title:          config.Apns.GetStringField(what, "Title"),
+			SubTitle:       config.Apns.GetStringField(what, "Subtitle"),
+			LocKey:         config.Apns.GetStringField(what, "LocKey"),
+			TitleLocKey:    config.Apns.GetStringField(what, "TitleLocKey"),
+			SubTitleLocKey: config.Apns.GetStringField(what, "SubtitleLocKey"),
+			ActionLocKey:   config.Apns.GetStringField(what, "ActionLocKey"),
+			LaunchImage:    config.Apns.GetStringField(what, "LaunchImage"),
+			Body:           body,
 		}
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})
-	if err != nil {
-		return nil
-	}
 	headers := map[string]string{
 		common.HeaderApnsExpiration: strconv.FormatInt(expires.Unix(), 10),
 		common.HeaderApnsPriority:   strconv.Itoa(priority),
@@ -373,9 +367,9 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		common.HeaderApnsPushType:   string(pushType),
 	}
 
-	ac := &fcmv1.ApnsConfig{
+	ac := &fbmsg.APNSConfig{
 		Headers: headers,
-		Payload: payload,
+		Payload: &fbmsg.APNSPayload{Aps: &apsPayload},
 	}
 
 	return ac

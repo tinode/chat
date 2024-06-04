@@ -10,9 +10,8 @@ import (
 	"errors"
 	"os"
 
-	fbase "firebase.google.com/go"
-	legacy "firebase.google.com/go/messaging"
-	fcmv1 "google.golang.org/api/fcm/v1"
+	fbase "firebase.google.com/go/v4"
+	fbmsg "firebase.google.com/go/v4/messaging"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -39,13 +38,12 @@ const (
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
-	input     chan *push.Receipt
-	channel   chan *push.ChannelReq
-	stop      chan bool
-	projectID string
+	input   chan *push.Receipt
+	channel chan *push.ChannelReq
+	stop    chan bool
 
-	client *legacy.Client
-	v1     *fcmv1.Service
+	ctx    context.Context
+	client *fbmsg.Client
 }
 
 type configType struct {
@@ -84,26 +82,18 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 		return false, errors.New("missing credentials")
 	}
 
-	ctx := context.Background()
-	credentials, err := google.CredentialsFromJSON(ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
-	if err != nil {
-		return false, err
-	}
-	if credentials.ProjectID == "" {
-		return false, errors.New("missing project ID")
-	}
-
-	app, err := fbase.NewApp(ctx, &fbase.Config{}, option.WithCredentials(credentials))
+	handler.ctx = context.Background()
+	credentials, err := google.CredentialsFromJSON(handler.ctx, config.Credentials, "https://www.googleapis.com/auth/firebase.messaging")
 	if err != nil {
 		return false, err
 	}
 
-	handler.client, err = app.Messaging(ctx)
+	app, err := fbase.NewApp(handler.ctx, &fbase.Config{}, option.WithCredentials(credentials))
 	if err != nil {
 		return false, err
 	}
 
-	handler.v1, err = fcmv1.NewService(ctx, option.WithCredentials(credentials), option.WithScopes(fcmv1.FirebaseMessagingScope))
+	handler.client, err = app.Messaging(handler.ctx)
 	if err != nil {
 		return false, err
 	}
@@ -111,13 +101,12 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
-	handler.projectID = credentials.ProjectID
 
 	go func() {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				go sendFcmV1(rcpt, &config)
+				go sendFcm(rcpt, &config)
 			case sub := <-handler.channel:
 				go processSubscription(sub)
 			case <-handler.stop:
@@ -129,38 +118,37 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	return true, nil
 }
 
-func sendFcmV1(rcpt *push.Receipt, config *configType) {
-	messages, uids := PrepareV1Notifications(rcpt, config)
+func sendFcm(rcpt *push.Receipt, config *configType) {
+	messages, uids := PrepareNotifications(rcpt, config)
 	for i := range messages {
-		req := &fcmv1.SendMessageRequest{
-			Message:      messages[i],
-			ValidateOnly: config.DryRun,
+		var err error
+		if config.DryRun {
+			_, err = handler.client.SendDryRun(handler.ctx, messages[i])
+		} else {
+			_, err = handler.client.Send(handler.ctx, messages[i])
 		}
-		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
+
 		if err != nil {
-			gerr, decodingErrs := common.DecodeGoogleApiError(err)
-			for _, err := range decodingErrs {
-				logs.Info.Println("fcm googleapi.Error decoding:", err)
-			}
-			switch gerr.FcmErrCode {
-			case "": // no error
-			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
+			if fbmsg.IsQuotaExceeded(err) || fbmsg.IsUnavailable(err) || fbmsg.IsInternal(err) {
 				// Transient errors. Stop sending this batch.
-				logs.Warn.Println("fcm transient failure:", gerr.FcmErrCode, gerr.ErrMessage)
+				logs.Warn.Println("fcm transient failure:", err.Error())
 				return
-			case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
+			}
+			if fbmsg.IsSenderIDMismatch(err) || fbmsg.IsInvalidArgument(err) || fbmsg.IsThirdPartyAuthError(err) {
 				// Config errors. Stop.
-				logs.Warn.Println("fcm invalid config:", gerr.FcmErrCode, gerr.ErrMessage)
+				logs.Warn.Println("fcm invalid config:", err.Error())
 				return
-			case common.ErrorUnregistered:
+			}
+
+			if fbmsg.IsUnregistered(err) {
 				// Token is no longer valid. Delete token from DB and continue sending.
-				logs.Warn.Println("fcm invalid token:", gerr.FcmErrCode, gerr.ErrMessage)
+				logs.Warn.Println("fcm invalid token:", err.Error())
 				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
-					logs.Warn.Println("tnpg failed to delete invalid token:", err)
+					logs.Warn.Println("fcm failed to delete invalid token:", err)
 				}
-			default:
+			} else {
 				// Unknown error. Stop sending just in case.
-				logs.Warn.Println("tnpg unrecognized error:", gerr.FcmErrCode, gerr.ErrMessage)
+				logs.Warn.Println("fcm unrecognized error:", err.Error())
 				return
 			}
 		}
@@ -193,7 +181,7 @@ func processSubscription(req *push.ChannelReq) {
 	}
 
 	var err error
-	var resp *legacy.TopicManagementResponse
+	var resp *fbmsg.TopicManagementResponse
 	if channel != "" && len(devices) > 0 {
 		if req.Unsub {
 			resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
@@ -234,7 +222,7 @@ func processSubscription(req *push.ChannelReq) {
 		len(devices), len(channels))
 }
 
-func handleSubErrors(response *legacy.TopicManagementResponse, uid types.Uid, devices []string) {
+func handleSubErrors(response *fbmsg.TopicManagementResponse, uid types.Uid, devices []string) {
 	if response.FailureCount <= 0 {
 		return
 	}
