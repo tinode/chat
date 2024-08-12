@@ -301,6 +301,7 @@ def read_auth_cookie(cookie_file_name):
     return schema, secret
 
 def on_login(cookie_file_name, params):
+    global botUID
     client_post(subscribe('me'))
 
     """Save authentication token to file"""
@@ -308,7 +309,7 @@ def on_login(cookie_file_name, params):
         return
 
     if 'user' in params:
-        botUID = params['user'].decode("ascii")
+        botUID = params['user'].decode("ascii")[1:-1]
 
     # Protobuf map 'params' is not a python object or dictionary. Convert it.
     nice = {'schema': 'token'}
