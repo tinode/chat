@@ -51,7 +51,13 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	2. **PostgreSQL**:
 	```
-	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-postgres:latest
+ 	$ docker exec -it -u postgres postgres psql
+ 	psql (13.16 (Debian 13.16-1.pgdg120+1))
+	Type "help" for help.
+	
+	postgres=# create database tinode;
+ 	exit
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net --env POSTGRES_DSN=postgresql://postgres:postgres@postgres:5432/tinode tinode/tinode-postgres:latest
 	```
 
 	3. **MongoDB**:
