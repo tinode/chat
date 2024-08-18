@@ -218,7 +218,7 @@ func (storeObj) GetUid() types.Uid {
 	return uGen.Get()
 }
 
-// GetUidString generate unique ID as string
+// GetUidString generate unique ID as a string.
 func (storeObj) GetUidString() string {
 	return uGen.GetStr()
 }
