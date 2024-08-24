@@ -38,9 +38,9 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
-	// Check if login is unique.
+	// Check if login is unique and compliance with the policy (not too long or too short).
 	if ok, err := authhdl.IsUnique(msg.Acc.Secret, s.remoteAddr); !ok {
-		logs.Warn.Println("create user: auth secret is not unique", err, "sid=", s.sid)
+		logs.Warn.Println("create user: auth secret is not compliant", err, "sid=", s.sid)
 		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp,
 			map[string]any{"what": "auth"}))
 		return

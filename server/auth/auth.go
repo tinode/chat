@@ -258,7 +258,7 @@ type AuthHandler interface {
 	AsTag(token string) string
 
 	// IsUnique verifies if the provided secret can be considered unique by the auth scheme
-	// E.g. if login is unique.
+	// E.g. if login is unique. It also may check for policy compliance, i.e. not too short, etc.
 	IsUnique(secret []byte, remoteAddr string) (bool, error)
 
 	// GenSecret generates a new secret, if appropriate.
