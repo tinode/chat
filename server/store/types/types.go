@@ -519,6 +519,8 @@ type User struct {
 	Devices map[string]*DeviceDef `bson:"__devices,skip,omitempty"`
 	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
 	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
+	// Channel options are WhatsApp, Website SDK or Instagram
+	Channel string `json:"channel,omitempty"`
 }
 
 // AccessMode is a definition of access mode bits.

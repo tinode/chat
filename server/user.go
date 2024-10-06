@@ -127,6 +127,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Create user record in the database.
+	user.Channel = msg.Acc.Channel
 	if _, err := store.Users.Create(&user, private); err != nil {
 		logs.Warn.Println("create user: failed to create user", err, "sid=", s.sid)
 		s.queueOut(ErrUnknown(msg.Id, "", msg.Timestamp))

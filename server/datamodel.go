@@ -144,6 +144,8 @@ type MsgClientAcc struct {
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 	// Credentials to verify (email or phone or captcha)
 	Cred []MsgCredClient `json:"cred,omitempty"`
+	// Channel options are WhatsApp, Website SDK or Instagram
+	Channel string `json:"channel,omitempty"`
 }
 
 // MsgClientLogin is a login {login} message.
@@ -156,6 +158,8 @@ type MsgClientLogin struct {
 	Secret []byte `json:"secret"`
 	// Credntials being verified (email or phone or captcha etc.)
 	Cred []MsgCredClient `json:"cred,omitempty"`
+	// Channel options are WhatsApp, Website SDK or Instagram
+	Channel string `json:"channel,omitempty"`
 }
 
 // MsgClientSub is a subscription request {sub} message.

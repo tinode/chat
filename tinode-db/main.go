@@ -88,6 +88,7 @@ type User struct {
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
 	Tags        []string    `json:"tags"`
+	Channel     string      `json:"channel"`
 }
 
 /*
