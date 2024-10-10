@@ -113,6 +113,7 @@ When you register a new account you are asked for an email address to send valid
     * Swift with no external dependencies.
     * C/C++, C#, Go, Python, PHP, Ruby and many other languages using [gRPC](https://grpc.io/docs/languages/).
   * Choice of a database backend. Other databases can be added with by writing [adapters](server/db/adapter.go).
+    * MariaDB
     * MySQL
     * PostgreSQL
     * MongoDB
