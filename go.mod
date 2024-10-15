@@ -29,6 +29,8 @@ require (
 	gopkg.in/rethinkdb/rethinkdb-go.v6 v6.2.2
 )
 
+require github.com/pkg/errors v0.9.1 // indirect
+
 require (
 	cloud.google.com/go v0.110.9 // indirect
 	cloud.google.com/go/compute v1.23.1 // indirect
@@ -63,6 +65,7 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/twilio/twilio-go v1.23.3
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
