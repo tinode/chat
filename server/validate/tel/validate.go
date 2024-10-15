@@ -25,7 +25,7 @@ type validator struct {
 	Languages []string `json:"languages"`
 	// Path to email validation and password reset templates, either a template itself or a literal string.
 	UniversalTemplFile string `json:"universal_templ"`
-	// Sender address.
+	// Sender address (phone number).
 	Sender string `json:"sender"`
 	// Debug response to accept during testing.
 	DebugResponse string `json:"debug_response"`
@@ -33,6 +33,8 @@ type validator struct {
 	MaxRetries int `json:"max_retries"`
 	// Length of secret numeric code to sent for validation.
 	CodeLength int `json:"code_length"`
+	// Twilio-specific config.
+	Twilio json.RawMessage `json:"twilio_conf"`
 
 	// Must use index into language array instead of language tags because language.Matcher is brain damaged:
 	// https://github.com/golang/go/issues/24211
@@ -89,6 +91,12 @@ func (v *validator) Init(jsonconf string) error {
 		// No i18n support. Use defaults.
 		v.universalTempl[0], _, err = validate.ReadTemplateFile(universalPathTempl, "")
 		if err != nil {
+			return err
+		}
+	}
+
+	if v.Twilio != nil {
+		if err = twilioInit(v.Twilio); err != nil {
 			return err
 		}
 	}
@@ -254,8 +262,14 @@ func (v *validator) TempAuthScheme() (string, error) {
 }
 
 // Implement sending the SMS.
-func (*validator) send(to, body string) error {
-	logs.Info.Println("Send SMS, To:", to, "\nText:", body)
+func (v *validator) send(to, body string) error {
+	if v.Twilio != nil {
+		if err := twilioSend(v.Sender, to, body); err != nil {
+			logs.Warn.Println("Twilio SMS error", to, err)
+		}
+	} else {
+		logs.Info.Println("Send SMS, To:", to, "\nText:", body)
+	}
 	return nil
 }
 
