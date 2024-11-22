@@ -19,7 +19,7 @@ Tinode는 XMPP/ Jabber 가 아닙니다. Tinode는 XMPP와 호환되지 않습�
 
 XMPP: XML에 기반한 메시지 지향 통신 프로토콜
 
-IM: Instant Messanger
+IM: Instant Messenger
 
 ## 설치 및 실행
 
