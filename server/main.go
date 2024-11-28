@@ -734,6 +734,8 @@ func main() {
 		mux.HandleFunc("/", serve404)
 	}
 
+	mux.HandleFunc(config.ApiPath+"v0/preview-link", PreviewLink)
+
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		logs.Err.Fatal(err)
 	}
