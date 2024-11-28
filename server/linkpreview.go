@@ -3,60 +3,83 @@ package main
 import (
 	"encoding/json"
 	"golang.org/x/net/html"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
 
-type LinkPreview struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Image       string `json:"image"`
-	URL         string `json:"url"`
+type linkPreview struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	ImageURL    string `json:"image_url,omitempty"`
 }
 
-// PreviewLink handles the HTTP request, fetches the URL, and returns the link preview
-func PreviewLink(w http.ResponseWriter, r *http.Request) {
-	url := r.URL.Query().Get("url")
-	if url == "" {
+var client = &http.Client{
+	Transport: &http.Transport{},
+	Timeout:   time.Second * 2,
+}
+
+// previewLink handles the HTTP request, fetches the URL, and returns the link preview.
+func previewLink(w http.ResponseWriter, r *http.Request) {
+	u := r.URL.Query().Get("url")
+	if u == "" {
 		http.Error(w, "Missing 'url' query parameter", http.StatusBadRequest)
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	parsedURL, err := url.Parse(u)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		http.Error(w, "invalid schema", http.StatusBadRequest)
+		return
 	}
 
-	client := &http.Client{
-		Timeout: time.Second * 5,
+	ips, err := net.LookupIP(parsedURL.Hostname())
+	if err != nil {
+		http.Error(w, "invalid host", http.StatusBadRequest)
+		return
 	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() {
+			http.Error(w, "non routable IP address", http.StatusBadRequest)
+			return
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "Non-OK HTTP status", http.StatusInternalServerError)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices { // StatusCode != 20X
+		http.Error(w, "Non-OK HTTP status", http.StatusBadGateway)
 		return
 	}
 
-	doc, err := html.Parse(resp.Body)
+	body := io.LimitReader(resp.Body, 2*1024) // 2KB limit
+	doc, err := html.Parse(body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("{}"))
 		return
 	}
 
-	metadata := extractMetadata(doc)
-
-	linkPreview := LinkPreview{
-		Title:       metadata["og:title"],
-		Description: metadata["og:description"],
-		Image:       metadata["og:image"],
-		URL:         url,
-	}
+	linkPreview := extractMetadata(doc)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(linkPreview); err != nil {
@@ -64,23 +87,34 @@ func PreviewLink(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractMetadata(n *html.Node) map[string]string {
-	metaTags := map[string]string{}
+func extractMetadata(n *html.Node) linkPreview {
+	var preview linkPreview
+
 	var traverse func(*html.Node)
 	traverse = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "meta" {
-			attrs := make(map[string]string)
+		if n.Type == html.ElementNode && strings.ToLower(n.Data) == "meta" {
+			var name, property, content string
 			for _, attr := range n.Attr {
-				attrs[attr.Key] = attr.Val
+				switch attr.Key {
+				case "name":
+					name = attr.Val
+				case "property":
+					property = attr.Val
+				case "content":
+					content = attr.Val
+				}
 			}
-			name := attrs["name"]
-			property := attrs["property"]
-			content := attrs["content"]
 
 			if strings.HasPrefix(property, "og:") && content != "" {
-				metaTags[property] = content
-			} else if name != "" && content != "" {
-				metaTags[name] = content
+				if property == "og:title" {
+					preview.Title = content
+				} else if property == "og:description" {
+					preview.Description = content
+				} else if property == "og:image" {
+					preview.ImageURL = content
+				}
+			} else if name == "description" && preview.Description == "" {
+				preview.Description = content
 			}
 		}
 
@@ -91,10 +125,11 @@ func extractMetadata(n *html.Node) map[string]string {
 
 	traverse(n)
 
-	if _, exists := metaTags["og:title"]; !exists {
-		metaTags["og:title"] = extractTitle(n)
+	if preview.Title == "" {
+		preview.Title = extractTitle(n)
 	}
-	return metaTags
+
+	return preview
 }
 
 func extractTitle(n *html.Node) string {
