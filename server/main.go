@@ -202,7 +202,8 @@ var globals struct {
 
 	// URL of the main endpoint.
 	// TODO: implement file-serving API for gRPC and remove this feature.
-	servingAt string
+	servingAt          string
+	linkPreviewEnabled bool
 }
 
 // Credential validator config.
@@ -735,6 +736,7 @@ func main() {
 		mux.HandleFunc("/", serve404)
 	}
 
+	globals.linkPreviewEnabled = config.LinkPreviewEnabled
 	if config.LinkPreviewEnabled {
 		mux.HandleFunc(config.ApiPath+"v0/preview-link", previewLink)
 	}
