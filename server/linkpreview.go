@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type linkPreview struct {
@@ -21,7 +23,7 @@ type linkPreview struct {
 var client = &http.Client{
 	Timeout: time.Second * 2,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if err := validateURL(req.URL.String()); err != nil {
+		if err := validateURL(req.URL); err != nil {
 			return err
 		}
 		return nil
@@ -30,17 +32,18 @@ var client = &http.Client{
 
 // previewLink handles the HTTP request, fetches the URL, and returns the link preview.
 func previewLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	// check authorization
 	uid, challenge, err := authHttpRequest(r)
 	if err != nil {
 		http.Error(w, "invalid auth secret", http.StatusBadRequest)
 		return
 	}
-	if challenge != nil {
-		http.Error(w, "login challenge not done", http.StatusMultipleChoices)
-		return
-	}
-	if uid.IsZero() {
+	if challenge != nil || uid.IsZero() {
 		http.Error(w, "user not authenticated", http.StatusUnauthorized)
 		return
 	}
@@ -51,7 +54,12 @@ func previewLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateURL(u); err != nil {
+	pu, err := url.Parse(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validateURL(pu); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -75,30 +83,35 @@ func previewLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	body := http.MaxBytesReader(nil, resp.Body, 2*1024) // 2KB limit
-
+	if cc := resp.Header.Get("Cache-Control"); cc != "" {
+		w.Header().Set("Cache-Control", cc)
+	}
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(extractMetadata(body)); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 
-func extractMetadata(body io.Reader) linkPreview {
+func extractMetadata(body io.Reader) *linkPreview {
 	var preview linkPreview
-	var gotTitle, gotDesc, gotImg, inTitleTag bool
+	var inTitleTag bool
 
 	tokenizer := html.NewTokenizer(body)
 	for {
 		switch tokenizer.Next() {
 		case html.ErrorToken:
-			return preview
+			return sanitizePreview(preview)
 
 		case html.StartTagToken, html.SelfClosingTagToken:
 			token := tokenizer.Token()
-			data := strings.ToLower(token.Data)
-			if data == "meta" {
+			if token.DataAtom == atom.Meta {
 				var name, property, content string
 				for _, attr := range token.Attr {
-					switch strings.ToLower(attr.Key) {
+					switch attr.Key {
 					case "name":
 						name = attr.Val
 					case "property":
@@ -112,46 +125,41 @@ func extractMetadata(body io.Reader) linkPreview {
 					switch property {
 					case "og:title":
 						preview.Title = content
-						gotTitle = true
 					case "og:description":
 						preview.Description = content
-						gotDesc = true
 					case "og:image":
 						preview.ImageURL = content
-						gotImg = true
 					}
 				} else if name == "description" && preview.Description == "" {
 					preview.Description = content
-					gotDesc = true
 				}
-			} else if data == "title" {
+			} else if token.DataAtom == atom.Title {
 				inTitleTag = true
 			}
 
 		case html.TextToken:
-			if !gotTitle && inTitleTag {
+			if preview.Title == "" && inTitleTag {
 				preview.Title = strings.TrimSpace(tokenizer.Token().Data)
-				gotTitle = true
+			}
+		case html.EndTagToken:
+			if tokenizer.Token().DataAtom == atom.Title {
 				inTitleTag = false
 			}
 		}
-		if gotTitle && gotDesc && gotImg {
+		if preview.Title != "" && preview.Description != "" && preview.ImageURL != "" {
 			break
 		}
 	}
-	return preview
+
+	return sanitizePreview(preview)
 }
 
-func validateURL(u string) error {
-	parsedURL, err := url.Parse(u)
-	if err != nil {
-		return err
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+func validateURL(u *url.URL) error {
+	if u.Scheme != "http" && u.Scheme != "https" {
 		return &url.Error{Op: "validate", Err: errors.New("invalid scheme")}
 	}
 
-	ips, err := net.LookupIP(parsedURL.Hostname())
+	ips, err := net.LookupIP(u.Hostname())
 	if err != nil {
 		return &url.Error{Op: "validate", Err: errors.New("invalid host")}
 	}
@@ -162,4 +170,18 @@ func validateURL(u string) error {
 	}
 
 	return nil
+}
+
+func sanitizePreview(preview linkPreview) *linkPreview {
+	if utf8.RuneCountInString(preview.Title) > 80 {
+		preview.Title = string([]rune(preview.Title)[:80])
+	}
+	if utf8.RuneCountInString(preview.Description) > 256 {
+		preview.Description = string([]rune(preview.Description)[:256])
+	}
+	if len(preview.ImageURL) > 2000 {
+		preview.ImageURL = preview.ImageURL[:2000]
+	}
+
+	return &preview
 }
