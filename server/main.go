@@ -240,10 +240,6 @@ type mediaConfig struct {
 	Handlers map[string]json.RawMessage `json:"handlers"`
 }
 
-type LinkPreviewConfig struct {
-	Enabled bool `json:"enabled"`
-}
-
 // Contentx of the configuration file
 type configType struct {
 	// HTTP(S) address:port to listen on for websocket and long polling clients. Either a
@@ -296,17 +292,17 @@ type configType struct {
 	DefaultCountryCode string `json:"default_country_code"`
 
 	// Configs for subsystems
-	Cluster     json.RawMessage             `json:"cluster_config"`
-	Plugin      json.RawMessage             `json:"plugins"`
-	Store       json.RawMessage             `json:"store_config"`
-	Push        json.RawMessage             `json:"push"`
-	TLS         json.RawMessage             `json:"tls"`
-	Auth        map[string]json.RawMessage  `json:"auth_config"`
-	Validator   map[string]*validatorConfig `json:"acc_validation"`
-	AccountGC   *accountGcConfig            `json:"acc_gc_config"`
-	Media       *mediaConfig                `json:"media"`
-	WebRTC      json.RawMessage             `json:"webrtc"`
-	LinkPreview *LinkPreviewConfig          `json:"link_preview"`
+	Cluster            json.RawMessage             `json:"cluster_config"`
+	Plugin             json.RawMessage             `json:"plugins"`
+	Store              json.RawMessage             `json:"store_config"`
+	Push               json.RawMessage             `json:"push"`
+	TLS                json.RawMessage             `json:"tls"`
+	Auth               map[string]json.RawMessage  `json:"auth_config"`
+	Validator          map[string]*validatorConfig `json:"acc_validation"`
+	AccountGC          *accountGcConfig            `json:"acc_gc_config"`
+	Media              *mediaConfig                `json:"media"`
+	WebRTC             json.RawMessage             `json:"webrtc"`
+	LinkPreviewEnabled bool                        `json:"link_preview_enabled"`
 }
 
 func main() {
@@ -739,7 +735,7 @@ func main() {
 		mux.HandleFunc("/", serve404)
 	}
 
-	if config.LinkPreview != nil && config.LinkPreview.Enabled {
+	if config.LinkPreviewEnabled {
 		mux.HandleFunc(config.ApiPath+"v0/preview-link", previewLink)
 	}
 
