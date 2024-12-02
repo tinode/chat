@@ -760,6 +760,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"maxTagCount":        globals.maxTagCount,
 			"maxFileUploadSize":  globals.maxFileUploadSize,
 			"reqCred":            globals.validatorClientConfig,
+			"linkPreviewEnabled": globals.linkPreviewEnabled,
 		}
 		if len(globals.iceServers) > 0 {
 			params["iceServers"] = globals.iceServers

@@ -202,7 +202,8 @@ var globals struct {
 
 	// URL of the main endpoint.
 	// TODO: implement file-serving API for gRPC and remove this feature.
-	servingAt string
+	servingAt          string
+	linkPreviewEnabled bool
 }
 
 // Credential validator config.
@@ -292,16 +293,17 @@ type configType struct {
 	DefaultCountryCode string `json:"default_country_code"`
 
 	// Configs for subsystems
-	Cluster   json.RawMessage             `json:"cluster_config"`
-	Plugin    json.RawMessage             `json:"plugins"`
-	Store     json.RawMessage             `json:"store_config"`
-	Push      json.RawMessage             `json:"push"`
-	TLS       json.RawMessage             `json:"tls"`
-	Auth      map[string]json.RawMessage  `json:"auth_config"`
-	Validator map[string]*validatorConfig `json:"acc_validation"`
-	AccountGC *accountGcConfig            `json:"acc_gc_config"`
-	Media     *mediaConfig                `json:"media"`
-	WebRTC    json.RawMessage             `json:"webrtc"`
+	Cluster            json.RawMessage             `json:"cluster_config"`
+	Plugin             json.RawMessage             `json:"plugins"`
+	Store              json.RawMessage             `json:"store_config"`
+	Push               json.RawMessage             `json:"push"`
+	TLS                json.RawMessage             `json:"tls"`
+	Auth               map[string]json.RawMessage  `json:"auth_config"`
+	Validator          map[string]*validatorConfig `json:"acc_validation"`
+	AccountGC          *accountGcConfig            `json:"acc_gc_config"`
+	Media              *mediaConfig                `json:"media"`
+	WebRTC             json.RawMessage             `json:"webrtc"`
+	LinkPreviewEnabled bool                        `json:"link_preview_enabled"`
 }
 
 func main() {
@@ -732,6 +734,11 @@ func main() {
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
+	}
+
+	globals.linkPreviewEnabled = config.LinkPreviewEnabled
+	if config.LinkPreviewEnabled {
+		mux.HandleFunc(config.ApiPath+"v0/preview-link", previewLink)
 	}
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
