@@ -92,9 +92,10 @@ func previewLink(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-
-	if err := json.NewEncoder(w).Encode(extractMetadata(body)); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		if err := json.NewEncoder(w).Encode(extractMetadata(body)); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -186,14 +187,18 @@ func validateURL(u *url.URL) error {
 
 func sanitizePreview(preview linkPreview) *linkPreview {
 	if utf8.RuneCountInString(preview.Title) > 80 {
-		preview.Title = string([]rune(strings.TrimSpace(preview.Title))[:80])
+		preview.Title = string([]rune(preview.Title)[:80])
 	}
 	if utf8.RuneCountInString(preview.Description) > 256 {
-		preview.Description = string([]rune(strings.TrimSpace(preview.Description))[:256])
+		preview.Description = string([]rune(preview.Description)[:256])
 	}
 	if len(preview.ImageURL) > 2000 {
-		preview.ImageURL = strings.TrimSpace(preview.ImageURL)[:2000]
+		preview.ImageURL = preview.ImageURL[:2000]
 	}
 
-	return &preview
+	return &linkPreview{
+		Title:       strings.TrimSpace(preview.Title),
+		Description: strings.TrimSpace(preview.Description),
+		ImageURL:    strings.TrimSpace(preview.ImageURL),
+	}
 }
