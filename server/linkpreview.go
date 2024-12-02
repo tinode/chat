@@ -86,11 +86,13 @@ func previewLink(w http.ResponseWriter, r *http.Request) {
 	if cc := resp.Header.Get("Cache-Control"); cc != "" {
 		w.Header().Set("Cache-Control", cc)
 	}
+
+	w.Header().Set("Content-Type", "application/json")
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+
 	if err := json.NewEncoder(w).Encode(extractMetadata(body)); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
@@ -101,50 +103,60 @@ func extractMetadata(body io.Reader) *linkPreview {
 	var inTitleTag bool
 
 	tokenizer := html.NewTokenizer(body)
+lp:
 	for {
 		switch tokenizer.Next() {
 		case html.ErrorToken:
-			return sanitizePreview(preview)
+			break lp
 
 		case html.StartTagToken, html.SelfClosingTagToken:
-			token := tokenizer.Token()
-			if token.DataAtom == atom.Meta {
+			tag, hasAttr := tokenizer.TagName()
+			tagName := atom.Lookup(tag)
+			if tagName == atom.Meta && hasAttr {
 				var name, property, content string
-				for _, attr := range token.Attr {
-					switch attr.Key {
+				for {
+					key, val, moreAttr := tokenizer.TagAttr()
+					switch atom.String(key) {
 					case "name":
-						name = attr.Val
+						name = string(val)
 					case "property":
-						property = attr.Val
+						property = string(val)
 					case "content":
-						content = attr.Val
+						content = string(val)
+					}
+					if !moreAttr {
+						break
 					}
 				}
 
-				if strings.HasPrefix(property, "og:") && content != "" {
-					switch property {
-					case "og:title":
-						preview.Title = content
-					case "og:description":
+				if content != "" {
+					if strings.HasPrefix(property, "og:") {
+						switch property {
+						case "og:title":
+							preview.Title = content
+						case "og:description":
+							preview.Description = content
+						case "og:image":
+							preview.ImageURL = content
+						}
+					} else if name == "description" && preview.Description == "" {
 						preview.Description = content
-					case "og:image":
-						preview.ImageURL = content
 					}
-				} else if name == "description" && preview.Description == "" {
-					preview.Description = content
 				}
-			} else if token.DataAtom == atom.Title {
+			} else if tagName == atom.Title {
 				inTitleTag = true
 			}
 
 		case html.TextToken:
-			if preview.Title == "" && inTitleTag {
-				preview.Title = strings.TrimSpace(tokenizer.Token().Data)
-			}
-		case html.EndTagToken:
-			if tokenizer.Token().DataAtom == atom.Title {
+			if inTitleTag {
+				if preview.Title == "" {
+					preview.Title = tokenizer.Token().Data
+				}
 				inTitleTag = false
 			}
+
+		case html.EndTagToken:
+			inTitleTag = false
 		}
 		if preview.Title != "" && preview.Description != "" && preview.ImageURL != "" {
 			break
@@ -174,13 +186,13 @@ func validateURL(u *url.URL) error {
 
 func sanitizePreview(preview linkPreview) *linkPreview {
 	if utf8.RuneCountInString(preview.Title) > 80 {
-		preview.Title = string([]rune(preview.Title)[:80])
+		preview.Title = string([]rune(strings.TrimSpace(preview.Title))[:80])
 	}
 	if utf8.RuneCountInString(preview.Description) > 256 {
-		preview.Description = string([]rune(preview.Description)[:256])
+		preview.Description = string([]rune(strings.TrimSpace(preview.Description))[:256])
 	}
 	if len(preview.ImageURL) > 2000 {
-		preview.ImageURL = preview.ImageURL[:2000]
+		preview.ImageURL = strings.TrimSpace(preview.ImageURL)[:2000]
 	}
 
 	return &preview
