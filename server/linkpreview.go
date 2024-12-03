@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +10,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 type linkPreview struct {
@@ -31,26 +32,27 @@ var client = &http.Client{
 }
 
 // previewLink handles the HTTP request, fetches the URL, and returns the link preview.
+// urlpreview?url=https%3A%2F%2Ftinode.co
 func previewLink(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	// check authorization
 	uid, challenge, err := authHttpRequest(r)
 	if err != nil {
-		http.Error(w, "invalid auth secret", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	if challenge != nil || uid.IsZero() {
-		http.Error(w, "user not authenticated", http.StatusUnauthorized)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
 	u := r.URL.Query().Get("url")
 	if u == "" {
-		http.Error(w, "Missing 'url' query parameter", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -92,6 +94,7 @@ func previewLink(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		if err := json.NewEncoder(w).Encode(extractMetadata(body)); err != nil {
 			http.Error(w, "Failed to encode response", http.StatusInternalServerError)

@@ -202,7 +202,9 @@ var globals struct {
 
 	// URL of the main endpoint.
 	// TODO: implement file-serving API for gRPC and remove this feature.
-	servingAt          string
+	servingAt string
+
+	// Indicator if link preview generator is enabled.
 	linkPreviewEnabled bool
 }
 
@@ -292,18 +294,22 @@ type configType struct {
 	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
 
+	// Enable service which generates link previews: in response to a GET request with a URL
+	// /v0/urlpreview?url=https%3A%2F%2Ftinode.co visit the URL, parse HTML, and return JSON like
+	// {"title": "Page title", description: "This is a demo page", image_url: "https://tinode.co/img/logo.png"}.
+	LinkPreviewEnabled bool `json:"link_preview"`
+
 	// Configs for subsystems
-	Cluster            json.RawMessage             `json:"cluster_config"`
-	Plugin             json.RawMessage             `json:"plugins"`
-	Store              json.RawMessage             `json:"store_config"`
-	Push               json.RawMessage             `json:"push"`
-	TLS                json.RawMessage             `json:"tls"`
-	Auth               map[string]json.RawMessage  `json:"auth_config"`
-	Validator          map[string]*validatorConfig `json:"acc_validation"`
-	AccountGC          *accountGcConfig            `json:"acc_gc_config"`
-	Media              *mediaConfig                `json:"media"`
-	WebRTC             json.RawMessage             `json:"webrtc"`
-	LinkPreviewEnabled bool                        `json:"link_preview_enabled"`
+	Cluster   json.RawMessage             `json:"cluster_config"`
+	Plugin    json.RawMessage             `json:"plugins"`
+	Store     json.RawMessage             `json:"store_config"`
+	Push      json.RawMessage             `json:"push"`
+	TLS       json.RawMessage             `json:"tls"`
+	Auth      map[string]json.RawMessage  `json:"auth_config"`
+	Validator map[string]*validatorConfig `json:"acc_validation"`
+	AccountGC *accountGcConfig            `json:"acc_gc_config"`
+	Media     *mediaConfig                `json:"media"`
+	WebRTC    json.RawMessage             `json:"webrtc"`
 }
 
 func main() {
@@ -731,14 +737,14 @@ func main() {
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
 
+	if config.LinkPreviewEnabled {
+		globals.linkPreviewEnabled = true
+		mux.HandleFunc(config.ApiPath+"v0/urlpreview", previewLink)
+	}
+
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
-	}
-
-	globals.linkPreviewEnabled = config.LinkPreviewEnabled
-	if config.LinkPreviewEnabled {
-		mux.HandleFunc(config.ApiPath+"v0/preview-link", previewLink)
 	}
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
