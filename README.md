@@ -112,11 +112,11 @@ When you register a new account you are asked for an email address to send valid
     * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket). Suitable for Android but with no Android SDK dependencies.
     * Swift with no external dependencies.
     * C/C++, C#, Go, Python, PHP, Ruby and many other languages using [gRPC](https://grpc.io/docs/languages/).
-  * Choice of a database backend. Other databases can be added with by writing [adapters](server/db/adapter.go).
-    * MySQL
+  * Choice of a database backend. Other databases can be added by writing [adapters](server/db/adapter.go).
+    * MySQL (and MariaDB, Percona as long as they remain SQL and wire protocol compatible)
     * PostgreSQL
     * MongoDB
-    * [RethinkDB](http://rethinkdb.com/)
+    * [RethinkDB](http://rethinkdb.com/). Support is deprecated because RethinkDB is no longer being developed
 
 ### Planned
 
