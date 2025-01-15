@@ -135,8 +135,6 @@ func pbServSerialize(msg *ServerComMessage) *pbx.ServerMsg {
 		pkt.Message = pbServMetaSerialize(msg.Meta)
 	}
 
-	pkt.Topic = msg.RcptTo
-
 	return &pkt
 }
 
