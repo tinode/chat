@@ -203,9 +203,6 @@ var globals struct {
 	// URL of the main endpoint.
 	// TODO: implement file-serving API for gRPC and remove this feature.
 	servingAt string
-
-	// Indicator if link preview generator is enabled.
-	linkPreviewEnabled bool
 }
 
 // Credential validator config.
@@ -293,11 +290,6 @@ type configType struct {
 	// when the country isn't specified by the client explicitly and
 	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
-
-	// Enable service which generates link previews: in response to a GET request with a URL
-	// /v0/urlpreview?url=https%3A%2F%2Ftinode.co visit the URL, parse HTML, and return JSON like
-	// {"title": "Page title", description: "This is a demo page", image_url: "https://tinode.co/img/logo.png"}.
-	LinkPreviewEnabled bool `json:"link_preview"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -735,11 +727,6 @@ func main() {
 		// Serve large files.
 		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
-	}
-
-	if config.LinkPreviewEnabled {
-		globals.linkPreviewEnabled = true
-		mux.HandleFunc(config.ApiPath+"v0/urlpreview", previewLink)
 	}
 
 	if staticMountPoint != "/" {
