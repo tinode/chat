@@ -62,7 +62,7 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.22"
+	currentVersion = "0.23"
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.19"
 
