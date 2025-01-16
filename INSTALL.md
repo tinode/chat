@@ -127,11 +127,11 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 
 2. Run DB initializer
 	```
-	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf
+	$GOPATH/bin/tinode-db -config=./tinode-db/tinode.conf
 	```
 	add `-data=./tinode-db/data.json` flag if you want sample data to be loaded:
 	```
-	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
+	$GOPATH/bin/tinode-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
 	```
 
 	DB initializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
@@ -145,7 +145,7 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 
 5. Run the server
 	```
-	$GOPATH/bin/tinode -config=./server/tinode.conf -static_data=$HOME/tinode/webapp/
+	$GOPATH/bin/server -config=./server/tinode.conf -static_data=$HOME/tinode/webapp/
 	```
 
 6. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.

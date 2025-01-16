@@ -3764,7 +3764,8 @@ func topicCat(name string) types.TopicCat {
 	return types.GetTopicCat(name)
 }
 
-// Generate random string as a name of the group topic
+// Generate the name of the group topic as a "grp" followed by random-looking
+// unique string.
 func genTopicName() string {
 	return "grp" + store.Store.GetUidString()
 }
