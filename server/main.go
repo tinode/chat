@@ -297,7 +297,7 @@ type configType struct {
 	// Enable service which generates link previews: in response to a GET request with a URL
 	// /v0/urlpreview?url=https%3A%2F%2Ftinode.co visit the URL, parse HTML, and return JSON like
 	// {"title": "Page title", description: "This is a demo page", image_url: "https://tinode.co/img/logo.png"}.
-	LinkPreviewEnabled bool `json:"link_preview"`
+	LinkPreviewEnabled bool `json:"link_preview_enabled"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
