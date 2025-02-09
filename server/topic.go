@@ -739,6 +739,9 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 
 	// User wants to leave without unsubscribing.
 	if pssd, _ := t.remSession(sess, asUid); pssd != nil {
+		if !sess.isProxy() {
+			sess.delSub(t.name)
+		}
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
 			if msg.init {
@@ -2915,7 +2918,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 	return nil
 }
 
-// replySetCreds adds or validates user credentials such as email and phone numbers.
+// replySetCred adds or validates user credentials such as email and phone numbers.
 func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	set := msg.Set
@@ -3840,7 +3843,8 @@ func topicCat(name string) types.TopicCat {
 	return types.GetTopicCat(name)
 }
 
-// Generate random string as a name of the group topic
+// Generate the name of the group topic as a "grp" followed by random-looking
+// unique string.
 func genTopicName() string {
 	return "grp" + store.Store.GetUidString()
 }

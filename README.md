@@ -1,10 +1,10 @@
 # Tinode Instant Messaging Server
 
-<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC.
-
-Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
+<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging full stack. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), clients for Android (Java), iOS (Swift), and web (ReactJS), as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc (all clients licensed under [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC.
 
 This is beta-quality software: feature-complete and stable but probably with a few bugs or missing features. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
+
+Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
 <a href="https://apps.apple.com/us/app/tinode/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
@@ -110,14 +110,14 @@ When you register a new account you are asked for an email address to send valid
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:
     * Javascript with no external dependencies.
-    * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket). Suitable for Android but with no Android SDK dependencies.
+    * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson), [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket), [ICU4J](https://github.com/unicode-org/icu). Suitable for Android but with no Android SDK dependencies.
     * Swift with no external dependencies.
     * C/C++, C#, Go, Python, PHP, Ruby and many other languages using [gRPC](https://grpc.io/docs/languages/).
-  * Choice of a database backend. Other databases can be added with by writing [adapters](server/db/adapter.go).
-    * MySQL
+  * Choice of a database backend. Other databases can be added by writing [adapters](server/db/adapter.go).
+    * MySQL (and MariaDB, Percona as long as they remain SQL and wire protocol compatible)
     * PostgreSQL
     * MongoDB
-    * [RethinkDB](http://rethinkdb.com/)
+    * [RethinkDB](http://rethinkdb.com/). Support is deprecated because RethinkDB is no longer being developed
 
 ### Planned
 
@@ -141,19 +141,21 @@ All client software has support for [internationalization](docs/translations.md)
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
-| Chinese (simplified) | &check; | &check; | &check; | &check; |
-| Chinese (traditional) |   | &check; | &check; | &check; |
+| Chinese simplified | &check; | &check; | &check; | &check; |
+| Chinese traditional |   | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
 | Korean |   | &check; | &check; |   |
-| Portugese | &check; |   | &check; |   |
-| Romanian |   | &check; |   |   |
+| Portuguese | &check; |   | &check; |   |
+| Romanian |   | &check; | &check; |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
+| Thai |   | &check; |   |   |
+| Ukrainian | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
-More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Vietnamese, Persian.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
 
 ## Third-Party
 

@@ -59,6 +59,10 @@ See more info at https://github.com/tinode/ios/#push_notifications
 * If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../server/auth/rest/).
 
 
+### Q: How do I make my installation private?<br/>
+**A**: If you want to restrict registrations to only those people whom you approve, then the simplest way is to restrict Tinode registrations to an email domain you control: register a custom domain, set up a catch-all email forwarding service at your domain registrar (usually free). Then use your domain name in Tinode config (`"acc_validation" -> "email" -> "domains"`, for example `"domains": ["my-domain.com"]`). You will receive registration emails at your catch-all email box and you will be able to forward validation codes to your users manually. Alternatively, if you have a lot of users, you can use [rest authenticator](../server/auth/rest/).
+
+
 ### Q: How to create a `root` user?<br/>
 **A**: Starting with Tinode version 0.18 the `root` access can be granted to a user by running the following command:
 ```sh
@@ -98,3 +102,12 @@ The test database has a stock user `xena` which has root access.
 
 ### Q: What is the proper way to format gRPC {pub content}?<br/>
 **A**: The gPRC sends `content` field of a `{pub}` message as a byte array while the client applications expect it to be valid JSON. Consequently, you have to format the field to be valid JSON before passing it to gRPC. For example, to send a plain text `Hello world` message you have to send a quoted string `"Hello world"`. In most cases the string you pass to the gRPC call would look like `"\"Hello world\""` or `'"Hello world"'`.
+
+
+### Q: How to fix PostgreSQL initialization failing with 'missing database' error?<br/>
+**A**: PostgreSQL has a (mis)feature: a DB connection must always select a database. If the connection tries to use a database (even with intent to create it) which does not exist, the connection fails. When Tinode is started for the first time, it tries to create a database, usually `tinode` (see `tinode.conf`, `"store_config": {"adapters": {"postgres": {"DBName": "tinode"}}}`. The database `tinode` obviously does not exist, so Tinode connection falls back to 'default' database which has the same name as the name of the connecting PostgreSQL user. The default configuration specifies user as `postgres` (`"User": "postgres"`), the database `postgres` always exists, so the connection succeeds and everything works as expected. But if you change the user to anything other than `postgres`, let's say `tinodeadmin`, then trouble starts: the database with the name `tinodeadmin` does not exist and the connection fails. If you want to change the user name to anything other than `postgres`, then you must create either a database `tinode` (or whatever you named your Tinode database) or an empty database with the same name as your user `tinodeadmin`. For example:
+```
+$ psql
+	postgres=# create database tinode;
+	exit
+```

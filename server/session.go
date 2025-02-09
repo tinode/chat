@@ -117,7 +117,7 @@ type Session struct {
 	bkgTimer *time.Timer
 
 	// Number of subscribe/unsubscribe requests in flight.
-	inflightReqs *sync.WaitGroup
+	inflightReqs *boundedWaitGroup
 	// Synchronizes access to session store in cluster mode:
 	// subscribe/unsubscribe replies are asynchronous.
 	sessionStoreLock sync.Mutex
@@ -510,7 +510,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	var uaRefresh bool
 
 	// Check if s.ver is defined
-	checkVers := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
+	checkVers := func(handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if s.ver == 0 {
 				logs.Warn.Println("s.dispatch: {hi} is missing", s.sid)
@@ -522,7 +522,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	}
 
 	// Check if user is logged in
-	checkUser := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
+	checkUser := func(handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if msg.AsUser == "" {
 				logs.Warn.Println("s.dispatch: authentication required", s.sid)
@@ -535,19 +535,19 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	switch {
 	case msg.Pub != nil:
-		handler = checkVers(msg, checkUser(msg, s.publish))
+		handler = checkVers(checkUser(s.publish))
 		msg.Id = msg.Pub.Id
 		msg.Original = msg.Pub.Topic
 		uaRefresh = true
 
 	case msg.Sub != nil:
-		handler = checkVers(msg, checkUser(msg, s.subscribe))
+		handler = checkVers(checkUser(s.subscribe))
 		msg.Id = msg.Sub.Id
 		msg.Original = msg.Sub.Topic
 		uaRefresh = true
 
 	case msg.Leave != nil:
-		handler = checkVers(msg, checkUser(msg, s.leave))
+		handler = checkVers(checkUser(s.leave))
 		msg.Id = msg.Leave.Id
 		msg.Original = msg.Leave.Topic
 
@@ -556,28 +556,28 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.Id = msg.Hi.Id
 
 	case msg.Login != nil:
-		handler = checkVers(msg, s.login)
+		handler = checkVers(s.login)
 		msg.Id = msg.Login.Id
 
 	case msg.Get != nil:
-		handler = checkVers(msg, checkUser(msg, s.get))
+		handler = checkVers(checkUser(s.get))
 		msg.Id = msg.Get.Id
 		msg.Original = msg.Get.Topic
 		uaRefresh = true
 
 	case msg.Set != nil:
-		handler = checkVers(msg, checkUser(msg, s.set))
+		handler = checkVers(checkUser(s.set))
 		msg.Id = msg.Set.Id
 		msg.Original = msg.Set.Topic
 		uaRefresh = true
 
 	case msg.Del != nil:
-		handler = checkVers(msg, checkUser(msg, s.del))
+		handler = checkVers(checkUser(s.del))
 		msg.Id = msg.Del.Id
 		msg.Original = msg.Del.Topic
 
 	case msg.Acc != nil:
-		handler = checkVers(msg, s.acc)
+		handler = checkVers(s.acc)
 		msg.Id = msg.Acc.Id
 
 	case msg.Note != nil:
@@ -628,11 +628,12 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	}
 
+	s.inflightReqs.Add(1)
 	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
+		s.inflightReqs.Done()
 	} else {
-		s.inflightReqs.Add(1)
 		select {
 		case globals.hub.join <- msg:
 		default:
@@ -655,18 +656,21 @@ func (s *Session) leave(msg *ClientComMessage) {
 		return
 	}
 
+	s.inflightReqs.Add(1)
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Session is attached to the topic.
 		if (msg.Original == "me" || msg.Original == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
+			s.inflightReqs.Done()
 		} else {
 			// Unlink from topic, topic will send a reply.
-			s.delSub(msg.RcptTo)
-			s.inflightReqs.Add(1)
 			sub.done <- msg
 		}
-	} else if !msg.Leave.Unsub {
+		return
+	}
+	s.inflightReqs.Done()
+	if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
 		s.queueOut(InfoNotJoined(msg.Id, msg.Original, msg.Timestamp))
 	} else {
@@ -1015,7 +1019,13 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	code, _, err := store.Store.GetLogicalAuthHandler(tempScheme).GenSecret(&auth.Rec{
+	tempAuth := store.Store.GetLogicalAuthHandler(tempScheme)
+	if tempAuth == nil || !tempAuth.IsInitialized() {
+		logs.Err.Println("s.authSecretReset: validator with missing temp auth", credMethod, tempScheme, s.sid)
+		return types.ErrInternal
+	}
+
+	code, _, err := tempAuth.GenSecret(&auth.Rec{
 		Uid:        uid,
 		AuthLevel:  auth.LevelAuth,
 		Features:   auth.FeatureNoLogin,

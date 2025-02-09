@@ -263,7 +263,7 @@ func (a *authenticator) AsTag(token string) string {
 	return a.name + ":" + token
 }
 
-// IsUnique checks login uniqueness.
+// IsUnique checks login uniqueness and policy compliance.
 func (a *authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error) {
 	uname, _, err := parseSecret(secret)
 	if err != nil {

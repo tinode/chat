@@ -1,4 +1,4 @@
-<!-- TOC depthfrom:1 depthto:6 withlinks:true updateonsave:false orderedlist:false -->
+<!-- TOC depthfrom:1 depthto:6 withlinks:true updateonsave:true orderedlist:false -->
 
 - [Server API](#server-api)
   - [How it Works?](#how-it-works)
@@ -28,6 +28,7 @@
     - [Peer to Peer Topics](#peer-to-peer-topics)
     - [Group Topics](#group-topics)
     - [sys Topic](#sys-topic)
+    - [Auxiliary data](#auxiliary-data)
   - [Using Server-Issued Message IDs](#using-server-issued-message-ids)
   - [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
   - [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
@@ -43,6 +44,7 @@
     - [Google FCM](#google-fcm)
     - [Stdout](#stdout)
   - [Video Calls](#video-calls)
+  - [Link Previews](#link-previews)
   - [Messages](#messages)
     - [Client to Server Messages](#client-to-server-messages)
       - [{hi}](#hi)
@@ -609,6 +611,21 @@ The `stdout` adapter is mostly useful for debugging and logging. It writes push 
 ## Video Calls
 
 [See separate document](call-establishment.md).
+
+## Link Previews
+
+Tinode provides an optional service which helps client applications generate link (URL) previews for inclusion into messages. The enpoint of this service (if enabled) is located at `/v0/urlpreview`. The service takes a single parameter `url`:
+
+```
+/v0/urlpreview?url=https%3A%2F%2Ftinode.co
+```
+The first several kilobytes of the document at the given URL is fetched by issuing an HTTP(S) GET request. If the returned document has content-type `text/html`, the HTML is parsed for page title, description, and image URL. The result is formatted as JSON and returned as
+
+```json
+{"title": "Page title", "description": "This is a page description", "image_url": "https://tinode.co/img/logo64x64.png"}
+```
+
+The link preview service requires authentication. It's exactly the same as authentication for [Out of Band Large Files](#out-of-band-handling-of-large-files).
 
 ## Messages
 

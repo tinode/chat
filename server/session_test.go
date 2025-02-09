@@ -14,6 +14,16 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+func test_makeSession(uid types.Uid) *Session {
+	return &Session{
+		send:         make(chan any, 10),
+		uid:          uid,
+		authLvl:      auth.LevelAuth,
+		inflightReqs: newBoundedWaitGroup(1),
+		ver:          22,
+	}
+}
+
 func TestDispatchHello(t *testing.T) {
 	s := &Session{
 		send:    make(chan any, 10),
@@ -211,13 +221,7 @@ func TestDispatchLogin(t *testing.T) {
 
 func TestDispatchSubscribe(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -266,13 +270,7 @@ func TestDispatchSubscribe(t *testing.T) {
 
 func TestDispatchAlreadySubscribed(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -300,13 +298,7 @@ func TestDispatchAlreadySubscribed(t *testing.T) {
 
 func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -341,13 +333,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 
 func TestDispatchLeave(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -384,6 +370,8 @@ func TestDispatchLeave(t *testing.T) {
 		if req != msg {
 			t.Error("Leave request: leave message expected to be the original leave message.")
 		}
+		// leave request handler is expected to clean up subs.
+		s.delSub(topicName)
 	} else {
 		t.Errorf("Unsub messages: expected 1, received %d.", len(leave))
 	}
@@ -395,13 +383,7 @@ func TestDispatchLeave(t *testing.T) {
 
 func TestDispatchLeaveUnsubMe(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -428,13 +410,7 @@ func TestDispatchLeaveUnsubMe(t *testing.T) {
 
 func TestDispatchLeaveUnknownTopic(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -460,13 +436,7 @@ func TestDispatchLeaveUnknownTopic(t *testing.T) {
 
 func TestDispatchLeaveUnsubFromUnknownTopic(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -493,13 +463,7 @@ func TestDispatchLeaveUnsubFromUnknownTopic(t *testing.T) {
 
 func TestDispatchPublish(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -549,13 +513,7 @@ func TestDispatchPublish(t *testing.T) {
 
 func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -590,13 +548,7 @@ func TestDispatchPublishBroadcastChannelFull(t *testing.T) {
 
 func TestDispatchPublishMissingSubcription(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -625,13 +577,7 @@ func TestDispatchPublishMissingSubcription(t *testing.T) {
 
 func TestDispatchGet(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -676,13 +622,7 @@ func TestDispatchGet(t *testing.T) {
 
 func TestDispatchGetMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -709,13 +649,7 @@ func TestDispatchGetMalformedWhat(t *testing.T) {
 
 func TestDispatchGetMetaChannelFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -750,13 +684,7 @@ func TestDispatchGetMetaChannelFull(t *testing.T) {
 
 func TestDispatchSet(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -808,13 +736,7 @@ func TestDispatchSet(t *testing.T) {
 
 func TestDispatchSetMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -840,13 +762,7 @@ func TestDispatchSetMalformedWhat(t *testing.T) {
 
 func TestDispatchSetMetaChannelFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -885,13 +801,7 @@ func TestDispatchSetMetaChannelFull(t *testing.T) {
 
 func TestDispatchDelMsg(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -936,13 +846,7 @@ func TestDispatchDelMsg(t *testing.T) {
 
 func TestDispatchDelMalformedWhat(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -967,13 +871,7 @@ func TestDispatchDelMalformedWhat(t *testing.T) {
 
 func TestDispatchDelMetaChanFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -1008,13 +906,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 
 func TestDispatchDelUnsubscribedSession(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -1042,13 +934,7 @@ func TestDispatchDelUnsubscribedSession(t *testing.T) {
 
 func TestDispatchNote(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -1100,13 +986,7 @@ func TestDispatchNote(t *testing.T) {
 
 func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)
@@ -1139,13 +1019,7 @@ func TestDispatchNoteBroadcastChanFull(t *testing.T) {
 
 func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {
 	uid := types.Uid(1)
-	s := &Session{
-		send:         make(chan any, 10),
-		uid:          uid,
-		authLvl:      auth.LevelAuth,
-		inflightReqs: &sync.WaitGroup{},
-		ver:          15,
-	}
+	s := test_makeSession(uid)
 	wg := sync.WaitGroup{}
 	r := responses{}
 	wg.Add(1)

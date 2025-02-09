@@ -57,7 +57,7 @@ func (ca *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	}
 
 	if config.MaxRetries < 1 {
-		return errors.New("auth_code: invalid reties count")
+		return errors.New("auth_code: invalid retries count")
 	}
 
 	ca.name = name
@@ -195,7 +195,7 @@ func (authenticator) GetResetParams(uid types.Uid) (map[string]any, error) {
 	return nil, nil
 }
 
-// Replace all occurences of % with / to ensure SQL LIKE query works correctly.
+// Replace all occurrences of '%' with '/' to ensure SQL LIKE query works correctly.
 func sanitizeKey(key string) string {
 	return strings.ReplaceAll(key, "%", "/")
 }

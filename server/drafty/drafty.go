@@ -33,10 +33,12 @@ type entity struct {
 }
 
 type document struct {
-	Txt string `json:"txt,omitempty"`
-	txt []rune
+	Txt string   `json:"txt,omitempty"`
 	Fmt []style  `json:"fmt,omitempty"`
 	Ent []entity `json:"ent,omitempty"`
+
+	// Parsed out grapheme clusters.
+	gc *graphemes
 }
 
 type span struct {
@@ -48,7 +50,7 @@ type span struct {
 }
 
 type node struct {
-	txt      []rune
+	gc       *graphemes
 	sp       *span
 	children []*node
 }
@@ -59,7 +61,7 @@ type previewState struct {
 	keymap    map[int]int
 }
 
-// Preview shortens Drafty to the specified length (in runes), removes quoted text, leading line breaks,
+// Preview shortens Drafty to the specified length (in graphemes), removes quoted text, leading line breaks,
 // and large content from entities making them suitable for a one-line preview,
 // for example for showing in push notifications.
 // The return value is a Drafty document encoded as JSON string.
@@ -93,7 +95,7 @@ func Preview(content any, length int) (string, error) {
 		return "", err
 	}
 
-	state.drafty.Txt = string(state.drafty.txt)
+	state.drafty.Txt = state.drafty.gc.string()
 	data, err := json.Marshal(state.drafty)
 	return string(data), err
 }
@@ -170,10 +172,10 @@ type formatter func(n *node, state any) error
 // Each node of the tree is uniformly formatted.
 func toTree(drafty *document) (*node, error) {
 	if len(drafty.Fmt) == 0 {
-		return &node{txt: drafty.txt}, nil
+		return &node{gc: drafty.gc}, nil
 	}
 
-	textLen := len(drafty.txt)
+	textLen := drafty.gc.length()
 
 	var spans []*span
 	for i := range drafty.Fmt {
@@ -223,7 +225,7 @@ func toTree(drafty *document) (*node, error) {
 	}
 
 	// Iterate over an array of spans.
-	children, err := forEach(drafty.txt, 0, textLen, filtered)
+	children, err := forEach(drafty.gc, 0, textLen, filtered)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +234,7 @@ func toTree(drafty *document) (*node, error) {
 }
 
 // forEach recursively iterates nested spans to form a tree.
-func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
+func forEach(g *graphemes, start, end int, spans []*span) ([]*node, error) {
 	var result []*node
 
 	// Process ranges calling iterator for each range.
@@ -244,10 +246,9 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 			result = append(result, &node{sp: sp})
 			continue
 		}
-
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			result = append(result, &node{txt: line[start:sp.at]})
+			result = append(result, &node{gc: g.slice(start, sp.at)})
 			start = sp.at
 		}
 
@@ -261,7 +262,7 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 		if tags[sp.tp].isVoid {
 			result = append(result, &node{sp: sp})
 		} else {
-			children, err := forEach(line, start, sp.end, subspans)
+			children, err := forEach(g, start, sp.end, subspans)
 			if err != nil {
 				return nil, err
 			}
@@ -272,7 +273,7 @@ func forEach(line []rune, start, end int, spans []*span) ([]*node, error) {
 
 	// Add the remaining unformatted range.
 	if start < end {
-		result = append(result, &node{txt: line[start:end]})
+		result = append(result, &node{gc: g.slice(start, end)})
 	}
 
 	return result, nil
@@ -294,7 +295,7 @@ func plainTextFormatter(n *node, ctx any) error {
 		}
 		text = string(state.txt)
 	} else {
-		text = string(n.txt)
+		text = n.gc.string()
 	}
 
 	state := ctx.(*plainTextState)
@@ -319,18 +320,15 @@ func plainTextFormatter(n *node, ctx any) error {
 		state.txt += text
 	case "BR":
 		state.txt += "\n"
-	case "IM":
+	case "AU", "EX", "IM", "VD":
 		name, ok := nullableMapGet(n.sp.data, "name")
 		if !ok || name == "" {
 			name = "?"
 		}
-		state.txt += "[IMAGE '" + name + "']"
-	case "EX":
-		name, ok := nullableMapGet(n.sp.data, "name")
-		if !ok || name == "" {
-			name = "?"
-		}
-		state.txt += "[FILE '" + name + "']"
+		expand := map[string]string{"AU": "AUDIO", "EX": "FILE", "IM": "IMAGE", "VD": "VIDEO"}
+		state.txt += "[" + expand[n.sp.tp] + " '" + name + "']"
+	case "VC":
+		state.txt += "[CALL]"
 	default:
 		state.txt += text
 	}
@@ -341,7 +339,7 @@ func plainTextFormatter(n *node, ctx any) error {
 func previewFormatter(n *node, ctx any) error {
 
 	state := ctx.(*previewState)
-	at := len(state.drafty.txt)
+	at := state.drafty.gc.length()
 	if at >= state.maxLength {
 		// Maximum doc length reached.
 		return nil
@@ -365,14 +363,19 @@ func previewFormatter(n *node, ctx any) error {
 			}
 		}
 	} else {
-		increment := len(n.txt)
-		if at+increment > state.maxLength {
-			increment = state.maxLength - at
+		increment := n.gc.length()
+		if increment > 0 {
+			if at+increment > state.maxLength {
+				increment = state.maxLength - at
+			}
+			if state.drafty.gc == nil {
+				state.drafty.gc = prepareGraphemes("")
+			}
+			state.drafty.gc = state.drafty.gc.append(n.gc.slice(0, increment))
 		}
-		state.drafty.txt = append(state.drafty.txt, n.txt[:increment]...)
 	}
 
-	end := len(state.drafty.txt)
+	end := state.drafty.gc.length()
 
 	if n.sp != nil {
 		fmt := style{}
@@ -424,13 +427,13 @@ func decodeAsDrafty(content any) (*document, error) {
 
 	switch tmp := content.(type) {
 	case string:
-		drafty = &document{txt: []rune(tmp)}
+		drafty = &document{gc: prepareGraphemes(tmp)}
 	case map[string]any:
 		drafty = &document{}
 		correct := 0
 		if txt, ok := tmp["txt"].(string); ok {
 			drafty.Txt = txt
-			drafty.txt = []rune(txt)
+			drafty.gc = prepareGraphemes(txt)
 			correct++
 		}
 		if ifmt, ok := tmp["fmt"].([]any); ok {

@@ -192,7 +192,7 @@ _IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malic
   { "tp":"EX", "data":{ "mime":"application/json", "val": { "seq": 3, "resp": { "confirmation": "some-value" } } } }
   ```
   * `url`: issue an `HTTP GET` request to the URL from the `data.ref` field. The following query parameters are appended to the URL: `<name>=<val>`, `uid=<current-user-ID>`, `topic=<topic name>`, `seq=<message sequence ID>`.
-  * `note`: send a `{note}` message to the current topic with `what` set to `data`.
+  * `note`: send a `{note}` message to the current topic with `what` set to `data` (not currently implemented, contact us if you need it).
   ```js
   { "what": "data", "data": { "mime": "application/json", "val": { "seq": 3, "resp": { "confirmation": "some-value" } } }
   ```

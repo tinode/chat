@@ -226,11 +226,15 @@ def parse_trusted(trusted):
         for t in trusted.split(","):
             t = t.strip()
             if t.startswith("rm-"):
-                result[t[3:]] = TINODE_DEL
+                result[t[3:]] = False
             else:
                 result[t] = True
 
     return result
+
+# Create proto for ClientExtra
+def pack_extra(cmd):
+    return pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser, auth_level=pb.ROOT if cmd.as_root else pb.NONE)
 
 # Read a value in the server response using dot notation, i.e.
 # $user.params.token or $meta.sub[1].user
@@ -360,9 +364,9 @@ def accMsg(id, cmd, ignored):
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-            public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
+            public=cmd.public, private=cmd.private, trusted=encode_to_bytes(parse_trusted(cmd.trusted))),
         cred=parse_cred(cmd.cred)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {login}
 def loginMsg(id, cmd, args):
@@ -400,19 +404,20 @@ def subMsg(id, cmd, ignored):
     cmd.private = TINODE_DEL if cmd.private == DELETE_MARKER else encode_to_bytes(cmd.private)
     return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
         set_query=pb.SetQuery(
-            desc=pb.SetDesc(public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted),
-                default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
+            desc=pb.SetDesc(public=cmd.public, private=cmd.private,
+                            trusted=encode_to_bytes(parse_trusted(cmd.trusted)),
+                            default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
         get_query=cmd.get_query),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
     if not cmd.topic:
         cmd.topic = tn_globals.DefaultTopic
     return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {pub}
 def pubMsg(id, cmd, ignored):
@@ -439,7 +444,7 @@ def pubMsg(id, cmd, ignored):
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
         head=head, content=encode_to_bytes(content)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {get}
 def getMsg(id, cmd, ignored):
@@ -459,7 +464,7 @@ def getMsg(id, cmd, ignored):
         what.append("cred")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
         query=pb.GetQuery(what=" ".join(what))),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {set}
 def setMsg(id, cmd, ignored):
@@ -480,11 +485,12 @@ def setMsg(id, cmd, ignored):
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-                public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
+                public=cmd.public, private=cmd.private,
+                trusted=encode_to_bytes(parse_trusted(cmd.trusted))),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None,
         cred=cred)),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # {del}
 def delMsg(id, cmd, ignored):
@@ -571,7 +577,7 @@ def delMsg(id, cmd, ignored):
         stdoutln("Unrecognized delete option '", cmd.what, "'")
         return None
 
-    msg = pb.ClientMsg(extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+    msg = pb.ClientMsg(extra=pack_extra(cmd))
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
@@ -629,7 +635,7 @@ def noteMsg(id, cmd, ignored):
 
     return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what,
         seq_id=cmd.seq, event=enum_event, payload=cmd.payload),
-        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
+        extra=pack_extra(cmd))
 
 # Upload file out of band over HTTP(S) (not gRPC).
 def upload(id, cmd, args):
@@ -809,6 +815,13 @@ def parse_cmd(parts):
         parser.add_argument('filename', help='name of the file to upload')
     elif macros:
         parser = macros.parse_macro(parts)
+
+    if parser:
+        try:
+            parser.add_argument('--as_root', action='store_true', help='execute command at ROOT auth level')
+        except Exception:
+            # Ignore exception here: --as_root has been added already, macro parser is persistent.
+            pass
     return parser
 
 # Parses command line into command and parameters.
@@ -998,7 +1011,7 @@ def serialize_cmd(string, id, args):
             return None, None
 
     except Exception as err:
-        stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
+        stdoutln("Error in '{0}': {1}".format(string, err))
         return None, None
 
 def pop_from_output_queue():

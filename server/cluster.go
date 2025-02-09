@@ -1002,6 +1002,11 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		logs.Err.Fatal("Cluster: invalid cluster size: 1")
 	}
 
+	if len(globals.cluster.nodes)%2 == 1 {
+		// Even number of cluster nodes (self + odd number).
+		logs.Warn.Println("Cluster: use odd number of cluster nodes")
+	}
+
 	if !globals.cluster.failoverInit(config.Failover) {
 		globals.cluster.rehash(nil)
 	}

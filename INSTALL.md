@@ -28,7 +28,7 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-1. Install [Go environment](https://golang.org/doc/install). The installation instructions below are for Go 1.16 and newer.
+1. Install [Go environment](https://golang.org/doc/install). The installation instructions below are for Go 1.18 and newer.
 
 2. OPTIONAL only if you intend to modify the code: Install [protobuf](https://developers.google.com/protocol-buffers/) and [gRPC](https://grpc.io/docs/languages/go/quickstart/) including [code generator](https://developers.google.com/protocol-buffers/docs/reference/go-generated) for Go.
 
@@ -44,7 +44,7 @@ See [instructions](./docker/README.md)
 	go install -tags mysql github.com/tinode/chat/server@latest
 	go install -tags mysql github.com/tinode/chat/tinode-db@latest
 	```
-	- **PostgreSQL**:
+  - **PostgreSQL**:
 	```
 	go install -tags postgres github.com/tinode/chat/server@latest
 	go install -tags postgres github.com/tinode/chat/tinode-db@latest
@@ -75,11 +75,7 @@ See [instructions](./docker/README.md)
     ```
     The value of `buildstamp` will be sent by the server to the clients.
 
-    Go versions 1.14 and 1.15 should use a combination of `go get` and `go build` to install Tinode, e.g.
-    ```
-    go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
-    ```
-    Building with Go 1.13 or below **will fail**!
+    Building with Go 1.17 or below **will fail**!
 
 5. Open `tinode.conf` (located at `$GOPATH/pkg/mod/github.com/tinode/chat@vX.XX.X/server/`). Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
 ```js
@@ -131,11 +127,11 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 
 2. Run DB initializer
 	```
-	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf
+	$GOPATH/bin/tinode-db -config=./tinode-db/tinode.conf
 	```
 	add `-data=./tinode-db/data.json` flag if you want sample data to be loaded:
 	```
-	$GOPATH/bin/init-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
+	$GOPATH/bin/tinode-db -config=./tinode-db/tinode.conf -data=./tinode-db/data.json
 	```
 
 	DB initializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
@@ -149,7 +145,7 @@ MongoDB should run as single node replicaset. See https://docs.mongodb.com/manua
 
 5. Run the server
 	```
-	$GOPATH/bin/tinode -config=./server/tinode.conf -static_data=$HOME/tinode/webapp/
+	$GOPATH/bin/server -config=./server/tinode.conf -static_data=$HOME/tinode/webapp/
 	```
 
 6. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.

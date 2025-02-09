@@ -48,9 +48,6 @@ x-tinode-env-vars: &tinode-env-vars
   # Video calls
   "WEBRTC_ENABLED": "false"
   # "ICE_SERVERS_FILE": "<path to ICE servers config>"
-  #
-  # Cluster.
-  # "CLUSTER_NUM_PROXY_EVENT_GOROUTINES": <size of proxy event goroutine pool>
 
 x-exporter-env-vars: &exporter-env-vars
   "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"

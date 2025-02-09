@@ -580,7 +580,7 @@ func TestFileGet(t *testing.T) {
 
 // ================== Update tests ================================
 func TestUserUpdate(t *testing.T) {
-	update := map[string]interface{}{
+	update := map[string]any{
 		"UserAgent": "Test Agent v0.11",
 		"UpdatedAt": now.Add(30 * time.Minute),
 	}
@@ -745,7 +745,7 @@ func TestTopicUpdateOnMessage(t *testing.T) {
 }
 
 func TestTopicUpdate(t *testing.T) {
-	update := map[string]interface{}{
+	update := map[string]any{
 		"UpdatedAt": now.Add(55 * time.Minute),
 	}
 	err := adp.TopicUpdate(topics[0].Id, update)
@@ -772,7 +772,7 @@ func TestTopicOwnerChange(t *testing.T) {
 }
 
 func TestSubsUpdate(t *testing.T) {
-	update := map[string]interface{}{
+	update := map[string]any{
 		"UpdatedAt": now.Add(22 * time.Minute),
 	}
 	err := adp.SubsUpdate(topics[0].Id, types.ParseUserId("usr"+users[0].Id), update)
@@ -944,7 +944,7 @@ func TestCredDel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []map[string]interface{}
+	var got []map[string]any
 	cur, err := db.Collection("credentials").Find(ctx, b.M{"method": "email", "value": "alice@test.example.com"})
 	if err != nil {
 		t.Fatal(err)
@@ -1164,14 +1164,14 @@ func TestMessageGetDeleted(t *testing.T) {
 }
 
 // ================================================================
-func mismatchErrorString(key string, got, want interface{}) string {
+func mismatchErrorString(key string, got, want any) string {
 	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)
 }
 
 func initConnectionToDb() {
 	var adpConfig struct {
-		Addresses interface{} `json:"addresses,omitempty"`
-		Database  string      `json:"database,omitempty"`
+		Addresses any    `json:"addresses,omitempty"`
+		Database  string `json:"database,omitempty"`
 	}
 
 	if err := json.Unmarshal(config.Adapters[adp.GetName()], &adpConfig); err != nil {

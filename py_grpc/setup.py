@@ -23,7 +23,7 @@ setuptools.setup(
     license="Apache 2.0",
     keywords="chat messaging messenger im tinode",
     package_data={
-        "": ["GIT_VERSION"],
+        "": ["GIT_VERSION", "*.pyi"],
     },
     classifiers=[
         "Programming Language :: Python :: 2",

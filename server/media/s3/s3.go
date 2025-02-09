@@ -162,18 +162,12 @@ func (ah *awshandler) Init(jsconf string) error {
 	return err
 }
 
-// Headers manages CORS, checks cache, and redirects GET, HEAD requests to the AWS server.
+// Headers adds CORS headers and redirects GET and HEAD requests to the AWS server.
 func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
-	switch method {
-	case http.MethodGet, http.MethodHead:
-		// Handling only GET, HEAD & OPTIONS methods.
-		break
-	case http.MethodOptions:
-		if headers, status := media.CORSHandler(headers, ah.conf.CorsOrigins, serve); status != 0 {
-			return headers, status, nil
-		}
-	default:
-		return nil, 0, nil
+	// Add CORS headers, if necessary.
+	headers, status := media.CORSHandler(method, headers, ah.conf.CorsOrigins, serve)
+	if status != 0 || method == http.MethodPost || method == http.MethodPut {
+		return headers, status, nil
 	}
 
 	fid := ah.GetIdFromUrl(url.String())

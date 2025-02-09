@@ -245,8 +245,8 @@ func (a *authenticator) AsTag(token string) string {
 	return ""
 }
 
-// IsUnique verifies if the provided secret can be considered unique by the auth scheme
-// E.g. if login is unique.
+// IsUnique verifies if the provided secret can be considered unique by the auth
+// scheme as well as policy compliance. E.g. if login is unique and not too short/long.
 func (a *authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error) {
 	resp, err := a.callEndpoint("checkunique", nil, secret, remoteAddr)
 	if err != nil {

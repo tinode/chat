@@ -15,6 +15,7 @@ import (
 	"errors"
 	"io"
 	"math/rand"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -29,6 +30,11 @@ import (
 )
 
 type fileResponseWriter func(msg *ServerComMessage, err error)
+
+// Allowed mime types for user-provided Content-type field. Must be alphabetically sorted.
+// Types not in the list are converted to "application/octet-stream".
+// See https://www.iana.org/assignments/media-types/media-types.xhtml
+var allowedMimeTypes = []string{"application/", "audio/", "font/", "image/", "text/", "video/"}
 
 func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
@@ -132,7 +138,7 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fdef, rsc, err := mh.Download(req.URL.String())
+	fd, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", now, nil), err)
 		return
@@ -140,11 +146,24 @@ func largeFileServeHTTP(wrt http.ResponseWriter, req *http.Request) {
 
 	defer rsc.Close()
 
-	if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
+	wrt.Header().Set("Content-Type", fd.MimeType)
+	asAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt"))
+	// Force download for html files as a security measure.
+	asAttachment = asAttachment ||
+		strings.Contains(fd.MimeType, "html") ||
+		strings.Contains(fd.MimeType, "xml") ||
+		strings.HasPrefix(fd.MimeType, "application/") ||
+		// The 'message', 'model', and 'multipart' cannot currently appear, but checked anyway in case
+		// DetectContentType changes its logic.
+		strings.HasPrefix(fd.MimeType, "message/") ||
+		strings.HasPrefix(fd.MimeType, "model/") ||
+		strings.HasPrefix(fd.MimeType, "multipart/") ||
+		strings.HasPrefix(fd.MimeType, "text/")
+	if asAttachment {
 		wrt.Header().Set("Content-Disposition", "attachment")
 	}
 
-	http.ServeContent(wrt, req, "", fdef.UpdatedAt, rsc)
+	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 
 	logs.Info.Println("media serve: OK, uid=", uid)
 }
@@ -276,10 +295,18 @@ func largeFileReceiveHTTP(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	mimeType := http.DetectContentType(buff)
-	// If DetectContentType fails, use client-provided content type.
+	// If DetectContentType fails, see if client-provided content type can be used.
 	if mimeType == "application/octet-stream" {
-		if contentType := header.Header.Get("Content-Type"); contentType != "" {
-			mimeType = contentType
+		if userContentType, params, err := mime.ParseMediaType(header.Header.Get("Content-Type")); err == nil {
+			// Make sure the content-type is legit.
+			for _, allowed := range allowedMimeTypes {
+				if strings.HasPrefix(userContentType, allowed) {
+					if userContentType = mime.FormatMediaType(userContentType, params); userContentType != "" {
+						mimeType = userContentType
+					}
+					break
+				}
+			}
 		}
 	}
 

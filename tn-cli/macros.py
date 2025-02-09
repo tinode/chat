@@ -49,7 +49,7 @@ class Macro:
 class Usermod(Macro):
     """Modifies user account. The following modes are available:
     * suspend/unsuspend account.
-    * change user's theCard (public name, description, avatar, private comment).
+    * change user's theCard (public name, description, avatar), private comment, trusted values.
 
     This macro requires root privileges."""
 
@@ -78,12 +78,13 @@ class Usermod(Macro):
             if cmd.suspend and cmd.unsuspend:
                 stdoutln("Cannot both suspend and unsuspend account")
                 return None
-            new_cmd = 'acc --user %s' % cmd.userid
+            new_cmd = 'acc --user %s --as_root' % cmd.userid
             if cmd.suspend:
                 new_cmd += ' --suspend true'
             if cmd.unsuspend:
                 new_cmd += ' --suspend false'
             return [new_cmd]
+
         # Change theCard.
         varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
         set_cmd = '.must ' + varname + ' set me'
@@ -96,7 +97,7 @@ class Usermod(Macro):
         if cmd.note is not None:
             set_cmd += ' --note="%s"' % cmd.note
         if cmd.trusted is not None:
-            set_cmd += ' --trusted="%s"' % cmd.trusted
+            set_cmd += ' --trusted="%s" --as_root' % cmd.trusted
         old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
         return ['.use --user %s' % cmd.userid,
                 '.must sub me',
@@ -193,7 +194,7 @@ class Useradd(Macro):
         if cmd.note is not None:
             set_cmd += ' --note="%s"' % cmd.note
         if cmd.trusted is not None:
-            set_cmd += ' --trusted="%s"' % cmd.trusted
+            set_cmd += ' --trusted="%s" --as_root' % cmd.trusted
         if cmd.tags:
             new_cmd += ' --tags="%s"' % cmd.tags
         if cmd.avatar:
@@ -253,7 +254,7 @@ class Userdel(Macro):
     def expand(self, id, cmd, args):
         if not cmd.userid:
             return None
-        del_cmd = 'del user --user %s' % cmd.userid
+        del_cmd = 'del user --user %s --as_root' % cmd.userid
         if cmd.hard:
             del_cmd += ' --hard'
         return [del_cmd]

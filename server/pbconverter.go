@@ -142,9 +142,6 @@ func pbServSerialize(msg *ServerComMessage) *pbx.ServerMsg {
 		pkt.Message = pbServMetaSerialize(msg.Meta)
 	}
 
-	// DEPRECATED.
-	pkt.Topic = msg.RcptTo
-
 	return &pkt
 }
 

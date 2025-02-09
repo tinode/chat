@@ -2797,8 +2797,8 @@ func normalizeUpdateMap(update map[string]any) map[string]any {
 }
 
 // Recursive unmarshalling of bson.D type.
-// Mongo drivers unmarshalling into any creates bson.D object for maps and bson.A object for slices.
-// We need to manually unmarshal them into correct types: map[string]any and []interface{] respectively.
+// Mongo drivers unmarshalling into 'any' creates bson.D object for maps and bson.A object for slices.
+// We need to manually unmarshal them into correct types: map[string]any and []any respectively.
 func unmarshalBsonD(bsonObj any) any {
 	if obj, ok := bsonObj.(b.D); ok && len(obj) != 0 {
 		result := make(map[string]any)

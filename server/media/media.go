@@ -81,6 +81,7 @@ func matchCORSOrigin(allowed []string, origin string) string {
 	return ""
 }
 
+// allowMethods must be in UPPERCASE.
 func matchCORSMethod(allowMethods []string, method string) bool {
 	if method == "" {
 		// Request has no Method header.
@@ -89,7 +90,7 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 
 	method = strings.ToUpper(method)
 	for _, mm := range allowMethods {
-		if strings.ToUpper(mm) == method {
+		if mm == method {
 			return true
 		}
 	}
@@ -97,36 +98,51 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 	return false
 }
 
-// CORSHandler is the default preflight OPTIONS processor for use by media handlers.
-func CORSHandler(req http.Header, allowedOrigins []string, serve bool) (http.Header, int) {
-	var allowMethods []string
-	if serve {
-		allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
-	} else {
-		allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
-	}
-
-	headers := http.Header{
+// CORSHandler is the default CORS processor for use by media handlers. It adds CORS headers to
+// preflight OPTIONS requests, Vary & Access-Control-Allow-Origin headers to all responses.
+func CORSHandler(method string, reqHeader http.Header, allowedOrigins []string, serve bool) (http.Header, int) {
+	respHeader := map[string][]string{
 		// Always add Vary because of possible intermediate caches.
-		"Vary":                             {"Origin", "Access-Control-Request-Method"},
-		"Access-Control-Allow-Headers":     {"*"},
-		"Access-Control-Max-Age":           {"86400"},
-		"Access-Control-Allow-Credentials": {"true"},
-		"Access-Control-Allow-Methods":     {strings.Join(allowMethods, ", ")},
+		"Vary": {"Origin", "Access-Control-Request-Method, Access-Control-Request-Headers"},
 	}
 
-	if !matchCORSMethod(allowMethods, req.Get("Access-Control-Request-Method")) {
-		// CORS policy does not allow this method.
-		return headers, http.StatusNoContent
+	origin := reqHeader.Get("Origin")
+
+	allowedOrigin := matchCORSOrigin(allowedOrigins, origin)
+	if acMethod := reqHeader.Get("Access-Control-Request-Method"); method == http.MethodOptions && acMethod != "" {
+		// Preflight request.
+
+		if allowedOrigin == "" {
+			return respHeader, http.StatusNoContent
+		}
+
+		var allowMethods []string
+		if serve {
+			allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
+		} else {
+			allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
+		}
+
+		if !matchCORSMethod(allowMethods, acMethod) {
+			// CORS policy does not allow this method.
+			return respHeader, http.StatusNoContent
+		}
+
+		respHeader["Access-Control-Allow-Headers"] = []string{"*"}
+		respHeader["Access-Control-Allow-Credentials"] = []string{"true"}
+		respHeader["Access-Control-Allow-Methods"] = []string{strings.Join(allowMethods, ", ")}
+		respHeader["Access-Control-Max-Age"] = []string{"86400"}
+		respHeader["Access-Control-Allow-Origin"] = []string{allowedOrigin}
+
+		return respHeader, http.StatusNoContent
 	}
 
-	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Get("Origin"))
-	if allowedOrigin == "" {
-		// CORS policy does not match the origin.
-		return headers, http.StatusNoContent
+	// Regular request, not a preflight.
+
+	if allowedOrigin != "" {
+		// Returning Origin from the actual request instead of '*', otherwise there could be an issue with Credentials.
+		respHeader["Access-Control-Allow-Origin"] = []string{origin}
 	}
 
-	headers["Access-Control-Allow-Origin"] = []string{allowedOrigin}
-
-	return headers, http.StatusNoContent
+	return respHeader, 0
 }

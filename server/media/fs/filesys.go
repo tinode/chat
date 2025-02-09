@@ -105,7 +105,7 @@ func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, s
 		// Not an OPTIONS request. No special handling for all other requests.
 		return nil, 0, nil
 	}
-	header, status := media.CORSHandler(headers, fh.corsOrigins, serve)
+	header, status := media.CORSHandler(method, headers, fh.corsOrigins, serve)
 	return header, status, nil
 }
 

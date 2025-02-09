@@ -4,12 +4,15 @@
 	"cache_control": 39600,
 	"static_mount": "/",
 	"grpc_listen": ":16060",
+	"grpc_keepalive_enabled": true,
 	"api_key_salt": "$API_KEY_SALT",
 	"max_message_size": 4194304,
-	"max_subscriber_count": 32,
+	"max_subscriber_count": 128,
 	"max_tag_count": 16,
 	"expvar": "/stats/expvar/",
 	"server_status": "$SERVER_STATUS_PATH",
+	"use_x_forwarded_for": true,
+	"default_country_code": "$DEFAULT_COUNTRY_CODE",
 
 	"media": {
 		"use_handler": "$MEDIA_HANDLER",
@@ -18,14 +21,19 @@
 		"gc_block_size": 100,
 		"handlers": {
 			"fs": {
-				"upload_dir": "uploads"
+				"upload_dir": "uploads",
+				"cache_control": "max-age=86400",
+				"cors_origins": $FS_CORS_ORIGINS
 			},
 			"s3":{
 				"access_key_id": "$AWS_ACCESS_KEY_ID",
 				"secret_access_key": "$AWS_SECRET_ACCESS_KEY",
 				"region": "$AWS_REGION",
 				"bucket": "$AWS_S3_BUCKET",
-				"cors_origin": $AWS_CORS_ORIGINS
+				"endpoint": "$AWS_S3_ENDPOINT",
+				"presign_ttl": 3600,
+				"cache_control": "max-age=86400",
+				"cors_origins": $AWS_CORS_ORIGINS
 			}
 		}
 	},
@@ -52,11 +60,17 @@
 			"expire_in": 1209600,
 			"serial_num": 1,
 			"key": "$AUTH_TOKEN_KEY"
+		},
+		"code": {
+			"expire_in": 900,
+			"max_retries": 3,
+			"code_length": 6
 		}
 	},
 
 	"store_config": {
 		"uid_key": "$UID_ENCRYPTION_KEY",
+		"max_results": 1024,
 		"use_adapter": "$STORE_USE_ADAPTER",
 		"adapters": {
 			"mysql": {
@@ -87,13 +101,15 @@
 				"host_url": "$SMTP_HOST_URL",
 				"smtp_server": "$SMTP_SERVER",
 				"smtp_port": "$SMTP_PORT",
-				"login": "$SMTP_LOGIN",
 				"sender": "$SMTP_SENDER",
+				"login": "$SMTP_LOGIN",
 				"sender_password": "$SMTP_PASSWORD",
-				"languages": ["en", "ru"],
+				"auth_mechanism": "$SMTP_AUTH_MECHANISM",
+				"smtp_helo_host": "$SMTP_HELO_HOST",
+				"languages": ["en", "es", "fr", "ru", "vi", "zh"],
 				"validation_templ": "./templ/email-validation-{{.Language}}.templ",
 				"reset_secret_templ": "./templ/email-password-reset-{{.Language}}.templ",
-				"max_retries": 4,
+				"max_retries": 3,
 				"domains": [$SMTP_DOMAINS],
 				"debug_response": "$DEBUG_EMAIL_VERIFICATION_CODE"
 			}
@@ -102,15 +118,18 @@
 		"tel": {
 			"add_to_tags": true,
 			"config": {
-				"validation_templ": "./templ/sms-validation-{{.Language}}.templ",
-				"reset_secret_templ": "./templ/sms-password-reset-{{.Language}}.templ",
-				"max_retries": 4,
+				"host_url": "$TEL_HOST_URL",
+				"languages": ["en", "es", "fr", "pt", "ru", "vi", "zh"],
+				"sender": "$TEL_SENDER",
+				"universal_templ": "./templ/sms-universal-{{.Language}}.templ",
+				"max_retries": 3,
 				"debug_response": "$DEBUG_TEL_VERIFICATION_CODE"
 			}
 		}
 	},
 
 	"acc_gc_config": {
+		"enabled": $ACC_GC_ENABLED,
 		"gc_period": 3600,
 		"gc_block_size": 10,
 		"gc_min_account_age": 48
@@ -122,7 +141,7 @@
 			"config": {
 				"enabled": $TNPG_PUSH_ENABLED,
 				"token": "$TNPG_AUTH_TOKEN",
-				"org": "$TNPG_USER"
+				"org": "$TNPG_ORG"
 			}
 		},
 		{
@@ -165,7 +184,6 @@
 			{"name": "tinode-1", "addr": "tinode-1:12001"},
 			{"name": "tinode-2", "addr": "tinode-2:12002"}
 		],
-		"num_proxy_event_goroutines": $CLUSTER_NUM_PROXY_EVENT_GOROUTINES,
 		"failover": {
 			"enabled": true,
 			"heartbeat": 100,
