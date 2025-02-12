@@ -27,7 +27,7 @@ import (
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 
-	backend "github.com/tinode/chat/server/db/mongodb"
+	// backend "github.com/tinode/chat/server/db/mongodb"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -1205,7 +1205,7 @@ func initConnectionToDb() {
 
 func init() {
 	logs.Init(os.Stderr, "stdFlags")
-	adp = backend.GetTestAdapter()
+	// adp = backend.GetTestAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
 	if file, err := os.Open(*conffile); err != nil {
@@ -1214,12 +1214,12 @@ func init() {
 		log.Fatal("Failed to parse config file:", err)
 	}
 
-	if adp == nil {
-		log.Fatal("Database adapter is missing")
-	}
-	if adp.IsOpen() {
-		log.Print("Connection is already opened")
-	}
+	// if adp == nil {
+	// 	log.Fatal("Database adapter is missing")
+	// }
+	// if adp.IsOpen() {
+	// 	log.Print("Connection is already opened")
+	// }
 
 	err := adp.Open(config.Adapters[adp.GetName()])
 	if err != nil {
