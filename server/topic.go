@@ -2996,7 +2996,6 @@ func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 		return errors.New("aux update by non-admin")
 	}
 
-	logs.Info.Println(msg.Set.Aux, t.aux)
 	if aux, changed := mergeMaps(copyMap(t.aux), msg.Set.Aux); changed {
 		err := store.Topics.Update(t.name, map[string]any{"Aux": aux, "UpdatedAt": now})
 		if err == nil {

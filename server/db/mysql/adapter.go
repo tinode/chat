@@ -44,7 +44,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 115
+	adpVersion = 114
 
 	adapterName = "mysql"
 
@@ -784,19 +784,11 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := bumpVersion(a, 114); err != nil {
-			return err
-		}
-	}
-
-	if a.version == 114 {
-		// Perform database upgrade from version 114 to version 115.
-
 		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD etag VARCHAR(128) AFTER size"); err != nil {
 			return err
 		}
 
-		if err := bumpVersion(a, 115); err != nil {
+		if err := bumpVersion(a, 114); err != nil {
 			return err
 		}
 	}

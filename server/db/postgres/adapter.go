@@ -46,7 +46,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 115
+	adpVersion  = 114
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -635,19 +635,11 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := bumpVersion(a, 114); err != nil {
-			return err
-		}
-	}
-
-	if a.version == 114 {
-		// Perform database upgrade from version 114 to version 115.
-
 		if _, err := a.db.Exec(ctx, "ALTER TABLE fileuploads ADD COLUMN etag VARCHAR(128)"); err != nil {
 			return err
 		}
 
-		if err := bumpVersion(a, 115); err != nil {
+		if err := bumpVersion(a, 114); err != nil {
 			return err
 		}
 	}

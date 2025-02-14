@@ -29,8 +29,6 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-type fileResponseWriter func(msg *ServerComMessage, err error)
-
 // Allowed mime types for user-provided Content-type field. Must be alphabetically sorted.
 // Types not in the list are converted to "application/octet-stream".
 // See https://www.iana.org/assignments/media-types/media-types.xhtml
@@ -491,8 +489,6 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		return nil
 	}
 
-	resp := pbx.FileUpResp{Meta: &pbx.FileMeta{}}
-
 	// Check if uploads are handled elsewhere.
 	headers, statusCode, err := mh.Headers(http.MethodPost, nil, http.Header{}, false)
 	if err != nil {
@@ -503,12 +499,14 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 
 	if statusCode != 0 {
 		// The handler requested to terminate further processing.
-		resp.Id = msgID
-		resp.Code = int32(statusCode)
-		resp.Text = http.StatusText(statusCode)
-		resp.RedirUrl = headers.Get("Location")
-		logs.Info.Println("media upload: completed with status", statusCode, "uid=", uid)
-		return nil
+		err = stream.SendAndClose(&pbx.FileUpResp{
+			Id:       msgID,
+			Code:     int32(statusCode),
+			Text:     http.StatusText(statusCode),
+			RedirUrl: headers.Get("Location"),
+		})
+		logs.Info.Println("media upload: completed with status", statusCode, "uid=", uid, err)
+		return err
 	}
 
 	mimeType := http.DetectContentType(req.Content)

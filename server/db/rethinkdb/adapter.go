@@ -34,7 +34,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 115
+	adpVersion = 114
 
 	adapterName = "rethinkdb"
 
@@ -558,10 +558,9 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 113 {
-		// Version 114: topics.aux added (never released to public).
-		// Version 115: fileuploads.etag added
+		// Version 114: topics.aux added, fileuploads.etag added.
 		// Just bump the version.
-		if err := bumpVersion(a, 115); err != nil {
+		if err := bumpVersion(a, 114); err != nil {
 			return err
 		}
 	}
@@ -2405,7 +2404,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		}
 		defer cursor2.Close()
 		if !cursor2.IsNil() {
-			tableCredentials.Get(cred.Id).
+			_, err = tableCredentials.Get(cred.Id).
 				Replace(rdb.Row.Without("DeletedAt").
 					Merge(map[string]any{
 						"UpdatedAt": cred.UpdatedAt,

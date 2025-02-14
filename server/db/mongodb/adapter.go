@@ -41,7 +41,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 115
+	adpVersion  = 114
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -532,9 +532,8 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 113 {
-		// Version 114: topics.aux added (never released to public).
-		// Version 115: fileuploads.etag added.
-		if err := bumpVersion(a, 115); err != nil {
+		// Version 114: topics.aux added, fileuploads.etag added..
+		if err := bumpVersion(a, 114); err != nil {
 			return err
 		}
 	}
@@ -2749,8 +2748,8 @@ func (a *adapter) isDbInitialized() bool {
 	return true
 }
 
-// GetTestAdapter returns an adapter object. It's required for running tests.
-func GetTestAdapter() *adapter {
+// TestingGetAdapter returns an adapter object. Useful for running tests.
+func TestingGetAdapter() *adapter {
 	return &adapter{}
 }
 

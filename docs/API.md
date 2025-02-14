@@ -28,13 +28,13 @@
     - [Peer to Peer Topics](#peer-to-peer-topics)
     - [Group Topics](#group-topics)
     - [sys Topic](#sys-topic)
-    - [Auxiliary data](#auxiliary-data)
   - [Using Server-Issued Message IDs](#using-server-issued-message-ids)
   - [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-  - [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
+  - [Trusted, Public, Private, Auxiliary Fields](#trusted-public-private-auxiliary-fields)
     - [Trusted](#trusted)
     - [Public](#public)
     - [Private](#private)
+    - [Auxiliary](#auxiliary)
   - [Format of Content](#format-of-content)
   - [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
     - [Uploading](#uploading)
@@ -432,14 +432,6 @@ A `channel` topic is different from the non-channel group topic in the following
 
 The `sys` topic serves as an always available channel of communication with the system administrators. A normal non-root user cannot subscribe to `sys` but can publish to it without subscription. Existing clients use this channel to report abuse by sending a Drafty-formatted `{pub}` message with the report as JSON attachment. A root user can subscribe to `sys` topic. Once subscribed, the root user will receive messages sent to `sys` topic by other users.
 
-### Auxiliary data
-
-Topics have `aux` field which represents arbitrary auxiliary data stored as a set of key-value pairs. The `aux` is writable by topic admins and readable by all topic subscribers.
-
-The following fields are currently defined:
-
-* `pins`: array of integer message IDs to pin to the top of the message list.
-
 ## Using Server-Issued Message IDs
 
 Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
@@ -454,13 +446,22 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Trusted, Public, and Private Fields
+## Trusted, Public, Private, Auxiliary Fields
 
-Topics and subscriptions have `trusted`, `public`, and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
+Topics have `trusted`, `public`, `aux` fields, subscriptions have `private` fields. The primary difference between these fields is in access control:
+
+ * `trusted`: writable by `ROOT` users, readable by anyone.
+ * `public`: writable by the `owner` or the user, readable by anyone.
+ * `aux`: writable by topic administrators, readable by subscribers.
+ * `private`: readable and writable only by the user who created the subscription.
+
+Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
+
+Although it's not yet enforced, if a third-party application defines custom keys, the key names should start with an `x-` followed by the application's fully qualified domain name, e.g. `x-example.com-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
 
 ### Trusted
 
-The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The field is writable by ROOT users, readable by anyone who has access to the topic or user. The following optional keys are currently defined:
+The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The field is writable by `ROOT` users, readable by anyone who has access to the topic or user. The following optional keys are currently defined:
 ```js
 trusted: {
   verified: true, // boolean, an indicator of a verified/trustworthy user or topic.
@@ -472,8 +473,7 @@ trusted: {
 
 ### Public
 
-The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md). The field is writable by
-by the user for users, the topic owner for topics. The field is readable by anyone who has access to topic or user.
+The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md). The field is writable by by the user for users, the topic owner for topics. The field is readable by anyone who has access to topic or user.
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
@@ -485,14 +485,21 @@ private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
   arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
-  label: "starred",  // string, label which UI may use for topic display or sorting.
   accepted: "JRWS" // string, 'given' mode accepted by the user.
 }
 ```
 
-Although it's not yet enforced, custom fields should start with an `x-` followed by the application name, e.g. `x-myapp-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
-
 The `fnd` topic expects `private` to be a string representing a [search query](#query-language)).
+
+### Auxiliary
+
+The format of the `aux` field is a set of key-value pairs. The `aux` is writable by topic admins and readable by all topic subscribers. The following keys are currently defined:
+
+```js
+aux: {
+  pins: [1001, 23456] // array of integer message IDs to pin to the top of the message list.
+}
+```
 
 ## Format of Content
 
