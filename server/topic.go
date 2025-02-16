@@ -1151,8 +1151,12 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 			return
 		}
 
-		// The number of unread messages has decreased, negative value.
-		unread = pud.readID - msg.Note.SeqId
+		// The number of unread messages has decreased by this value.
+		unread = countUndeletedMessages(t.name, asUid, msg.Note.SeqId, pud.readID)
+		if unread == 0 {
+			return;
+		}
+				// The number of unread messages has decreased, negative value.
 		pud.readID = msg.Note.SeqId
 		if pud.readID > pud.recvID {
 			pud.recvID = pud.readID
@@ -1199,9 +1203,9 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 			sendPush(t.pushForReadRcpt(asUid, read, msg.Timestamp))
 		}
 
-		// Update cached count of unread messages (not tracking unread messages fror channels).
+		// Update cached count of unread messages (not tracking unread messages from channels).
 		if !asChan {
-			usersUpdateUnread(asUid, unread, true)
+			usersUpdateUnread(asUid, -unread, true)
 		}
 	}
 
@@ -1792,13 +1796,14 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		if !asChan {
 			oldReader := (oldWant & oldGiven).IsReader()
 			newReader := (userData.modeWant & userData.modeGiven).IsReader()
-
-			if oldReader && !newReader {
-				// Decrement unread count
-				usersUpdateUnread(asUid, userData.readID-t.lastID, true)
-			} else if !oldReader && newReader {
-				// Increment unread count
-				usersUpdateUnread(asUid, t.lastID-userData.readID, true)
+			unread := countUndeletedMessages(t.name, asUid, userData.readID, t.lastID)
+			// Decrement/increment unread count based on whether the user is becoming a reader or not.
+			if unread != 0 {
+				if oldReader && !newReader {
+					usersUpdateUnread(asUid, -unread, true)
+				} else if !oldReader && newReader {
+					usersUpdateUnread(asUid, unread, true)
+				}
 			}
 		}
 
@@ -2008,15 +2013,17 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 	var modeChanged *MsgAccessMode
 	// Access mode has changed.
 	if oldGiven != userData.modeGiven {
-
 		oldReader := (oldWant & oldGiven).IsReader()
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
-		if oldReader && !newReader {
-			// Decrement unread count
-			usersUpdateUnread(target, userData.readID-t.lastID, true)
-		} else if !oldReader && newReader {
-			// Increment unread count
-			usersUpdateUnread(target, t.lastID-userData.readID, true)
+		unread := countUndeletedMessages(t.name, asUid, userData.readID, t.lastID)
+		if unread != 0 {
+			if oldReader && !newReader {
+				// Decrement unread count
+				usersUpdateUnread(target, -unread, true)
+			} else if !oldReader && newReader {
+				// Increment unread count
+				usersUpdateUnread(target, unread, true)
+			}
 		}
 		t.notifySubChange(target, asUid, false,
 			oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
@@ -3200,8 +3207,9 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 	}
 
 	// Update cached unread count: negative value
-	if (pud.modeWant & pud.modeGiven).IsReader() {
-		usersUpdateUnread(uid, pud.readID-t.lastID, true)
+	unread := countUndeletedMessages(t.name, asUid, pud.readID, t.lastID)
+	if (unread != 0) && (pud.modeWant & pud.modeGiven).IsReader() {
+		usersUpdateUnread(uid, -unread, true)
 	}
 
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
@@ -3276,9 +3284,10 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	var oldWant types.AccessMode
 	var oldGiven types.AccessMode
 	if !asChan {
-		// Update cached unread count: negative value
-		if (pud.modeWant & pud.modeGiven).IsReader() {
-			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
+		// Decrement unread count
+		unread := countUndeletedMessages(t.name, asUid, pud.readID, t.lastID)
+		if (unread != 0) && (pud.modeWant & pud.modeGiven).IsReader() {
+			usersUpdateUnread(asUid, -unread, true)
 		}
 		oldWant, oldGiven = pud.modeWant, pud.modeGiven
 	} else {
@@ -3787,4 +3796,21 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 		}
 	}
 	return name
+}
+
+// Helper function to count undeleted messages in a range
+func countUndeletedMessages(topic string, uid types.Uid, since, before int) int {
+	opts := &types.QueryOpt{
+		User:            uid,
+		Topic:           topic,
+		Since:           since,
+		Before:          before,
+	}
+
+	fmt.Println("countUndeletedMessages params:", topic, uid, since, before)
+	count := 0
+	if msgs, err := store.Messages.GetAll(topic, uid, opts); err == nil {
+		count = len(msgs)
+	}
+	return count
 }
