@@ -626,6 +626,15 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	from := helper.uids[0]
 	to := helper.uids[1]
 
+	opts := &types.QueryOpt{
+		User:            from,
+		Topic:           topicName,
+		Since:           8,
+		Before:          0,
+	}
+
+	// Change from uu (Users store) to mm (Messages store)
+	helper.mm.EXPECT().GetAll(topicName, from, opts).Return([]types.Message{{SeqId: readId,}}, nil)
 	helper.ss.EXPECT().Update(topicName, from, map[string]any{"ReadSeqId": readId}).Return(nil)
 
 	msg := &ClientComMessage{
@@ -918,6 +927,14 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 	from := helper.uids[0]
 	to := helper.uids[1]
 
+	opts := &types.QueryOpt{
+		User:            from,
+		Topic:           topicName,
+		Since:           8,
+		Before:          0,
+	}
+
+	helper.mm.EXPECT().GetAll(topicName, from, opts).Return([]types.Message{{SeqId: readId,}}, nil)
 	helper.ss.EXPECT().Update(topicName, from, map[string]any{"ReadSeqId": readId}).Return(types.ErrInternal)
 
 	msg := &ClientComMessage{
@@ -1022,6 +1039,14 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 		helper.topic.perUser[uid] = pud
 	}
 
+	opts := &types.QueryOpt{
+		User:            from,
+		Topic:           topicName,
+		Since:           8,
+		Before:          0,
+	}
+
+	helper.mm.EXPECT().GetAll(topicName, from, opts).Return([]types.Message{{SeqId: readId,}}, nil)
 	helper.ss.EXPECT().Update(chanName, from, map[string]any{"ReadSeqId": readId}).Return(nil)
 
 	msg := &ClientComMessage{
@@ -2102,6 +2127,15 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 
 	uid := helper.uids[2]
 	helper.ss.EXPECT().Delete(topicName, uid).Return(nil)
+
+	opts := &types.QueryOpt{
+		User:            uid,
+		Topic:           topicName,
+		Since:           0,
+		Before:          0,
+	}
+
+	helper.mm.EXPECT().GetAll(topicName, uid, opts).Return([]types.Message{{SeqId: 0,}}, nil)
 
 	// Add a couple more sessions.
 	for i := 0; i < 2; i++ {
