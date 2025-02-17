@@ -52,6 +52,9 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	case t.xoriginal == "sys":
 		// Initialize system topic.
 		err = initTopicSys(t)
+	case t.xoriginal == "slf":
+		// Initialize self (notes and saved messages) topic.
+		err = initTopicSlf(t, join)
 	default:
 		// Unrecognized topic name
 		err = types.ErrTopicNotFound
@@ -516,7 +519,6 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 		modeWant:  types.ModeCFull,
 	}
 
-	var tags []string
 	if pktsub.Set != nil {
 		// User sent initialization parameters
 		if pktsub.Set.Desc != nil {
@@ -571,17 +573,16 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 			userData.modeWant |= types.ModeJoin | types.ModeOwner
 		}
 
-		if tags = normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
+		if tags := normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
 			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				return types.ErrPermissionDenied
 			}
+			// Assign tags
+			t.tags = tags
 		}
 	}
 
 	t.perUser[t.owner] = userData
-
-	// Assign tags
-	t.tags = tags
 
 	t.created = timestamp
 	t.updated = timestamp
@@ -592,7 +593,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	stopic := &types.Topic{
 		ObjHeader: types.ObjHeader{Id: sreg.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
-		Tags:      tags,
+		Tags:      t.tags,
 		UseBt:     isChan,
 		Public:    t.public,
 		Trusted:   t.trusted,
@@ -697,6 +698,114 @@ func initTopicSys(t *Topic) error {
 		t.touched = stopic.TouchedAt
 	}
 	t.lastID = stopic.SeqId
+
+	return nil
+}
+
+// Initialize or load a self-topic 'slf'.
+func initTopicSlf(t *Topic, sreg *ClientComMessage) error {
+	t.cat = types.TopicCatSlf
+
+	stopic, err := store.Topics.Get(t.name)
+	if err != nil {
+		return err
+	}
+
+	// If topic exists, load subscriptions
+	if stopic != nil {
+		if err = t.loadSubscribers(); err != nil {
+			return err
+		}
+
+		// t.owner is set by loadSubscriptions
+
+		// Topic exists but subscription is missing. Fail.
+		if len(t.perUser) == 0 {
+			logs.Err.Println("hub: missing subscription for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
+			return types.ErrInternal
+		}
+
+		t.created = stopic.CreatedAt
+		t.updated = stopic.UpdatedAt
+		if !stopic.TouchedAt.IsZero() {
+			t.touched = stopic.TouchedAt
+		}
+		t.aux = stopic.Aux
+		t.lastID = stopic.SeqId
+		t.delID = stopic.DelId
+
+	} else {
+		// Get topic owner.
+		userID := types.ParseUserId(sreg.AsUser)
+		user, err := store.Users.Get(userID)
+		if err != nil {
+			return err
+		}
+		if user == nil {
+			// User not found. Really should not happen.
+			return types.ErrUserNotFound
+		}
+
+		t.owner = userID
+
+		t.accessAuth = getDefaultAccess(t.cat, true, false)
+		t.accessAnon = getDefaultAccess(t.cat, false, false)
+
+		// Default access for the self-owner.
+		userData := perUserData{
+			modeGiven: t.accessAuth,
+			modeWant:  t.accessAuth,
+		}
+
+		// Mark the topic as new.
+		sreg.Sub.Created = true
+
+		if sreg.Sub.Set != nil {
+			// User sets non-default Private
+			if sreg.Sub.Set.Desc != nil {
+				if !isNullValue(sreg.Sub.Set.Desc.Private) {
+					userData.private = sreg.Sub.Set.Desc.Private
+				}
+				// Public, trusted are ignored.
+			}
+
+			if tags := normalizeTags(sreg.Sub.Set.Tags); len(tags) > 0 {
+				if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
+					return types.ErrPermissionDenied
+				}
+
+				// Assign tags
+				t.tags = tags
+			}
+		}
+
+		// Mark this subscription as new
+		sreg.Sub.Newsub = true
+
+		t.perUser[t.owner] = userData
+
+		timestamp := types.TimeNow()
+
+		t.created = timestamp
+		t.updated = timestamp
+		t.touched = timestamp
+
+		stopic = &types.Topic{
+			ObjHeader: types.ObjHeader{Id: sreg.RcptTo, CreatedAt: timestamp},
+			Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
+			Tags:      t.tags,
+		}
+
+		// store.Topics.Create will add a subscription record for the topic creator
+		stopic.GiveAccess(t.owner, userData.modeWant, userData.modeGiven)
+		err = store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
+		if err != nil {
+			return err
+		}
+
+		sreg.Sub.Created = true
+		sreg.Sub.Newsub = true
+	}
 
 	return nil
 }

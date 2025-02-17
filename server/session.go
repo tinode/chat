@@ -1325,6 +1325,8 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		routeTo = msg.AsUser
 	} else if msg.Original == "fnd" {
 		routeTo = types.ParseUserId(msg.AsUser).FndName()
+	} else if msg.Original == "slf" {
+		routeTo = types.ParseUserId(msg.AsUser).SlfName()
 	} else if strings.HasPrefix(msg.Original, "usr") {
 		// p2p topic
 		uid1 := types.ParseUserId(msg.AsUser)

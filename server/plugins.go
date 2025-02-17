@@ -48,9 +48,11 @@ const (
 	plgTopicP2P
 	plgTopicGrp
 	plgTopicSys
+	plgTopicSlf
 	plgTopicNew
+	plgTopicNch
 
-	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys
+	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys | plgTopicSlf
 )
 
 const (
@@ -65,7 +67,7 @@ var (
 		"data", "meta", "pres", "info",
 	}
 
-	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "sys", "new"}
+	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "sys", "slf", "new", "nch"}
 )
 
 // PluginFilter is a enum which defines filtering types.
@@ -647,8 +649,14 @@ func pluginDoFiltering(filter *PluginFilter, msg *ClientComMessage) bool {
 			return flt&plgTopicP2P != 0
 		case "grp":
 			return flt&plgTopicGrp != 0
+		case "sys":
+			return flt&plgTopicSys != 0
+		case "slf":
+			return flt&plgTopicSlf != 0
 		case "new":
 			return flt&plgTopicNew != 0
+		case "nch":
+			return flt&plgTopicNch != 0
 		}
 		return false
 	}

@@ -183,6 +183,11 @@ func (uid Uid) FndName() string {
 	return uid.PrefixId("fnd")
 }
 
+// SlfName generates 'slf' topic name for the given Uid.
+func (uid Uid) SlfName() string {
+	return uid.PrefixId("slf")
+}
+
 // PrefixId converts Uid to string prefixed with the given prefix.
 func (uid Uid) PrefixId(prefix string) string {
 	if uid.IsZero() {
@@ -541,7 +546,9 @@ const (
 	// Normal user's access to a topic ("JRWPS", 47, 0x2F).
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
 	// User's subscription to 'me' and 'fnd' ("JPS", 41, 0x29).
-	ModeCSelf AccessMode = ModeJoin | ModePres | ModeShare
+	ModeCMeFnd AccessMode = ModeJoin | ModePres | ModeShare
+	// User's  subscription to 'slf' topic ("JRWDO", 199, 0xC7).
+	ModeCSelf = ModeJoin | ModeRead | ModeWrite | ModeDelete | ModeOwner
 	// Owner's subscription to a generic topic ("JRWPASDO", 255, 0xFF).
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode ("JRWPA", 31, 0x1F).
@@ -1296,6 +1303,8 @@ const (
 	TopicCatGrp
 	// TopicCatSys is a constant indicating a system topic.
 	TopicCatSys
+	// TopicCatSlf si a constant indicating a 'self' topic, i.e. topic for saved messages and notes.
+	TopicCatSlf
 )
 
 // GetTopicCat given topic name returns topic category.
@@ -1311,6 +1320,8 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatFnd
 	case "sys":
 		return TopicCatSys
+	case "slf":
+		return TopicCatSlf
 	default:
 		panic("invalid topic type for name '" + name + "'")
 	}

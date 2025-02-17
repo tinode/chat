@@ -304,16 +304,16 @@ func (usersMapper) Create(user *types.User, private any) (*types.User, error) {
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().UserId(),
-			ModeWant:  types.ModeCSelf,
-			ModeGiven: types.ModeCSelf,
+			ModeWant:  types.ModeCMeFnd,
+			ModeGiven: types.ModeCMeFnd,
 			Private:   private,
 		},
 		&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().FndName(),
-			ModeWant:  types.ModeCSelf,
-			ModeGiven: types.ModeCSelf,
+			ModeWant:  types.ModeCMeFnd,
+			ModeGiven: types.ModeCMeFnd,
 			Private:   nil,
 		})
 	if err != nil {
@@ -367,12 +367,12 @@ func (usersMapper) DelAuthRecords(uid types.Uid, scheme string) error {
 	return adp.AuthDelScheme(uid, scheme)
 }
 
-// Get returns a user object for the given user id
+// Get returns a user object for the given user ID or nil if the user is not found.
 func (usersMapper) Get(uid types.Uid) (*types.User, error) {
 	return adp.UserGet(uid)
 }
 
-// GetAll returns a slice of user objects for the given user ids
+// GetAll returns a slice of user objects for the given user IDs.
 func (usersMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adp.UserGetAll(uid...)
 }

@@ -331,6 +331,8 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 		}
 		return types.ModeCPublic
 	case types.TopicCatMe:
+		return types.ModeCMeFnd
+	case types.TopicCatSlf:
 		return types.ModeCSelf
 	default:
 		panic("Unknown topic category")

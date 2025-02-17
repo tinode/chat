@@ -11,6 +11,7 @@ package main
 import (
 	"errors"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -2398,9 +2399,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	case types.TopicCatMe:
 		if req != nil {
 			// If topic is provided, it could be in the form of user ID 'usrAbCd'.
-			// Convert it to P2P topic name.
+			// Convert it to P2P topic name. Likewise for Self topic 'slf' -> 'slfAbcD'.
 			if uid2 := types.ParseUserId(req.Topic); !uid2.IsZero() {
 				req.Topic = uid2.P2PName(asUid)
+			}
+			if req.Topic == "slf" {
+				req.Topic = asUid.SlfName()
 			}
 		}
 		// Fetch user's subscriptions, with Topic.Public+Topic.Trusted denormalized into subscription.
@@ -2560,6 +2564,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				if with != "" {
 					mts.Topic = with
 					mts.Online = t.perSubs[with].online && !deleted && presencer
+				} else if strings.HasPrefix(sub.Topic, "slf") {
+					mts.Topic = "slf"
+					// Not reporting Online as it makes no sense for slf.
 				} else {
 					mts.Topic = sub.Topic
 					mts.Online = t.perSubs[sub.Topic].online && !deleted && presencer
@@ -2959,7 +2966,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 func (t *Topic) replyGetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp && t.cat != types.TopicCatSlf {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category to query aux")
 	}

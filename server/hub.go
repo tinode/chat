@@ -563,7 +563,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 // Terminate all topics associated with the given user:
 // * all p2p topics with the given user
 // * group topics where the given user is the owner.
-// * user's 'me' and 'fnd' topics.
+// * user's 'me', 'fnd', 'slf' topics.
 func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
 	var done chan bool
 	if alldone != nil {
