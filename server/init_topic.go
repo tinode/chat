@@ -362,7 +362,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 				sub2.ModeGiven = users[u1].Access.Auth
 			}
 			// Sanity check
-			sub2.ModeGiven = sub2.ModeGiven&types.ModeCP2P | types.ModeApprove
+			sub2.ModeGiven = sub2.ModeGiven&globals.typesModeCP2P | types.ModeApprove
 
 			// Swap Public+Trusted to match swapped Public+Trusted in subs returned from store.Topics.GetSubs
 			sub2.SetPublic(users[u1].Public)
@@ -380,7 +380,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 			userData.modeGiven = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
-				types.ModeCP2P)
+				globals.typesModeCP2P)
 
 			// By default assign the same mode that user1 gave to user2 (could be changed below)
 			userData.modeWant = sub2.ModeGiven
@@ -401,7 +401,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 							logs.Err.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
 						}
 						// Ensure sanity
-						userData.modeWant = userData.modeWant&types.ModeCP2P | types.ModeApprove
+						userData.modeWant = userData.modeWant&globals.typesModeCP2P | types.ModeApprove
 					}
 
 					// Since user1 issued a {sub} request, make sure the user can join
@@ -437,9 +437,9 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 			sub2.ModeWant = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
-				types.ModeCP2P)
+				globals.typesModeCP2P)
 			// Ensure sanity
-			sub2.ModeWant = sub2.ModeWant&types.ModeCP2P | types.ModeApprove
+			sub2.ModeWant = sub2.ModeWant&globals.typesModeCP2P | types.ModeApprove
 		}
 
 		// Create everything

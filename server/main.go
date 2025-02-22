@@ -33,6 +33,7 @@ import (
 	_ "github.com/tinode/chat/server/auth/code"
 	_ "github.com/tinode/chat/server/auth/rest"
 	_ "github.com/tinode/chat/server/auth/token"
+	"github.com/tinode/chat/server/store/types"
 
 	// Database backends
 	_ "github.com/tinode/chat/server/db/mongodb"
@@ -201,8 +202,14 @@ var globals struct {
 	wsCompression bool
 
 	// URL of the main endpoint.
-	// TODO: implement file-serving API for gRPC and remove this feature.
+	// DEPRECTATED: use file-serving gRPC API instead. This feature will be removed.
 	servingAt string
+
+	// P2P auth access mode. With or without the D permission depending on P2PDeleteAge.
+	typesModeCP2P types.AccessMode
+
+	// Maximum age of messages which can be deleted with 'D' permission.
+	msgDeleteAge time.Duration
 }
 
 // Credential validator config.
@@ -290,6 +297,17 @@ type configType struct {
 	// when the country isn't specified by the client explicitly and
 	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
+	// Permit hard-deleting messages in p2p topics for both participants.
+	// If it's set to 'false' then the message is only deleted for the peer who issued the command.
+	// If it's 'true' then the message is deleted completely by either participant.
+	// Changing the value affects the ability to hard-delete (the added or removed the D permission)
+	// only for new topics going forward.
+	P2PDeleteEnabled bool `json:"p2p_delete_enabled"`
+	// The maximum age of a message in seconds when it can be deleted by users with the 'D' permission.
+	// E.g. 600 means messages up to 10 minutes old can be deleted, older than that cannot be deleted.
+	// Missing or 0 means no age limit.
+	// Does not affect topic owners: owners can delete any message.
+	MsgDeleteAge int `json:"msg_delete_age"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -380,7 +398,8 @@ func main() {
 	}
 	statsSet("Version", decVersion)
 
-	// Initialize random state
+	// Initialize random state.
+	// This is deprecated, should be removed when support of Go 1.19 is dropped.
 	rand.Seed(time.Now().UnixNano())
 
 	// Initialize serving debug profiles (optional).
@@ -554,6 +573,16 @@ func main() {
 	globals.defaultCountryCode = config.DefaultCountryCode
 	if globals.defaultCountryCode == "" {
 		globals.defaultCountryCode = defaultCountryCode
+	}
+
+	// Default access mode for P2P: with/without the D permission.
+	globals.typesModeCP2P = types.ModeCP2P
+	if config.P2PDeleteEnabled {
+		globals.typesModeCP2P = types.ModeCP2PD
+	}
+
+	if config.MsgDeleteAge > 0 {
+		globals.msgDeleteAge = time.Duration(config.MsgDeleteAge) * time.Second
 	}
 
 	// Websocket compression.

@@ -829,9 +829,9 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		}
 
 		if types.GetTopicCat(msg.RcptTo) == types.TopicCatP2P {
-			// For P2P topics ignore requests exceeding types.ModeCP2P and do not allow
+			// For P2P topics ignore requests exceeding typesModeCP2P and do not allow
 			// removal of 'A' permission.
-			modeWant = modeWant&types.ModeCP2P | types.ModeApprove
+			modeWant = modeWant&globals.typesModeCP2P | types.ModeApprove
 		}
 
 		if modeWant != sub.ModeWant {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2727,8 +2728,31 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, err
 }
 
+// Convert a slice of ranges to SQL and arguments.
+func rangesToSql(in []t.Range) (string, []any) {
+	if len(in) > 1 || in[0].Hi == 0 {
+		var args []any
+		for _, r := range in {
+			if r.Hi == 0 {
+				args = append(args, r.Low)
+			} else {
+				for i := r.Low; i < r.Hi; i++ {
+					args = append(args, i)
+				}
+			}
+		}
+
+		return "IN (?" + strings.Repeat(",?", len(args)-1) + ")", args
+	}
+
+	// Optimizing for a special case of single range low..hi.
+	// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
+	return "BETWEEN ? AND ?", []any{in[0].Low, in[0].Hi - 1}
+}
+
 func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 	var err error
+
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
 		_, err = tx.Exec("DELETE FROM dellog WHERE topic=?", topic)
@@ -2736,70 +2760,92 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 			_, err = tx.Exec("DELETE FROM messages WHERE topic=?", topic)
 		}
 		// filemsglinks will be deleted because of ON DELETE CASCADE
+		return nil
+	}
 
-	} else {
-		// Only some messages are being deleted
-		// Start with making log entries
-		forUser := decodeUidString(toDel.DeletedFor)
-		var insert *sql.Stmt
-		if insert, err = tx.Prepare(
-			"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
+	// Only some messages are being deleted.
+
+	delRanges := toDel.SeqIdRanges
+
+	if toDel.DeletedFor == "" {
+		// Hard-deleting messages requires updates to the messages table.
+		where := "m.topic=?"
+		args := []any{topic}
+
+		rSql, rArgs := rangesToSql(delRanges)
+		where += " AND m.seqid " + rSql
+		args = append(args, rArgs...)
+		where += " AND m.deletedat IS NULL"
+
+		// We are asked to delete messages no older than newerThan.
+		if newerThan := toDel.GetNewerThan(); newerThan != nil {
+			where += " AND m.createdat>?"
+			args = append(args, newerThan)
+		}
+
+		// Find the actual IDs still present in the database.
+		var seqIDs []int
+		err = tx.Select(&seqIDs, "SELECT seqid FROM messages AS m WHERE "+where, args...)
+		if err != nil {
 			return err
 		}
 
-		// Counter of deleted messages
-		seqCount := 0
-		for _, rng := range toDel.SeqIdRanges {
-			if rng.Hi == 0 {
-				// Dellog must contain valid Low and *Hi*.
-				rng.Hi = rng.Low + 1
-			}
-			seqCount += rng.Hi - rng.Low
-			if _, err = insert.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
-				break
-			}
+		if len(seqIDs) == 0 {
+			// Nothing to delete. No need to make a log entry. All done.
+			return nil
 		}
 
-		if err == nil && toDel.DeletedFor == "" {
-			// Hard-deleting messages requires updates to the messages table
-			where := "m.topic=? AND "
-			args := []any{topic}
-			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
-				for _, r := range toDel.SeqIdRanges {
-					if r.Hi == 0 {
-						args = append(args, r.Low)
-					} else {
-						for i := r.Low; i < r.Hi; i++ {
-							args = append(args, i)
-						}
-					}
-				}
+		// Recalculate the actual ranges to delete.
+		sort.Ints(seqIDs)
+		delRanges = t.SliceToRange(seqIDs)
 
-				where += "m.seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
-			} else {
-				// Optimizing for a special case of single range low..hi.
-				where += "m.seqid BETWEEN ? AND ?"
-				// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
-				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
-			}
-			where += " AND m.deletedAt IS NULL"
+		// Compose a new query with the new ranges.
+		where = "m.topic=?"
+		args = []any{topic}
+		rSql, rArgs = rangesToSql(delRanges)
+		where += " AND m.seqid " + rSql
+		args = append(args, rArgs...)
+		// No need to add anything else: deletedat etc is already accounted for.
 
-			_, err = tx.Exec("DELETE fml.* FROM filemsglinks AS fml INNER JOIN messages AS m ON m.id=fml.msgid WHERE "+
-				where, args...)
-			if err != nil {
-				return err
-			}
+		_, err = tx.Exec("DELETE fml.* FROM filemsglinks AS fml INNER JOIN messages AS m ON m.id=fml.msgid WHERE "+
+			where, args...)
+		if err != nil {
+			return err
+		}
 
-			_, err = tx.Exec("UPDATE messages AS m SET m.deletedAt=?,m.delId=?,m.head=NULL,m.content=NULL WHERE "+
-				where,
-				append([]any{t.TimeNow(), toDel.DelId}, args...)...)
+		// Instead of deleting messages, clear all content.
+		_, err = tx.Exec("UPDATE messages AS m SET m.deletedat=?,m.delId=?,m.`from`=0,m.head=NULL,m.content=NULL WHERE "+
+			where,
+			append([]any{t.TimeNow(), toDel.DelId}, args...)...)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	// Now make log entries. Needed for both hard- and soft-deleting.
+	forUser := decodeUidString(toDel.DeletedFor)
+	var insert *sql.Stmt
+	if insert, err = tx.Prepare(
+		"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
+		return err
+	}
+
+	for _, rng := range delRanges {
+		if rng.Hi == 0 {
+			// Dellog must contain valid Low and *Hi*.
+			rng.Hi = rng.Low + 1
+		}
+		// A log entry for each range.
+		if _, err = insert.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
+			break
 		}
 	}
 
 	return err
 }
 
-// MessageDeleteList deletes messages in the given topic with seqIds from the list
+// MessageDeleteList deletes messages in the given topic with seqIds from the list.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {

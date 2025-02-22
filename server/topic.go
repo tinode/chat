@@ -1527,7 +1527,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			// If no modeWant is provided, leave existing one unchanged.
 
 			// Make sure the user is not asking for unreasonable permissions
-			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
+			userData.modeWant = (userData.modeWant & globals.typesModeCP2P) | types.ModeApprove
 		} else if t.cat == types.TopicCatSys {
 			if asLvl != auth.LevelRoot {
 				sess.queueOut(ErrPermissionDeniedReply(pkt, now))
@@ -1714,8 +1714,9 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			}
 
 			if t.cat == types.TopicCatP2P {
-				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement.
-				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
+				// For P2P topics ignore requests exceeding the maximum allowed. Otherwise it will generate
+				// a useless announcement.
+				modeWant = (modeWant & globals.typesModeCP2P) | types.ModeApprove
 			} else if t.cat == types.TopicCatSys {
 				// Anyone can always write to Sys topic.
 				modeWant &= (modeWant & types.ModeCSys) | types.ModeWrite
@@ -1892,10 +1893,10 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 			return nil, err
 		}
 
-		// Make sure the new permissions are reasonable in P2P topics: permissions no greater than default,
+		// Make sure the new permissions are reasonable in P2P topics: permissions no greater than allowed,
 		// approver permission cannot be removed.
 		if t.cat == types.TopicCatP2P {
-			modeGiven = (modeGiven & types.ModeCP2P) | types.ModeApprove
+			modeGiven = (modeGiven & globals.typesModeCP2P) | types.ModeApprove
 		}
 	}
 
@@ -2203,7 +2204,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 			}
 			if anon != types.ModeUnset {
 				if t.cat == types.TopicCatMe {
-					anon &= types.ModeCP2P
+					anon &= globals.typesModeCP2P
 					if anon != types.ModeNone {
 						anon |= types.ModeApprove
 					}
@@ -2993,7 +2994,7 @@ func (t *Topic) replyGetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatP2P && t.cat != types.TopicCatGrp && t.cat != types.TopicCatSlf {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category to assign aux")
 	}
@@ -3136,11 +3137,12 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 	}
 
 	forUser := asUid
+	var age time.Duration
 	if del.Hard {
 		forUser = types.ZeroUid
+		age = globals.msgDeleteAge
 	}
-
-	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, ranges); err != nil {
+	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, age, ranges); err != nil {
 		sess.queueOut(ErrUnknownReply(msg, now))
 		return err
 	}

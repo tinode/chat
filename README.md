@@ -91,6 +91,7 @@ When you register a new account you are asked for an email address to send valid
   * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, videos, file attachments.
   * Forms and templated responses suitable for chatbots.
   * Verified/staff/untrusted account markers.
+  * Leave notes to self, bookmark (save) messages.
   * Message status notifications: message delivery to server; received and read notifications; typing notifications.
   * Most recent message preview in contact list.
   * Server-generated presence notifications for people, group chats.

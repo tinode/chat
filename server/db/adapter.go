@@ -153,7 +153,7 @@ type Adapter interface {
 	// MessageGetAll returns messages matching the query
 	MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error)
 	// MessageDeleteList marks messages as deleted.
-	// Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
+	// Soft- or Hard- is defined by forUser value: forUser.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)

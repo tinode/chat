@@ -553,6 +553,8 @@ const (
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode ("JRWPA", 31, 0x1F).
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
+	// P2P acess mode when hard-deleting messages is enabled ("JRWPAD", 95, 0x5F)
+	ModeCP2PD AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeDelete
 	// Default Auth access mode for a user ("JRWPAS", 63, 0x3F).
 	ModeCAuth AccessMode = ModeCP2P | ModeCPublic
 	// Read-only access to topic ("JR", 3).
@@ -1265,6 +1267,34 @@ func (rs RangeSorter) Normalize() RangeSorter {
 	return rs
 }
 
+// Convert a slice of int values to a slice of ranges.
+// The int slice must be sorted low -> high.
+func SliceToRange(in []int) []Range {
+	if len(in) == 0 {
+		return nil
+	}
+
+	var out []Range
+	for _, id := range in {
+		size := len(out)
+
+		if size == 0 {
+			out = append(out, Range{Low: id})
+			continue
+		}
+
+		prev := &out[size-1]
+		if (prev.Hi == 0 && (id != prev.Low+1)) || (id > prev.Hi) {
+			// New range.
+			out = append(out, Range{Low: id})
+		} else {
+			// Expand existing range.
+			prev.Hi = id + 1
+		}
+	}
+	return out
+}
+
 // DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
 	ObjHeader   `bson:",inline"`
@@ -1272,6 +1302,19 @@ type DelMessage struct {
 	DeletedFor  string
 	DelId       int
 	SeqIdRanges []Range
+
+	// Delete messages newer than this value. Not serialized.
+	newerThan *time.Time
+}
+
+// GetNewerThan returns a newerThan delete query parameter.
+func (dm *DelMessage) GetNewerThan() *time.Time {
+	return dm.newerThan
+}
+
+// SetNewerThan sets a newerThan delete query parameter.
+func (dm *DelMessage) SetNewerThan(t time.Time) {
+	dm.newerThan = &t
 }
 
 // QueryOpt is options of a query, [since, before] - both ends inclusive (closed)

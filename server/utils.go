@@ -322,7 +322,7 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 
 	switch cat {
 	case types.TopicCatP2P:
-		return types.ModeCP2P
+		return globals.typesModeCP2P
 	case types.TopicCatFnd:
 		return types.ModeNone
 	case types.TopicCatGrp:
