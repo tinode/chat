@@ -433,7 +433,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX topictags_tag(tag),
-			UNIQUE INDEX topictags_userid_tag(topic, tag)
+			UNIQUE INDEX topictags_topic_tag(topic, tag)
 		)`); err != nil {
 		return err
 	}
@@ -596,7 +596,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag)"); err != nil {
+		if _, err := a.db.Exec("CREATE UNIQUE INDEX topictags_topic_tag ON topictags(topic, tag)"); err != nil {
 			return err
 		}
 
@@ -2366,7 +2366,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 }
 
-// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+// FindUsers returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
@@ -2458,7 +2458,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly 
 
 }
 
-// Returns a list of topics with matching tags.
+// FindTopics returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
@@ -2530,6 +2530,9 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 		sub.SetPublic(fromJSON(public))
 		sub.SetTrusted(fromJSON(trusted))
 		sub.SetDefaultAccess(access.Auth, access.Anon)
+		// Indicating that the mode is not set, not 'N'.
+		sub.ModeGiven = t.ModeUnset
+		sub.ModeWant = t.ModeUnset
 		foundTags := make([]string, 0, 1)
 		for _, tag := range topicTags {
 			if _, ok := index[tag]; ok {
@@ -2548,7 +2551,131 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 		return nil, err
 	}
 	return subs, nil
+}
 
+// FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
+//
+//	uid - caller ID. If this ID is found as matching, skip it.
+//	tag - tag to find
+//	limit - number of results to return; limit = 1 is a special case, which only checks for result existence.
+//	partialMatch - use tag as prefix to match.
+//	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
+func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
+	var args []any
+	var tagMatcher func(needle, haystack string) bool
+	var compareOp string
+	if partialMatch {
+		tagMatcher = strings.HasPrefix
+		compareOp = " LIKE CONCAT(?, '%')"
+	} else {
+		tagMatcher = func(needle, haystack string) bool {
+			return needle == haystack
+		}
+		compareOp = "=?"
+	}
+	stateConstraint := ""
+	if activeOnly {
+		stateConstraint = "state=? AND "
+	}
+	if limit > a.maxResults {
+		limit = a.maxResults
+	}
+
+	query := "SELECT t.name AS topic"
+	if limit > 1 {
+		query += ",t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags"
+	}
+	query += " FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE " + stateConstraint + "tt.tag" + compareOp
+	if activeOnly {
+		args = append(args, t.StateOK)
+	}
+	args = append(args, tag)
+
+	query += " UNION ALL "
+
+	query += "SELECT u.id AS topic"
+	if limit > 1 {
+		query += ",u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags "
+	}
+	query += " FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
+		"WHERE " + stateConstraint + "ut.tag" + compareOp
+	if activeOnly {
+		args = append(args, t.StateOK)
+	}
+	args = append(args, tag)
+
+	// LIMIT is applied to all resultant rows.
+	query += " LIMIT ?"
+	args = append(args, limit)
+
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	rows, err := a.db.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var access t.DefaultAccess
+	var public, trusted any
+	var topicTags t.StringSlice
+	var isChan int
+	var sub t.Subscription
+	var subs []t.Subscription
+	thisUser := uid.UserId()
+	for rows.Next() {
+		if limit == 1 {
+			if err = rows.Scan(&sub.Topic); err != nil {
+				subs = nil
+				break
+			}
+		} else if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
+			&public, &trusted, &topicTags); err != nil {
+			subs = nil
+			break
+		}
+
+		// User IDs are returned as decoded decimal strings.
+		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
+			sub.Topic = store.EncodeUid(id).UserId()
+
+			// Skip the caller.
+			if sub.Topic == thisUser {
+				continue
+			}
+		}
+
+		if limit == 1 {
+			// That's it, one result is found, done.
+			break
+		}
+
+		if isChan != 0 {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+		sub.SetPublic(fromJSON(public))
+		sub.SetTrusted(fromJSON(trusted))
+		sub.SetDefaultAccess(access.Auth, access.Anon)
+		foundTags := make([]string, 0, 1)
+		for _, tt := range topicTags {
+			if tagMatcher(tag, tt) {
+				foundTags = append(foundTags, tt)
+			}
+		}
+		sub.Private = foundTags
+		subs = append(subs, sub)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+
+	if err != nil {
+		return nil, err
+	}
+	return subs, nil
 }
 
 // Messages

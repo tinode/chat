@@ -573,7 +573,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 			userData.modeWant |= types.ModeJoin | types.ModeOwner
 		}
 
-		if tags := normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
+		if tags := normalizeTags(pktsub.Set.Tags, globals.maxTagCount); len(tags) > 0 {
 			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				return types.ErrPermissionDenied
 			}
@@ -769,7 +769,7 @@ func initTopicSlf(t *Topic, sreg *ClientComMessage) error {
 				// Public, trusted are ignored.
 			}
 
-			if tags := normalizeTags(sreg.Sub.Set.Tags); len(tags) > 0 {
+			if tags := normalizeTags(sreg.Sub.Set.Tags, globals.maxTagCount); len(tags) > 0 {
 				if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 					return types.ErrPermissionDenied
 				}

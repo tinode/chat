@@ -100,8 +100,10 @@ CREATE TABLE topics(
 	access		JSON,
 	seqid		INT NOT NULL DEFAULT 0,
 	delid		INT DEFAULT 0,
-	public		JSON,
+	public	JSON,
+	trusted	JSON,
 	tags		JSON, -- Denormalized array of tags
+	aux			JSON,
 
 	PRIMARY KEY(id),
 	UNIQUE INDEX topics_name (name),
@@ -118,7 +120,7 @@ CREATE TABLE topictags(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	INDEX topictags_tag (tag),
-	UNIQUE INDEX topictags_userid_tag(topic, tag)
+	UNIQUE INDEX topictags_topic_tag(topic, tag)
 );
 
 # Subscriptions
@@ -201,14 +203,15 @@ CREATE TABLE credentials(
 
 # Records of uploaded files. Files themselves are stored elsewhere.
 CREATE TABLE fileuploads(
-	id			BIGINT NOT NULL,
+	id				BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
 	updatedat	DATETIME(3) NOT NULL,
 	userid		BIGINT,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
-	size		BIGINT NOT NULL,
+	size			BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
+	etag			VARCHAR(128),
 
 	PRIMARY KEY(id),
 	INDEX fileuploads_status(status)

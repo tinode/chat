@@ -67,7 +67,7 @@ func rangeSerialize(in []MsgRange) []types.Range {
 
 // Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
 // the number of tags does not exceed the maximum.
-func normalizeTags(src []string) types.StringSlice {
+func normalizeTags(src []string, maxTags int) types.StringSlice {
 	if src == nil {
 		return nil
 	}
@@ -75,12 +75,12 @@ func normalizeTags(src []string) types.StringSlice {
 	// Make sure the number of tags does not exceed the maximum.
 	// Technically it may result in fewer tags than the maximum due to empty tags and
 	// duplicates, but that's user's fault.
-	if len(src) > globals.maxTagCount {
-		src = src[:globals.maxTagCount]
+	if len(src) > maxTags {
+		src = src[:maxTags]
 	}
 
 	// Trim whitespace and force to lowercase.
-	for i := 0; i < len(src); i++ {
+	for i := range src {
 		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
 	}
 
@@ -442,13 +442,14 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 }
 
 // rewriteTag attempts to match the original token against the email, telephone number and optionally login patterns.
-// The tag is expected to be converted to lowercase.
-// On success, it prepends the token with the corresponding prefix. It returns an empty string if the tag is invalid.
+// The tag is expected to be in lowercase.
+// On success, it returns a slice with the original tag and thr tag with the corresponding prefix. It returns an
+// empty slice if the tag is invalid.
 // TODO: consider inferring country code from user location.
-func rewriteTag(orig, countryCode string, withLogin bool) string {
+func rewriteTag(orig, countryCode string, withLogin bool) []string {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if prefixedTagRegexp.MatchString(orig) {
-		return orig
+		return []string{orig}
 	}
 
 	// Check if token can be rewritten by any of the validators
@@ -457,7 +458,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		if conf.addToTags {
 			val := store.Store.GetValidator(name)
 			if tag, _ := val.PreCheck(orig, param); tag != "" {
-				return tag
+				return []string{orig, tag}
 			}
 		}
 	}
@@ -468,52 +469,61 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		for _, name := range auths {
 			auth := store.Store.GetAuthHandler(name)
 			if tag := auth.AsTag(orig); tag != "" {
-				return tag
+				return []string{orig, tag}
 			}
 		}
 	}
 
 	if tagRegexp.MatchString(orig) {
-		return orig
+		return []string{orig}
 	}
 
 	logs.Warn.Printf("invalid generic tag '%s'", orig)
 
-	return ""
+	return nil
+}
+
+// Call rewriteTag for each slice member and return a new slice with original and converted values.
+func rewriteTagSlice(tags []string, countryCode string, withLogin bool) []string {
+	var result []string
+	for _, tag := range tags {
+		rewritten := rewriteTag(tag, countryCode, withLogin)
+		if len(rewritten) != 0 {
+			result = append(result, rewritten...)
+		}
+	}
+	return result
 }
 
 // Parser for search queries. The query may contain non-ASCII characters,
 // i.e. length of string in bytes != length of string in runes.
 // Returns
-// * required tags: AND of ORs of tags (at least one of each subset must be present in every result),
+// * required tags: AND tags (at least one must be present in every result),
 // * optional tags
 // * error.
-func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []string, error) {
+func parseSearchQuery(query string) ([]string, []string, error) {
 	const (
 		NONE = iota
-		QUO
-		AND
-		OR
-		END
-		ORD
+		QUO  // 1
+		AND  // 2
+		OR   // 3
+		END  // 4
+		ORD  // 5
 	)
 	type token struct {
-		op           int
-		val          string
-		rewrittenVal string
+		op  int
+		val string
 	}
 	type context struct {
-		// Pre-token operand
+		// Pre-token operand.
 		preOp int
-		// Post-token operand
+		// Post-token operand.
 		postOp int
-		// Inside quoted string
+		// Inside quoted string.
 		quo bool
-		// Current token is a quoted string
-		unquote bool
-		// Start of the current token
+		// Start of the current token.
 		start int
-		// End of the current token
+		// End of the current token.
 		end int
 	}
 	ctx := context{preOp: AND}
@@ -521,21 +531,29 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 	var prev int
 	query = strings.TrimSpace(query)
 	// Split query into tokens.
+	//   i - character index into the string.
+	//   pos - rune index into the string.
+	//   w - width of the current rune in characters.
 	for i, w, pos := 0, 0, 0; prev != END; i, pos = i+w, pos+1 {
 		//
 		var emit bool
 
 		// Lexer: get next rune.
 		var r rune
+		// Ordinary character by default.
 		curr := ORD
 		r, w = utf8.DecodeRuneInString(query[i:])
 		switch {
 		case w == 0:
+			// Width zero: end of the string.
 			curr = END
 		case r == '"':
+			// Quote opening or closing.
 			curr = QUO
 		case !ctx.quo:
+			// Not inside quoted string, test for control characters.
 			if r == ' ' || r == '\t' {
+				// Tab or space.
 				curr = AND
 			} else if r == ',' {
 				curr = OR
@@ -553,8 +571,8 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 				}
 				// Start of the quoted string. Open the quote.
 				ctx.quo = true
-				ctx.unquote = true
 			}
+			// Treat quoted string as ordinary.
 			curr = ORD
 		}
 
@@ -595,8 +613,8 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 		}
 
 		if emit {
-			if ctx.quo {
-				return nil, nil, fmt.Errorf("unterminated quoted string at or near %d", pos)
+			if ctx.quo && curr == END {
+				return nil, nil, fmt.Errorf("unterminated quoted string at or near %d %#v", pos, ctx)
 			}
 
 			// Emit the new token.
@@ -605,27 +623,16 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 				op = OR
 			}
 			start, end := ctx.start, ctx.end
-			if ctx.unquote {
+			if query[start] == '"' && query[end-1] == '"' {
 				start++
 				end--
 			}
 			// Add token if non-empty.
 			if start < end {
-				original := strings.ToLower(query[start:end])
-				rewritten := rewriteTag(original, countryCode, withLogin)
-				// The 'rewritten' equals to "" means the token is invalid.
-				if rewritten != "" {
-					t := token{val: original, op: op}
-					if rewritten != original {
-						t.rewrittenVal = rewritten
-					}
-					out = append(out, t)
-				}
+				out = append(out, token{val: strings.ToLower(query[start:end]), op: op})
 			}
 			ctx.start = i
-			ctx.preOp = ctx.postOp
-			ctx.postOp = NONE
-			ctx.unquote = false
+			ctx.preOp, ctx.postOp = ctx.postOp, NONE
 		}
 
 		prev = curr
@@ -636,22 +643,14 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 	}
 
 	// Convert tokens to two string slices.
-	var and [][]string
+	var and []string
 	var or []string
 	for _, t := range out {
 		switch t.op {
 		case AND:
-			var terms []string
-			terms = append(terms, t.val)
-			if len(t.rewrittenVal) > 0 {
-				terms = append(terms, t.rewrittenVal)
-			}
-			and = append(and, terms)
+			and = append(and, t.val)
 		case OR:
 			or = append(or, t.val)
-			if len(t.rewrittenVal) > 0 {
-				or = append(or, t.rewrittenVal)
-			}
 		}
 	}
 	return and, or, nil

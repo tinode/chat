@@ -266,6 +266,7 @@ type UsersPersistenceInterface interface {
 	UpdateState(uid types.Uid, state types.ObjState) error
 	GetSubs(id types.Uid) ([]types.Subscription, error)
 	FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error)
+	Find(id types.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]types.Subscription, error)
 	GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetOwnTopics(id types.Uid) ([]string, error)
@@ -441,6 +442,11 @@ func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string
 	}
 
 	return allSubs, nil
+}
+
+// Find returns topics and/or users which match the given tag, with optional partial matching.
+func (usersMapper) Find(id types.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]types.Subscription, error) {
+	return adp.FindAny(id, tag, limit, partialMatch, activeOnly)
 }
 
 // GetTopics load a list of user's subscriptions with Public+Trusted fields copied to subscription

@@ -69,7 +69,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Ensure tags are unique and not restricted.
-	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
+	if tags := normalizeTags(msg.Acc.Tags, globals.maxTagCount); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 			logs.Warn.Println("create user: attempt to directly assign restricted tags, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)

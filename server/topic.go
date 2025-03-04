@@ -2441,20 +2441,28 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 		}
 	case types.TopicCatFnd:
-		// Select public or private query. Public has priority.
+		// Try rewriting tags as login pattern i.e. "abcd" -> "basic:abcd"
 		rewriteLogin := true
+		// Select public or private query. Public has priority.
 		raw := t.fndGetPublic(sess)
 		if raw == nil {
-			rewriteLogin = false
 			raw = userData.private
+			// Private: not rewriting.
+			rewriteLogin = false
 		}
 
 		if query, ok := raw.(string); ok && len(query) > 0 {
 			query, subs, err = pluginFind(asUid, query)
 			if err == nil && subs == nil && query != "" {
-				var req [][]string
-				var opt []string
-				if req, opt, err = parseSearchQuery(query, sess.countryCode, rewriteLogin); err == nil {
+				if and, opt, err := parseSearchQuery(query); err == nil {
+					var req [][]string
+					for _, tag := range and {
+						rewritten := rewriteTag(tag, sess.countryCode, rewriteLogin)
+						if len(rewritten) > 0 {
+							req = append(req, rewritten)
+						}
+					}
+					opt = rewriteTagSlice(opt, sess.countryCode, rewriteLogin)
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
 						allReq := types.FlattenDoubleSlice(req)
@@ -2515,6 +2523,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Topics.GetUsersAny(topicName, msgOpts2storeOpts(req))
 		}
+		// Do nothing for all other topic types, like 'sys', 'slf'.
 	}
 
 	if err != nil {
@@ -2803,6 +2812,40 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
+	if t.cat == types.TopicCatFnd {
+		// Checking public (session) data only.
+		raw := t.fndGetPublic(sess)
+		if tag, ok := raw.(string); ok && tag != "" {
+			tag, subs, err := pluginFind(asUid, tag)
+			if err == nil && subs == nil && tag != "" {
+				// Checking for alias availability.
+				// Check soft-deleted and suspended topics too: they can be reactivated.
+				subs, err = store.Users.Find(asUid, tag, 1, false, true)
+			}
+
+			if err != nil {
+				sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+				return err
+			}
+
+			if len(subs) > 0 {
+				sess.queueOut(&ServerComMessage{
+					Meta: &MsgServerMeta{
+						Id:        msg.Id,
+						Topic:     msg.Original,
+						Timestamp: &now,
+						Tags:      []string{subs[0].Topic},
+					},
+				})
+				return nil
+			}
+		}
+
+		// Inform the requester that there are no tags.
+		sess.queueOut(NoContentParamsReply(msg, now, map[string]string{"what": "tags"}))
+		return nil
+	}
+
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category for getting tags")
@@ -2846,7 +2889,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 		resp = ErrPermissionDeniedReply(msg, now)
 		err = errors.New("tags update by non-owner")
 
-	} else if tags := normalizeTags(set.Tags); tags != nil {
+	} else if tags := normalizeTags(set.Tags, globals.maxTagCount); tags != nil {
 		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDeniedReply(msg, now)
