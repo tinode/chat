@@ -2,7 +2,9 @@
 package common
 
 import (
+	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	t "github.com/tinode/chat/server/store/types"
@@ -57,4 +59,73 @@ func SelectLatestTime(t1, t2 time.Time) time.Time {
 	}
 
 	return t1
+}
+
+// RangesToSql converts a slice of ranges to SQL BETWEEN or IN() constraint and arguments.
+func RangesToSql(in []t.Range) (string, []any) {
+	if len(in) > 1 || in[0].Hi == 0 {
+		var args []any
+		for _, r := range in {
+			if r.Hi == 0 {
+				args = append(args, r.Low)
+			} else {
+				for i := r.Low; i < r.Hi; i++ {
+					args = append(args, i)
+				}
+			}
+		}
+
+		return "IN (?" + strings.Repeat(",?", len(args)-1) + ")", args
+	}
+
+	// Optimizing for a special case of single range low..hi.
+	// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
+	return "BETWEEN ? AND ?", []any{in[0].Low, in[0].Hi - 1}
+}
+
+// Convert to JSON before storing to JSON field.
+func ToJSON(src any) []byte {
+	if src == nil {
+		return nil
+	}
+
+	jval, _ := json.Marshal(src)
+	return jval
+}
+
+// Deserialize JSON data from DB.
+func FromJSON(src any) any {
+	if src == nil {
+		return nil
+	}
+	if bb, ok := src.([]byte); ok {
+		var out any
+		json.Unmarshal(bb, &out)
+		return out
+	}
+	return nil
+}
+
+// Convert update to a list of columns and arguments.
+func UpdateByMap(update map[string]any) (cols []string, args []any) {
+	for col, arg := range update {
+		col = strings.ToLower(col)
+		if col == "public" || col == "trusted" || col == "private" || col == "aux" {
+			arg = ToJSON(arg)
+		}
+		cols = append(cols, col+"=?")
+		args = append(args, arg)
+	}
+	return
+}
+
+// If Tags field is updated, get the tags so tags table cab be updated too.
+func ExtractTags(update map[string]any) []string {
+	var tags []string
+
+	if val := update["Tags"]; val != nil {
+		tags, _ = val.(t.StringSlice)
+	}
+
+	return []string(tags)
 }

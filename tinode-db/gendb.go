@@ -15,7 +15,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func genDb(data *Data) {
+func genDb(data *Data, p2pDel bool) {
 	var err error
 	var botAccount string
 
@@ -109,7 +109,7 @@ func genDb(data *Data) {
 		nameIndex[uu.Username] = user.Id
 
 		// Add address book as fnd.private
-		if uu.AddressBook != nil && len(uu.AddressBook) > 0 {
+		if len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
 				map[string]interface{}{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
 				log.Fatal(err)
@@ -185,10 +185,14 @@ func genDb(data *Data) {
 		created := getCreatedTime(ss.CreatedAt)
 
 		// Assign default access mode
-		s0want := types.ModeCP2P
-		s0given := types.ModeCP2P
-		s1want := types.ModeCP2P
-		s1given := types.ModeCP2P
+		defaultMode := types.ModeCP2P
+		if p2pDel {
+			defaultMode = types.ModeCP2PD
+		}
+		s0want := defaultMode
+		s0given := defaultMode
+		s1want := defaultMode
+		s1given := defaultMode
 
 		// Check of non-default access mode was provided
 		if ss.Users[0].Want != "" {

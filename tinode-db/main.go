@@ -4,7 +4,6 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -24,6 +23,7 @@ import (
 )
 
 type configType struct {
+	P2PDeleteEnabled bool `json:"p2p_delete_enabled"`
 	StoreConfig json.RawMessage `json:"store_config"`
 }
 
@@ -204,7 +204,7 @@ func main() {
 
 	var data Data
 	if *datafile != "" && *datafile != "-" {
-		raw, err := ioutil.ReadFile(*datafile)
+		raw, err := os.ReadFile(*datafile)
 		if err != nil {
 			log.Fatalln("Failed to read sample data file:", err)
 		}
@@ -301,7 +301,7 @@ func main() {
 	}
 
 	if *reset || created {
-		genDb(&data)
+		genDb(&data, config.P2PDeleteEnabled)
 	} else if len(data.Users) > 0 {
 		log.Println("Sample data ignored.")
 	}
