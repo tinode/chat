@@ -2078,7 +2078,7 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string, activeOnly bool)
 	pipeline := b.A{
 		b.M{"$match": matchOn},
 
-		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "trusted": 1, "tags": 1}},
+		b.M{"$project": b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1, "access": 1, "public": 1, "trusted": 1, "tags": 1}},
 
 		b.M{"$unwind": "$tags"},
 
@@ -2086,9 +2086,10 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string, activeOnly bool)
 
 		b.M{"$group": b.M{
 			"_id":              "$_id",
-			"access":           b.M{"$first": "$access"},
 			"createdat":        b.M{"$first": "$createdat"},
 			"updatedat":        b.M{"$first": "$updatedat"},
+			"usebt":            b.M{"$first": "$usebt"},
+			"access":           b.M{"$first": "$access"},
 			"public":           b.M{"$first": "$public"},
 			"trusted":          b.M{"$first": "$trusted"},
 			"tags":             b.M{"$addToSet": "$tags"},
@@ -2122,13 +2123,14 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly 
 	defer cur.Close(a.ctx)
 
 	var subs []t.Subscription
+	thisUser := uid.String()
 	for cur.Next(a.ctx) {
 		var user t.User
 		var sub t.Subscription
 		if err = cur.Decode(&user); err != nil {
 			return nil, err
 		}
-		if user.Id == uid.String() {
+		if user.Id == thisUser {
 			// Skip the caller
 			continue
 		}
@@ -2151,7 +2153,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly 
 	return subs, nil
 }
 
-// FindTopics searches for group topics given a list of tags
+// FindTopics searches for group topics given a list of tags.
 func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index, pipeline := a.getFindPipeline(req, opt, activeOnly)
 	cur, err := a.db.Collection("topics").Aggregate(a.ctx, pipeline)
@@ -2185,6 +2187,104 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 			}
 		}
 		sub.Private = tags
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
+}
+
+// FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
+//
+//	uid - caller ID. If this ID is found as matching, skip it.
+//	tag - tag to find
+//	limit - number of results to return; limit = 1 is a special case, which only checks for result existence.
+//	partialMatch - use tag as prefix to match.
+//	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
+func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
+	var tagMatcher func(needle, haystack string) bool
+	// Pipeline identical for users and topics.
+	var commonPipe b.A
+	if partialMatch {
+		commonPipe = b.A{
+			b.M{"$match": b.M{"$or": b.A{
+				b.M{"tags": b.M{"$regex": primitive.Regex{Pattern: "^" + tag, Options: "i"}}},
+			}}},
+		}
+		tagMatcher = strings.HasPrefix
+	} else {
+		commonPipe = b.A{
+			b.M{"$match": b.M{"tags": tag}},
+		}
+		tagMatcher = func(needle, haystack string) bool {
+			return needle == haystack
+		}
+	}
+
+	var projection b.M
+	if limit == 1 {
+		projection = b.M{"_id": 1}
+	} else {
+		projection = b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1, "access": 1, "public": 1, "trusted": 1, "tags": 1}
+	}
+
+	commonPipe = append(commonPipe, b.M{"$project": projection})
+	// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
+	pipeline := append(b.A{}, commonPipe...)
+	pipeline = append(pipeline,
+		b.M{"$unionWith": b.M{"coll": "topics", "pipeline": commonPipe}},
+		b.M{"$limit": limit})
+	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var sub t.Subscription
+	var subs []t.Subscription
+	for cur.Next(a.ctx) {
+		entry := map[string]any{}
+		if err = cur.Decode(entry); err != nil {
+			subs = nil
+			break
+		}
+
+		if id, ok := entry["_id"].(string); ok {
+			if user := t.ParseUid(id); !user.IsZero() {
+				sub.Topic = user.UserId()
+				if uid == user {
+					continue
+				}
+			} else {
+				sub.Topic = id
+			}
+		}
+
+		if limit == 1 {
+			subs = append(subs, sub)
+			// That's it, one result is found, done.
+			break
+		}
+
+		if useBt, _ := entry["usebt"].(bool); useBt {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
+		sub.CreatedAt = entry["createdat"].(time.Time)
+		sub.UpdatedAt = entry["updatedat"].(time.Time)
+		sub.SetPublic(unmarshalBsonD(entry["public"]))
+		sub.SetTrusted(unmarshalBsonD(entry["tructed"]))
+		if access, ok := entry["access"].(map[string]int); ok {
+			sub.SetDefaultAccess(t.AccessMode(access["auth"]), t.AccessMode(access["anon"]))
+		}
+		if topicTags, ok := entry["tags"].([]string); ok {
+			foundTags := make([]string, 0, 1)
+			for _, tt := range topicTags {
+				if tagMatcher(tag, tt) {
+					foundTags = append(foundTags, tt)
+				}
+			}
+			sub.Private = foundTags
+		}
 		subs = append(subs, sub)
 	}
 

@@ -35,8 +35,8 @@ See [instructions](./docker/README.md)
 3. Make sure one of the following databases is installed and running:
  * MySQL 5.7 or above. MySQL 5.6 or below **will not work**.
  * PostgreSQL 13 or above. PostgreSQL 12 or below **will not work**.
- * MongoDB 4.2 or above.
- * RethinkDB.
+ * MongoDB 4.4 or above. MongoDB 4.2 and below **will not work**.
+ * RethinkDB (deprecated, support will be dropped in 2027).
 
 4. Fetch, build Tinode server and tinode-db database initializer:
   - **MySQL**:

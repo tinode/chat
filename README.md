@@ -118,7 +118,7 @@ When you register a new account you are asked for an email address to send valid
     * MySQL (and MariaDB, Percona as long as they remain SQL and wire protocol compatible)
     * PostgreSQL
     * MongoDB
-    * [RethinkDB](http://rethinkdb.com/). Support is deprecated because RethinkDB is no longer being developed
+    * [RethinkDB](http://rethinkdb.com/). Support is deprecated and will be dropped in 2027 because RethinkDB is no longer being developed (unless its development resumes).
 
 ### Planned
 

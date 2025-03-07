@@ -2446,7 +2446,6 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 
 }
 
-// FindAny executes the given SQL query with the provided arguments and returns the results as a slice of maps.
 // FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
 //
 //	uid - caller ID. If this ID is found as matching, skip it.
@@ -2544,6 +2543,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 		}
 
 		if limit == 1 {
+			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
 		}

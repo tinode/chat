@@ -2647,6 +2647,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 		}
 
 		if limit == 1 {
+			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
 		}
