@@ -1269,7 +1269,7 @@ func (rs RangeSorter) Normalize() RangeSorter {
 
 // Convert a slice of int values to a slice of ranges.
 // The int slice must be sorted low -> high.
-func SliceToRange(in []int) []Range {
+func SliceToRanges(in []int) []Range {
 	if len(in) == 0 {
 		return nil
 	}

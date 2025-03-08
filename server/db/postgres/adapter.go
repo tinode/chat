@@ -2758,7 +2758,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 	delRanges := toDel.SeqIdRanges
 
 	if toDel.DeletedFor == "" {
-		// Hard-deleting messages requires updates to the messages table
+		// Hard-deleting messages requires updates to the messages table.
 		where := "m.topic=? "
 		args := []any{topic}
 
@@ -2803,16 +2803,15 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 
 		// Recalculate the actual ranges to delete.
 		sort.Ints(seqIDs)
-		delRanges = t.SliceToRange(seqIDs)
+		delRanges = t.SliceToRanges(seqIDs)
 
 		// Compose a new query with the new ranges.
 		where = "m.topic=?"
 		args = []any{topic}
-		if len(delRanges) > 0 {
-			rSql, rArgs := common.RangesToSql(delRanges)
-			where += " AND m.seqid " + rSql
-			args = append(args, rArgs...)
-		}
+		rSql, rArgs := common.RangesToSql(delRanges)
+		where += " AND m.seqid " + rSql
+		args = append(args, rArgs...)
+
 		// No need to add anything else: deletedat etc is already accounted for.
 
 		query, newargs = expandQuery("DELETE FROM filemsglinks AS fml USING messages AS m WHERE m.id=fml.msgid AND "+

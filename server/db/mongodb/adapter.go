@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2368,6 +2369,24 @@ func (a *adapter) messagesHardDelete(topic string) error {
 	return err
 }
 
+// rangeToFilter is Mongo's equivalent of common.RangeToSql.
+func rangeToFilter(delRanges []t.Range, filter b.M) b.M {
+	if len(delRanges) > 1 || delRanges[0].Hi <= delRanges[0].Low {
+		rangeFilter := b.A{}
+		for _, rng := range delRanges {
+			if rng.Hi == 0 {
+				rangeFilter = append(rangeFilter, b.M{"seqid": rng.Low})
+			} else {
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
+			}
+		}
+		filter["$or"] = rangeFilter
+	} else {
+		filter["seqid"] = b.M{"$gte": delRanges[0].Low, "$lte": delRanges[0].Hi}
+	}
+	return filter
+}
+
 // MessageDeleteList marks messages as deleted.
 // Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
@@ -2380,32 +2399,64 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 
 	// Only some messages are being deleted
 
-	// Start with making a log entry
-	_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
-	if err != nil {
-		return err
-	}
-
-	filter := b.M{
-		"topic": topic,
-		// Skip already hard-deleted messages.
-		"delid": b.M{"$exists": false},
-	}
-	if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-		rangeFilter := b.A{}
-		for _, rng := range toDel.SeqIdRanges {
-			if rng.Hi == 0 {
-				rangeFilter = append(rangeFilter, b.M{"seqid": rng.Low})
-			} else {
-				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
-			}
-		}
-		filter["$or"] = rangeFilter
-	} else {
-		filter["seqid"] = b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}
-	}
+	delRanges := toDel.SeqIdRanges
 
 	if toDel.DeletedFor == "" {
+		// Hard-deleting messages requires updates to the messages table.
+
+		filter := b.M{
+			"topic": topic,
+			// Skip already hard-deleted messages.
+			"delid": b.M{"$exists": false},
+		}
+
+		// Mongo's equivalent of common.RangeToSql
+		rangeToFilter(delRanges, filter)
+
+		// We are asked to delete messages no older than newerThan.
+		if newerThan := toDel.GetNewerThan(); newerThan != nil {
+			filter["createdat"] = b.M{"$gt": newerThan}
+		}
+
+		pipeline := b.A{
+			b.M{"$match": filter},
+			b.M{"$project": b.M{"seqid": 1}},
+		}
+
+		// Find the actual IDs still present in the database.
+
+		cur, err := a.db.Collection("messages").Aggregate(a.ctx, pipeline)
+		if err != nil {
+			return err
+		}
+		defer cur.Close(a.ctx)
+
+		var seqIDs []int
+		for cur.Next(a.ctx) {
+			var result struct {
+				SeqID int `bson:"seqid"`
+			}
+			if err = cur.Decode(&result); err != nil {
+				return err
+			}
+			seqIDs = append(seqIDs, result.SeqID)
+		}
+
+		if len(seqIDs) == 0 {
+			// Nothing to delete. No need to make a log entry. All done.
+			return nil
+		}
+
+		// Recalculate the actual ranges to delete.
+		sort.Ints(seqIDs)
+		delRanges = t.SliceToRanges(seqIDs)
+
+		// Compose a new query with the new ranges.
+		filter = b.M{
+			"topic": topic,
+		}
+		rangeToFilter(delRanges, filter)
+
 		if err = a.decFileUseCounter(a.ctx, "messages", filter); err != nil {
 			return err
 		}
@@ -2421,6 +2472,12 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	} else {
 		// Soft-deleting: adding DelId to DeletedFor
 
+		filter := b.M{
+			"topic": topic,
+			// Skip already hard-deleted messages.
+			"delid": b.M{"$exists": false},
+		}
+
 		// Skip messages already soft-deleted for the current user
 		filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
 		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
@@ -2431,10 +2488,8 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 				}}})
 	}
 
-	// If operation has failed, remove dellog record.
-	if err != nil {
-		_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
-	}
+	// Now make log entries. Needed for both hard- and soft-deleting.
+	_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
 	return err
 }
 

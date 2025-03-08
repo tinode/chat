@@ -2896,16 +2896,15 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 
 		// Recalculate the actual ranges to delete.
 		sort.Ints(seqIDs)
-		delRanges = t.SliceToRange(seqIDs)
+		delRanges = t.SliceToRanges(seqIDs)
 
 		// Compose a new query with the new ranges.
 		where = "m.topic=?"
 		args = []any{topic}
-		if len(delRanges) > 0 {
-			rSql, rArgs := common.RangesToSql(delRanges)
-			where += " AND m.seqid " + rSql
-			args = append(args, rArgs...)
-		}
+		rSql, rArgs := common.RangesToSql(delRanges)
+		where += " AND m.seqid " + rSql
+		args = append(args, rArgs...)
+
 		// No need to add anything else: deletedat etc is already accounted for.
 
 		_, err = tx.Exec("DELETE fml.* FROM filemsglinks AS fml INNER JOIN messages AS m ON m.id=fml.msgid WHERE "+
