@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2257,78 +2258,117 @@ func (a *adapter) messagesHardDelete(topic string) error {
 	return err
 }
 
+func rangeToQuery(delRanges []t.Range, topic string, query rdb.Term) rdb.Term {
+	if len(delRanges) > 1 || delRanges[0].Hi <= delRanges[0].Low {
+		var indexVals []any
+		for _, rng := range delRanges {
+			if rng.Hi == 0 {
+				indexVals = append(indexVals, []any{topic, rng.Low})
+			} else {
+				for i := rng.Low; i <= rng.Hi; i++ {
+					indexVals = append(indexVals, []any{topic, i})
+				}
+			}
+		}
+		query = query.GetAllByIndex("Topic_SeqId", indexVals...)
+	} else {
+		// Optimizing for a special case of single range low..hi
+		query = query.Between(
+			[]any{topic, delRanges[0].Low},
+			[]any{topic, delRanges[0].Hi},
+			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"})
+	}
+	return query
+}
+
 // MessageDeleteList deletes messages in the given topic with seqIds from the list.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
-	var indexVals []any
 	var err error
 
 	if toDel == nil {
 		// Delete all messages.
-		err = a.messagesHardDelete(topic)
-	} else {
-		// Only some messages are being deleted
+		return a.messagesHardDelete(topic)
+	}
 
-		// Start with making a log entry
-		_, err = rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
+	// Only some messages are being deleted
+
+	delRanges := toDel.SeqIdRanges
+
+	if toDel.DeletedFor == "" {
+		// Hard-deleting messages requires updates to the messages table.
+		query := rangeToQuery(delRanges, topic, rdb.DB(a.dbName).Table("messages"))
+
+		// Skip already hard-deleted messages.
+		query = query.Filter(rdb.Row.HasFields("DelId").Not())
+
+		// We are asked to delete messages no older than newerThan.
+		if newerThan := toDel.GetNewerThan(); newerThan != nil {
+			query = query.Filter(rdb.Row.Field("CreatedAt").Gt(newerThan))
+		}
+
+		query = query.Field("SeqId")
+
+		// Find the actual IDs still present in the database.
+		cursor, err := query.Run(a.conn)
 		if err != nil {
 			return err
 		}
+		defer cursor.Close()
 
-		query := rdb.DB(a.dbName).Table("messages")
-		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-			for _, rng := range toDel.SeqIdRanges {
-				if rng.Hi == 0 {
-					indexVals = append(indexVals, []any{topic, rng.Low})
-				} else {
-					for i := rng.Low; i <= rng.Hi; i++ {
-						indexVals = append(indexVals, []any{topic, i})
-					}
-				}
-			}
-			query = query.GetAllByIndex("Topic_SeqId", indexVals...)
-		} else {
-			// Optimizing for a special case of single range low..hi
-			query = query.Between(
-				[]any{topic, toDel.SeqIdRanges[0].Low},
-				[]any{topic, toDel.SeqIdRanges[0].Hi},
-				rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"})
-		}
-		// Skip already hard-deleted messages.
-		query = query.Filter(rdb.Row.HasFields("DelId").Not())
-		if toDel.DeletedFor == "" {
-			// First decrement use counter for attachments.
-			if err = a.decFileUseCounter(query); err == nil {
-				// Hard-delete individual messages. Message is not deleted but all fields with personal content
-				// are removed.
-				_, err = query.Replace(rdb.Row.Without("Head", "From", "Content", "Attachments").Merge(
-					map[string]any{
-						"DeletedAt": t.TimeNow(), "DelId": toDel.DelId})).
-					RunWrite(a.conn)
-			}
-
-		} else {
-			// Soft-deleting: adding DelId to DeletedFor
-			_, err = query.
-				// Skip messages already soft-deleted for the current user
-				Filter(func(row rdb.Term) any {
-					return rdb.Not(row.Field("DeletedFor").Default([]any{}).Contains(
-						func(df rdb.Term) any {
-							return df.Field("User").Eq(toDel.DeletedFor)
-						}))
-				}).Update(map[string]any{"DeletedFor": rdb.Row.Field("DeletedFor").
-				Default([]any{}).Append(
-				&t.SoftDelete{
-					User:  toDel.DeletedFor,
-					DelId: toDel.DelId})}).RunWrite(a.conn)
+		var seqIDs []int
+		if err = cursor.All(&seqIDs); err != nil {
+			return err
 		}
 
-		// If operation has failed, remove dellog record.
+		if len(seqIDs) == 0 {
+			// Nothing to delete. No need to make a log entry. All done.
+			return nil
+		}
+
+		// Recalculate the actual ranges to delete.
+		sort.Ints(seqIDs)
+		delRanges = t.SliceToRanges(seqIDs)
+
+		// Compose a new query with the new ranges.
+		query = rangeToQuery(delRanges, topic, rdb.DB(a.dbName).Table("messages"))
+
+		// First decrement use counter for attachments.
+		if err = a.decFileUseCounter(query); err != nil {
+			return err
+		}
+
+		// Hard-delete individual messages. The messages are not deleted but all fields with personal content
+		// are removed.
+		if _, err = query.Replace(rdb.Row.Without("Head", "From", "Content", "Attachments").Merge(
+			map[string]any{
+				"DeletedAt": t.TimeNow(), "DelId": toDel.DelId})).
+			RunWrite(a.conn); err != nil {
+			return err
+		}
+
+	} else {
+		// Soft-deleting: adding DelId to DeletedFor
+		_, err = rdb.DB(a.dbName).Table("messages").
+			// Skip hard-deleted messages.
+			Filter(rdb.Row.HasFields("DelId").Not()).
+			// Skip messages already soft-deleted for the current user
+			Filter(func(row rdb.Term) any {
+				return rdb.Not(row.Field("DeletedFor").Default([]any{}).Contains(
+					func(df rdb.Term) any {
+						return df.Field("User").Eq(toDel.DeletedFor)
+					}))
+			}).Update(map[string]any{"DeletedFor": rdb.Row.Field("DeletedFor").
+			Default([]any{}).Append(
+			&t.SoftDelete{
+				User:  toDel.DeletedFor,
+				DelId: toDel.DelId})}).RunWrite(a.conn)
 		if err != nil {
-			rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
-				Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
+			return err
 		}
 	}
 
+	// Make log entries. Needed for both hard- and soft-deleting.
+	_, err = rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
 	return err
 }
 

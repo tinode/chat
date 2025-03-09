@@ -2481,10 +2481,10 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 			"topic": topic,
 			// Skip already hard-deleted messages.
 			"delid": b.M{"$exists": false},
+			// Skip messages already soft-deleted for the current user
+			"deletedfor.user": b.M{"$ne": toDel.DeletedFor},
 		}
 
-		// Skip messages already soft-deleted for the current user
-		filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
 		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
 			b.M{"$addToSet": b.M{
 				"deletedfor": &t.SoftDelete{
@@ -2493,7 +2493,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 				}}})
 	}
 
-	// Now make log entries. Needed for both hard- and soft-deleting.
+	// Make log entries. Needed for both hard- and soft-deleting.
 	_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
 	return err
 }
