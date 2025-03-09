@@ -1962,10 +1962,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly 
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var allReq []string
-	for _, el := range req {
-		allReq = append(allReq, el...)
-	}
+	allReq := t.FlattenDoubleSlice(req)
 	var allTags []any
 	for _, tag := range append(allReq, opt...) {
 		allTags = append(allTags, tag)
@@ -2033,6 +2030,96 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	}
 	return subs, nil
 
+}
+
+// FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
+//
+//	uid - caller ID. If this ID is found as matching, skip it.
+//	tag - tag to find
+//	limit - number of results to return; limit = 1 is a special case, which only checks for result existence.
+//	partialMatch - use tag as prefix to match.
+//	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
+func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
+	var tagMatcher func(needle, haystack string) bool
+	query := rdb.DB(a.dbName)
+	if partialMatch {
+		// This is seriously inefficient.
+		query = query.Table("users").Union(rdb.Table("topics")).Filter(func(row rdb.Term) any {
+			return row.Field("Tags").Default([]any{}).Contains(
+				func(df rdb.Term) any {
+					// Case-insensitive regex match.
+					return df.Field("User").Match("(?i)^" + tag)
+				})
+		})
+		tagMatcher = strings.HasPrefix
+	} else {
+		query = query.Table("users").GetAllByIndex("Tags", tag).Union(rdb.Table("topics").GetAllByIndex("Tags", tag))
+		tagMatcher = func(needle, haystack string) bool {
+			return needle == haystack
+		}
+	}
+
+	if activeOnly {
+		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
+	}
+	if limit > a.maxResults {
+		limit = a.maxResults
+	}
+
+	if limit == 1 {
+		query = query.Pluck("Id")
+	} else {
+		query = query.Pluck("Id", "CreatedAt", "UpdatedAt", "UseBt", "Access", "Public", "Trusted", "Tags")
+	}
+	query = query.Limit(limit)
+
+	// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
+	cursor, err := query.Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	var topic t.Topic
+	var sub t.Subscription
+	var subs []t.Subscription
+	for cursor.Next(&topic) {
+		if user := t.ParseUid(topic.Id); !user.IsZero() {
+			sub.Topic = user.UserId()
+			if user == uid {
+				continue
+			}
+		}
+
+		if limit == 1 {
+			subs = append(subs, sub)
+			// That's it, one result is found, done.
+			break
+		}
+
+		if topic.UseBt {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
+		sub.CreatedAt = topic.CreatedAt
+		sub.UpdatedAt = topic.UpdatedAt
+		sub.SetPublic(topic.Public)
+		sub.SetTrusted(topic.Trusted)
+		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
+
+		if len(topic.Tags) > 0 {
+			foundTags := make([]string, 0, 1)
+			for _, tt := range topic.Tags {
+				if tagMatcher(tag, tt) {
+					foundTags = append(foundTags, tt)
+				}
+			}
+			sub.Private = foundTags
+		}
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
 }
 
 // Messages

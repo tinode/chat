@@ -1205,7 +1205,7 @@ func initConnectionToDb() {
 
 func init() {
 	logs.Init(os.Stderr, "stdFlags")
-	adp = backend.TestingGetAdapter()
+	adp = backend.GetTestingAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
 	if file, err := os.Open(*conffile); err != nil {

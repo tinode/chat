@@ -2587,6 +2587,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 	query += " FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE " + stateConstraint + "tt.tag" + compareOp
 	if activeOnly {
+		// Has to be here because it's added twice.
 		args = append(args, t.StateOK)
 	}
 	args = append(args, tag)
