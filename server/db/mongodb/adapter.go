@@ -2203,22 +2203,27 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 //	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
 func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
 	var tagMatcher func(needle, haystack string) bool
-	// Pipeline identical for users and topics.
-	var commonPipe b.A
+	// Part of the pipeline identical for users and topics.
+	var matchOn b.M
 	if partialMatch {
-		commonPipe = b.A{
-			b.M{"$match": b.M{"$or": b.A{
-				b.M{"tags": b.M{"$regex": primitive.Regex{Pattern: "^" + tag, Options: "i"}}},
-			}}},
-		}
+		matchOn = b.M{"$or": b.A{
+			b.M{"tags": b.M{"$regex": primitive.Regex{Pattern: "^" + tag, Options: "i"}}},
+		}}
 		tagMatcher = strings.HasPrefix
 	} else {
-		commonPipe = b.A{
-			b.M{"$match": b.M{"tags": tag}},
-		}
+		matchOn = b.M{"tags": tag}
 		tagMatcher = func(needle, haystack string) bool {
 			return needle == haystack
 		}
+	}
+
+	if activeOnly {
+		matchOn["state"] = b.M{"$eq": t.StateOK}
+	}
+	commonPipe := b.A{b.M{"$match": matchOn}}
+
+	if limit > a.maxResults {
+		limit = a.maxResults
 	}
 
 	var projection b.M
@@ -2273,7 +2278,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 		sub.CreatedAt = entry["createdat"].(time.Time)
 		sub.UpdatedAt = entry["updatedat"].(time.Time)
 		sub.SetPublic(unmarshalBsonD(entry["public"]))
-		sub.SetTrusted(unmarshalBsonD(entry["tructed"]))
+		sub.SetTrusted(unmarshalBsonD(entry["trusted"]))
 		if access, ok := entry["access"].(map[string]int); ok {
 			sub.SetDefaultAccess(t.AccessMode(access["auth"]), t.AccessMode(access["anon"]))
 		}
@@ -2903,8 +2908,8 @@ func (a *adapter) isDbInitialized() bool {
 	return true
 }
 
-// TestingGetAdapter returns an adapter object. Useful for running tests.
-func TestingGetAdapter() *adapter {
+// GetTestingAdapter returns an adapter object. Useful for running tests.
+func GetTestingAdapter() *adapter {
 	return &adapter{}
 }
 
