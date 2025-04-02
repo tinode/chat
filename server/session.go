@@ -1206,16 +1206,7 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	if sub := s.getSub(msg.RcptTo); sub != nil && msg.MetaWhat != constMsgDelTopic {
-		// Session is attached, deleting subscription or messages. Send to topic.
-		select {
-		case sub.meta <- msg:
-		default:
-			// Reply with a 503 to the user.
-			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
-			logs.Err.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
-		}
-	} else if msg.MetaWhat == constMsgDelTopic {
+	if msg.MetaWhat == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		select {
@@ -1229,6 +1220,15 @@ func (s *Session) del(msg *ClientComMessage) {
 			// Reply with a 503 to the user.
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.del: hub.unreg channel full", s.sid)
+		}
+	} else if sub := s.getSub(msg.RcptTo); sub != nil {
+		// Session is attached, deleting subscription or messages. Send to topic.
+		select {
+		case sub.meta <- msg:
+		default:
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
+			logs.Err.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
