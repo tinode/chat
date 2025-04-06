@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/tinode/chat/server/logs"
+	"github.com/tinode/chat/server/store/types"
 )
 
 const (
@@ -165,7 +166,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		wrt.WriteHeader(http.StatusForbidden)
