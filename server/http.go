@@ -169,17 +169,6 @@ func signalHandler() <-chan bool {
 	return stop
 }
 
-// Wrapper for http.Handler which optionally adds a Strict-Transport-Security to the response.
-func hstsHandler(handler http.Handler) http.Handler {
-	if globals.tlsStrictMaxAge != "" {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Strict-Transport-Security", "max-age="+globals.tlsStrictMaxAge)
-			handler.ServeHTTP(w, r)
-		})
-	}
-	return handler
-}
-
 // The following code is used to intercept HTTP errors so they can be wrapped into json.
 
 // Wrapper around http.ResponseWriter which detects status set to 400+ and replaces
@@ -268,6 +257,32 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 
 		http.Redirect(wrt, req, target.String(), http.StatusTemporaryRedirect)
 	}
+}
+
+// Wrapper for adding optional HTTP headers:
+//   - Strict-Transport-Security
+//   - X-Frame-Options
+//   - Referrer-Policy
+func optionalHttpHeaders(handler http.Handler) http.Handler {
+	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Referrer-Policy", "origin")
+		handler.ServeHTTP(w, r)
+	})
+
+	if globals.tlsStrictMaxAge != "" {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Strict-Transport-Security", "max-age="+globals.tlsStrictMaxAge)
+			handler.ServeHTTP(w, r)
+		})
+	}
+
+	if globals.xFrameOptions != "-" {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Frame-Options", globals.xFrameOptions)
+			handler.ServeHTTP(w, r)
+		})
+	}
+	return handler
 }
 
 // Wrapper for http.Handler which optionally adds a Cache-Control header to the response

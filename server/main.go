@@ -188,6 +188,9 @@ var globals struct {
 	// Prioritize X-Forwarded-For header as the source of IP address of the client.
 	useXForwardedFor bool
 
+	// Add X-Frame-Options header to HTTP response.
+	xFrameOptions string
+
 	// Country code to assign to sessions by default.
 	defaultCountryCode string
 
@@ -286,6 +289,9 @@ type configType struct {
 	// Take IP address of the client from HTTP header 'X-Forwarded-For'.
 	// Useful when tinode is behind a proxy. If missing, fallback to default RemoteAddr.
 	UseXForwardedFor bool `json:"use_x_forwarded_for"`
+	// Add X-Frame-Options to HTTP response headers. It should be one of "DENY", "SAMEORIGIN",
+	// "-" (disabled). The default is SAMEORIGIN.
+	XFrameOptions string `json:"x_frame_options"`
 	// 2-letter country code (ISO 3166-1 alpha-2) to assign to sessions by default
 	// when the country isn't specified by the client explicitly and
 	// it's impossible to infer it.
@@ -556,6 +562,16 @@ func main() {
 		globals.defaultCountryCode = defaultCountryCode
 	}
 
+	// Configuration of X-Frame-Options header.
+	globals.xFrameOptions = config.XFrameOptions
+	if globals.xFrameOptions == "" {
+		globals.xFrameOptions = "SAMEORIGIN"
+	}
+	if globals.xFrameOptions != "SAMEORIGIN" && globals.xFrameOptions != "DENY" && globals.xFrameOptions != "-" {
+		logs.Warn.Println("Ignored invalid x_frame_options", config.XFrameOptions)
+		globals.xFrameOptions = "SAMEORIGIN"
+	}
+
 	// Websocket compression.
 	globals.wsCompression = !config.WSCompressionDisabled
 
@@ -666,15 +682,15 @@ func main() {
 			}
 		}
 		mux.Handle(staticMountPoint,
-			// Add optional Cache-Control header
+			// Add optional Cache-Control header.
 			cacheControlHandler(config.CacheControl,
-				// Optionally add Strict-Transport_security to the response
-				hstsHandler(
-					// Add gzip compression
+				// Optionally add Strict-Transport-Security and X-Frame-Options to the response.
+				optionalHttpHeaders(
+					// Add gzip compression.
 					gh.CompressHandler(
 						// And add custom formatter of errors.
 						httpErrorHandler(
-							// Remove mount point prefix
+							// Remove mount point prefix.
 							http.StripPrefix(staticMountPoint,
 								http.FileServer(http.Dir(*staticPath))))))))
 		logs.Info.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
