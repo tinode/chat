@@ -264,25 +264,27 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 //   - X-Frame-Options
 //   - Referrer-Policy
 func optionalHttpHeaders(handler http.Handler) http.Handler {
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Referrer-Policy", "origin")
 		handler.ServeHTTP(w, r)
 	})
 
+	h2 := h1
 	if globals.tlsStrictMaxAge != "" {
-		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h2 = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Strict-Transport-Security", "max-age="+globals.tlsStrictMaxAge)
-			handler.ServeHTTP(w, r)
+			h1.ServeHTTP(w, r)
 		})
 	}
 
+	h3 := h2
 	if globals.xFrameOptions != "-" {
-		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h3 = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Frame-Options", globals.xFrameOptions)
-			handler.ServeHTTP(w, r)
+			h2.ServeHTTP(w, r)
 		})
 	}
-	return handler
+	return h3
 }
 
 // Wrapper for http.Handler which optionally adds a Cache-Control header to the response

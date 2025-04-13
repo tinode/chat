@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -441,7 +441,7 @@ func parsePublic(public *theCard, path string) *card {
 		if dir == "" {
 			dir = path
 		}
-		photo.Data, err = ioutil.ReadFile(filepath.Join(dir, fname))
+		photo.Data, err = os.ReadFile(filepath.Join(dir, fname))
 		if err != nil {
 			log.Fatal(err)
 		}

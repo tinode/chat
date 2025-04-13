@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -150,7 +150,7 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 	}
 
 	// Read response.
-	body, err := ioutil.ReadAll(post.Body)
+	body, err := io.ReadAll(post.Body)
 	if err != nil {
 		return nil, err
 	}
