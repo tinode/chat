@@ -2293,13 +2293,11 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	// Only some messages are being deleted
 
 	delRanges := toDel.SeqIdRanges
-
+	query := rangeToQuery(delRanges, topic, rdb.DB(a.dbName).Table("messages"))
+	// Skip already hard-deleted messages.
+	query = query.Filter(rdb.Row.HasFields("DelId").Not())
 	if toDel.DeletedFor == "" {
 		// Hard-deleting messages requires updates to the messages table.
-		query := rangeToQuery(delRanges, topic, rdb.DB(a.dbName).Table("messages"))
-
-		// Skip already hard-deleted messages.
-		query = query.Filter(rdb.Row.HasFields("DelId").Not())
 
 		// We are asked to delete messages no older than newerThan.
 		if newerThan := toDel.GetNewerThan(); newerThan != nil {
@@ -2347,21 +2345,20 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		}
 
 	} else {
-		// Soft-deleting: adding DelId to DeletedFor
-		_, err = rdb.DB(a.dbName).Table("messages").
-			// Skip hard-deleted messages.
-			Filter(rdb.Row.HasFields("DelId").Not()).
+		// Soft-deleting: adding DelId to DeletedFor.
+		_, err = query.
 			// Skip messages already soft-deleted for the current user
 			Filter(func(row rdb.Term) any {
 				return rdb.Not(row.Field("DeletedFor").Default([]any{}).Contains(
 					func(df rdb.Term) any {
 						return df.Field("User").Eq(toDel.DeletedFor)
 					}))
-			}).Update(map[string]any{"DeletedFor": rdb.Row.Field("DeletedFor").
-			Default([]any{}).Append(
-			&t.SoftDelete{
-				User:  toDel.DeletedFor,
-				DelId: toDel.DelId})}).RunWrite(a.conn)
+			}).
+			Update(map[string]any{"DeletedFor": rdb.Row.Field("DeletedFor").
+				Default([]any{}).Append(
+				&t.SoftDelete{
+					User:  toDel.DeletedFor,
+					DelId: toDel.DelId})}).RunWrite(a.conn)
 		if err != nil {
 			return err
 		}

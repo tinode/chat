@@ -2405,18 +2405,16 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	// Only some messages are being deleted
 
 	delRanges := toDel.SeqIdRanges
+	filter := b.M{
+		"topic": topic,
+		// Skip already hard-deleted messages.
+		"delid": b.M{"$exists": false},
+	}
+	// Mongo's equivalent of common.RangeToSql
+	rangeToFilter(delRanges, filter)
 
 	if toDel.DeletedFor == "" {
 		// Hard-deleting messages requires updates to the messages table.
-
-		filter := b.M{
-			"topic": topic,
-			// Skip already hard-deleted messages.
-			"delid": b.M{"$exists": false},
-		}
-
-		// Mongo's equivalent of common.RangeToSql
-		rangeToFilter(delRanges, filter)
 
 		// We are asked to delete messages no older than newerThan.
 		if newerThan := toDel.GetNewerThan(); newerThan != nil {
@@ -2477,13 +2475,8 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	} else {
 		// Soft-deleting: adding DelId to DeletedFor
 
-		filter := b.M{
-			"topic": topic,
-			// Skip already hard-deleted messages.
-			"delid": b.M{"$exists": false},
-			// Skip messages already soft-deleted for the current user
-			"deletedfor.user": b.M{"$ne": toDel.DeletedFor},
-		}
+		// Skip messages already soft-deleted for the current user
+		filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
 
 		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
 			b.M{"$addToSet": b.M{
