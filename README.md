@@ -162,7 +162,7 @@ More translations are [welcome](docs/translations.md). In addition to languages 
 
 ### Projects
 
-* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango)
+* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango) (outdated)
 * [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) (outdated)
 
 ### Licenses
