@@ -65,58 +65,6 @@ func rangeSerialize(in []MsgRange) []types.Range {
 	return out
 }
 
-// Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
-// the number of tags does not exceed the maximum.
-func normalizeTags(src []string, maxTags int) types.StringSlice {
-	if src == nil {
-		return nil
-	}
-
-	// Make sure the number of tags does not exceed the maximum.
-	// Technically it may result in fewer tags than the maximum due to empty tags and
-	// duplicates, but that's user's fault.
-	if len(src) > maxTags {
-		src = src[:maxTags]
-	}
-
-	// Trim whitespace and force to lowercase.
-	for i := range src {
-		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
-	}
-
-	// Sort tags
-	sort.Strings(src)
-
-	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
-	// been if length were enforced later, but that's client's fault.
-	var prev string
-	var dst []string
-	for _, curr := range src {
-		if isNullValue(curr) {
-			// Return non-nil empty array
-			return make([]string, 0, 1)
-		}
-
-		// Unicode handling
-		ucurr := []rune(curr)
-
-		// Enforce length in characters, not in bytes.
-		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
-			continue
-		}
-
-		// Make sure the tag starts with a letter or a number.
-		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
-			continue
-		}
-
-		dst = append(dst, curr)
-		prev = curr
-	}
-
-	return types.StringSlice(dst)
-}
-
 // stringSliceDelta extracts the slices of added and removed strings from two slices:
 //
 //	added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
@@ -162,29 +110,6 @@ func stringSliceDelta(rold, rnew []string) (added, removed, intersection []strin
 		}
 	}
 	return added, removed, intersection
-}
-
-// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
-// true - same, false - different.
-func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
-	rold := filterRestrictedTags(oldTags, namespaces)
-	rnew := filterRestrictedTags(newTags, namespaces)
-
-	if len(rold) != len(rnew) {
-		return false
-	}
-
-	sort.Strings(rold)
-	sort.Strings(rnew)
-
-	// Match old tags against the new tags.
-	for i := 0; i < len(rnew); i++ {
-		if rold[i] != rnew[i] {
-			return false
-		}
-	}
-
-	return true
 }
 
 // Process credentials for correctness: remove duplicate and unknown methods.
@@ -418,9 +343,10 @@ func versionToString(vers int) string {
 
 // Tag handling
 
-// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
-// Tags to filter, restricted namespaces to filter.
-func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
+// filterTags takes a slice of tags and a map of namespaces, return a slice of namespace tags
+// contained in the input.
+// params: Tags to filter, namespaces to use as the filter.
+func filterTags(tags []string, namespaces map[string]bool) []string {
 	var out []string
 	if len(namespaces) == 0 {
 		return out
@@ -433,6 +359,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 			continue
 		}
 
+		// [1] is the prefix. [0] is the whole tag.
 		if namespaces[parts[1]] {
 			out = append(out, s)
 		}
@@ -493,6 +420,99 @@ func rewriteTagSlice(tags []string, countryCode string, withLogin bool) []string
 		}
 	}
 	return result
+}
+
+// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
+// true - same, false - different.
+func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
+	rold := filterTags(oldTags, namespaces)
+	rnew := filterTags(newTags, namespaces)
+
+	if len(rold) != len(rnew) {
+		return false
+	}
+
+	sort.Strings(rold)
+	sort.Strings(rnew)
+
+	// Match old tags against the new tags.
+	for i := range rnew {
+		if rold[i] != rnew[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
+// the number of tags does not exceed the maximum.
+func normalizeTags(src []string, maxTags int) types.StringSlice {
+	if src == nil {
+		return nil
+	}
+
+	// Make sure the number of tags does not exceed the maximum.
+	// Technically it may result in fewer tags than the maximum due to empty tags and
+	// duplicates, but that's user's fault.
+	if len(src) > maxTags {
+		src = src[:maxTags]
+	}
+
+	// Trim whitespace and force to lowercase.
+	for i := range src {
+		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
+	}
+
+	// Sort tags
+	sort.Strings(src)
+
+	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// been if length were enforced later, but that's client's fault.
+	var prev string
+	var dst []string
+	for _, curr := range src {
+		if isNullValue(curr) {
+			// Return non-nil empty array
+			return make([]string, 0, 1)
+		}
+
+		// Unicode handling
+		ucurr := []rune(curr)
+
+		// Enforce length in characters, not in bytes.
+		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
+			continue
+		}
+
+		// Make sure the tag starts with a letter or a number.
+		if unicode.IsLetter(ucurr[0]) || unicode.IsDigit(ucurr[0]) {
+			dst = append(dst, curr)
+			prev = curr
+		}
+	}
+
+	return types.StringSlice(dst)
+}
+
+// hasDuplicateNamespaceTags checks for duplication of unique NS tags.
+// Each namespace can have only one tag. This does not prevent tags from
+// being duplicate accross requests, just saves an extra DB call.
+func hasDuplicateNamespaceTags(src []string, uniqueNS map[string]bool) bool {
+	found := map[string]bool{}
+	for _, tag := range src {
+		parts := prefixedTagRegexp.FindStringSubmatch(tag)
+		if len(parts) < 2 {
+			// Invalid tag, ignored.
+			continue
+		}
+
+		if uniqueNS[parts[1]] && found[parts[1]] {
+			return true
+		}
+		found[parts[1]] = true
+	}
+	return false
 }
 
 // Parser for search queries. The query may contain non-ASCII characters,

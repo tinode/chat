@@ -473,3 +473,60 @@ func TestMergeInterfaces(t *testing.T) {
 		}
 	}
 }
+
+func TestFilterTags(t *testing.T) {
+	cases := []struct {
+		tags     []string
+		ns       map[string]bool
+		expected []string
+	}{
+		{
+			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
+			ns:       map[string]bool{"ns1": true, "ns2": false, "xtra": true},
+			expected: []string{"ns1:tag1"},
+		},
+		{
+			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
+			ns:       map[string]bool{},
+			expected: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		got := filterTags(tc.tags, tc.ns)
+		if !reflect.DeepEqual(got, tc.expected) {
+			t.Errorf("filterTags(%v, %v): expected (%v), got (%v)", tc.tags, tc.ns, tc.expected, got)
+		}
+	}
+}
+
+func TestHasDuplicateNamespaceTags(t *testing.T) {
+	cases := []struct {
+		tags     []string
+		ns       map[string]bool
+		expected bool
+	}{
+		{
+			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
+			ns:       map[string]bool{"ns1": true, "ns2": false, "xtra": true, "nons": true},
+			expected: false,
+		},
+		{
+			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: ", "ns1:tag2"},
+			ns:       map[string]bool{"ns1": true, "ns2": false, "xtra": true},
+			expected: true,
+		},
+		{
+			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
+			ns:       map[string]bool{},
+			expected: false,
+		},
+	}
+
+	for _, tc := range cases {
+		got := hasDuplicateNamespaceTags(tc.tags, tc.ns)
+		if !reflect.DeepEqual(got, tc.expected) {
+			t.Errorf("filterTags(%v, %v): expected (%v), got (%v)", tc.tags, tc.ns, tc.expected, got)
+		}
+	}
+}
