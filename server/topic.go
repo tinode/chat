@@ -2466,8 +2466,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
 						allReq := types.FlattenDoubleSlice(req)
-						restr, _, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(allReq, opt...),
-							globals.maskedTagNS))
+						restr, _, _ := stringSliceDelta(t.tags, filterTags(append(allReq, opt...), globals.maskedTagNS))
 
 						if len(restr) > 0 {
 							sess.queueOut(ErrPermissionDeniedReply(msg, now))
@@ -2808,17 +2807,18 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 	return nil
 }
 
-// replyGetTags returns topic's tags - tokens used for discovery.
+// replyGetTags returns topics' tags - tokens used for discovery.
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
 	if t.cat == types.TopicCatFnd {
+		// Fnd: checking for alias availability.
+
 		// Checking public (session) data only.
 		raw := t.fndGetPublic(sess)
 		if tag, ok := raw.(string); ok && tag != "" {
 			tag, subs, err := pluginFind(asUid, tag)
 			if err == nil && subs == nil && tag != "" {
-				// Checking for alias availability.
 				// Check soft-deleted and suspended topics too: they can be reactivated.
 				subs, err = store.Users.Find(asUid, tag, 1, false, true)
 			}
@@ -2893,9 +2893,27 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDeniedReply(msg, now)
-		} else {
-			added, removed, _ := stringSliceDelta(t.tags, tags)
-			if len(added) > 0 || len(removed) > 0 {
+		} else if hasDuplicateNamespaceTags(tags, globals.uniqueTagNS) {
+			err = errors.New("duplicate unique tags")
+			resp = ErrMalformedReply(msg, now)
+		} else if added, removed, _ := stringSliceDelta(t.tags, tags); len(added) > 0 || len(removed) > 0 {
+			if unique := filterTags(added, globals.uniqueTagNS); len(unique) > 0 {
+				// Check for global uniqueness.
+				// It's not inside a transaction, so a race may happen.
+				for _, tag := range unique {
+					var result []types.Subscription
+					if result, err = store.Users.Find(asUid, tag, 1, false, false); err != nil {
+						resp = ErrUnknownReply(msg, now)
+						break
+					} else if len(result) > 0 {
+						err = errors.New("globally duplicate unique tags")
+						resp = ErrMalformedReply(msg, now)
+						break
+					}
+				}
+			}
+
+			if err == nil {
 				update := map[string]any{"Tags": tags, "UpdatedAt": now}
 				if t.cat == types.TopicCatMe {
 					err = store.Users.Update(asUid, update)
@@ -2918,9 +2936,9 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 					}
 					resp = NoErrParamsReply(msg, now, params)
 				}
-			} else {
-				resp = InfoNotModifiedReply(msg, now)
 			}
+		} else {
+			resp = InfoNotModifiedReply(msg, now)
 		}
 	} else {
 		resp = InfoNotModifiedReply(msg, now)
