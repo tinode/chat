@@ -2090,16 +2090,18 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 			if user == uid {
 				continue
 			}
+		} else {
+			sub.Topic = topic.Id
+		}
+
+		if topic.UseBt {
+			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		if limit == 1 {
 			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
-		}
-
-		if topic.UseBt {
-			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		sub.CreatedAt = topic.CreatedAt

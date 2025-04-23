@@ -2265,14 +2265,14 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 			}
 		}
 
+		if useBt, _ := entry["usebt"].(bool); useBt {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
 		if limit == 1 {
 			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
-		}
-
-		if useBt, _ := entry["usebt"].(bool); useBt {
-			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		sub.CreatedAt = entry["createdat"].(time.Time)

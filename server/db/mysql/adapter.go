@@ -2647,15 +2647,16 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 			}
 		}
 
+		if isChan != 0 {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
 		if limit == 1 {
 			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
 		}
 
-		if isChan != 0 {
-			sub.Topic = t.GrpToChn(sub.Topic)
-		}
 		sub.SetPublic(common.FromJSON(public))
 		sub.SetTrusted(common.FromJSON(trusted))
 		sub.SetDefaultAccess(access.Auth, access.Anon)
