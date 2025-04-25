@@ -2644,6 +2644,6 @@ func TestHandleTopicTermination(t *testing.T) {
 func TestMain(m *testing.M) {
 	logs.Init(os.Stderr, "stdFlags")
 	// Set max subscriber count to effective infinity.
-	globals.maxSubscriberCount = 1000000000
+	globals.maxSubscriberCount = 1_000_000_000
 	os.Exit(m.Run())
 }
