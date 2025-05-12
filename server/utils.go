@@ -23,6 +23,8 @@ import (
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
+	"maps"
+
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -30,7 +32,7 @@ import (
 // * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars
 // * tag body may contain Unicode letters and numbers, as well as the following symbols: +-.!?#@_
 // Tag body can be up to maxTagLength (96) chars long.
-var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#@\pL\pN]{1,96}$`)
+var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):([-_+.!?#@\pL\pN]{1,96})$`)
 
 // Generic tag: the same restrictions as tag body.
 var tagRegexp = regexp.MustCompile(`^[-_+.!?#@\pL\pN]{1,96}$`)
@@ -495,6 +497,21 @@ func normalizeTags(src []string, maxTags int) types.StringSlice {
 	return types.StringSlice(dst)
 }
 
+func validateTag(tag string) (string, string) {
+	// Check if the tag already has a prefix e.g. basic:alice.
+	if parts := prefixedTagRegexp.FindStringSubmatch(tag); len(parts) == 3 {
+		// Valid prefixed tag.
+		return parts[1], parts[2]
+	}
+
+	if tagRegexp.MatchString(tag) {
+		// Valid unprefixed tag (tag value only).
+		return "", tag
+	}
+
+	return "", ""
+}
+
 // hasDuplicateNamespaceTags checks for duplication of unique NS tags.
 // Each namespace can have only one tag. This does not prevent tags from
 // being duplicate accross requests, just saves an extra DB call.
@@ -874,9 +891,7 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 // Shallow copy of a map
 func copyMap(src map[string]any) map[string]any {
 	dst := make(map[string]any, len(src))
-	for key, val := range src {
-		dst[key] = val
-	}
+	maps.Copy(dst, src)
 	return dst
 }
 

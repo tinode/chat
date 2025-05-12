@@ -50,7 +50,7 @@ func (g *graphemes) slice(start, end int) *graphemes {
 
 	// Convert grapheme offsets to string offsets.
 	s := 0
-	for i := 0; i < start; i++ {
+	for i := range start {
 		s += int(g.sizes[i])
 	}
 	e := s

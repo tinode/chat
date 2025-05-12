@@ -20,6 +20,8 @@ import (
 	"strings"
 	textt "text/template"
 
+	"slices"
+
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
@@ -241,15 +243,7 @@ func (v *validator) PreCheck(cred string, _ map[string]any) (string, error) {
 			return "", t.ErrMalformed
 		}
 
-		var found bool
-		for _, domain := range v.Domains {
-			if domain == parts[1] {
-				found = true
-				break
-			}
-		}
-
-		if !found {
+		if !slices.Contains(v.Domains, parts[1]) {
 			return "", t.ErrPolicy
 		}
 	}

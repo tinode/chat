@@ -209,10 +209,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
-		upper := i + pushBatchSize
-		if upper > n {
-			upper = n
-		}
+		upper := min(i+pushBatchSize, n)
 		var payloads []any
 		for j := i; j < upper; j++ {
 			payloads = append(payloads, messages[j])

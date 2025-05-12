@@ -69,7 +69,7 @@ func (ring *Ring) Len() int {
 // Add adds keys to the ring.
 func (ring *Ring) Add(keys ...string) {
 	for _, key := range keys {
-		for i := 0; i < ring.replicas; i++ {
+		for i := range ring.replicas {
 			ring.keys = append(ring.keys, elem{
 				hash: ring.hashfunc([]byte(strconv.Itoa(i) + key)),
 				key:  key})

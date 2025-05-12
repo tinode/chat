@@ -81,7 +81,7 @@ func verifyResponseCodes(r *responses, codes []int, t *testing.T) {
 	if len(r.messages) != len(codes) {
 		t.Errorf("responses: expected %d, received %d.", len(codes), len(r.messages))
 	}
-	for i := 0; i < len(codes); i++ {
+	for i := range codes {
 		resp := r.messages[i].(*ServerComMessage)
 		if resp == nil {
 			t.Fatalf("Response %d must be ServerComMessage", i)

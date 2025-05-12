@@ -41,7 +41,7 @@ func TestSelectEarliestUpdatedSubs(t *testing.T) {
 
 	getOrder := func(subs []types.Subscription) string {
 		var order []string
-		for i := 0; i < len(subs); i++ {
+		for i := range subs {
 			order = append(order, subs[i].Id)
 		}
 		return strings.Join(order, ",")

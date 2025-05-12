@@ -111,7 +111,7 @@ func genDb(data *Data, p2pDel bool) {
 		// Add address book as fnd.private
 		if len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
-				map[string]interface{}{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
+				map[string]any{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -297,7 +297,7 @@ func genDb(data *Data, p2pDel bool) {
 			// Initial maximum increment of the message sent time in milliseconds
 			increment := 3600 * 1000
 			subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
-			for i := 0; i < toInsert; i++ {
+			for i := range toInsert {
 				// At least 20% of subsequent messages should come from the same user in the same topic.
 				if rand.Intn(5) > 0 {
 					subIdx = rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)

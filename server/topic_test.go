@@ -83,7 +83,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	t.Helper()
 	b.numUsers = numUsers
 	b.uids = make([]types.Uid, numUsers)
-	for i := 0; i < numUsers; i++ {
+	for i := range numUsers {
 		// Can't use 0 as a valid uid.
 		b.uids[i] = types.Uid(i + 1)
 	}
@@ -1291,7 +1291,7 @@ func registerSessionVerifyOutputs(t *testing.T, sessionOutput *responses, expect
 	// Session output.
 	if len(sessionOutput.messages) == len(expectedCtrlCodes) {
 		n := len(expectedCtrlCodes)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			resp := sessionOutput.messages[i].(*ServerComMessage)
 			code := expectedCtrlCodes[i]
 			if resp.Ctrl != nil {
@@ -2104,7 +2104,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	helper.ss.EXPECT().Delete(topicName, uid).Return(nil)
 
 	// Add a couple more sessions.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		s, r := helper.newSession(fmt.Sprintf("sid-uid-%d-%d", uid, i), uid)
 		helper.sessions = append(helper.sessions, s)
 		helper.results = append(helper.results, r)

@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"time"
 
+	"slices"
+
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -487,13 +489,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	}
 
 	// Is this a required credential for this validation level?
-	var isRequired bool
-	for _, method := range globals.authValidators[authLvl] {
-		if method == cred.Method {
-			isRequired = true
-			break
-		}
-	}
+	isRequired := slices.Contains(globals.authValidators[authLvl], cred.Method)
 
 	// If credential is required, make sure the method remains validated even after this credential is deleted.
 	if isRequired {

@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 
+	"slices"
+
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -88,14 +90,7 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 		return false
 	}
 
-	method = strings.ToUpper(method)
-	for _, mm := range allowMethods {
-		if mm == method {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(allowMethods, strings.ToUpper(method))
 }
 
 // CORSHandler is the default CORS processor for use by media handlers. It adds CORS headers to

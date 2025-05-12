@@ -37,7 +37,7 @@ func (p *GoRoutinePool) Schedule(task Task) {
 // Stop sends a stop signal to all running goroutines.
 func (p *GoRoutinePool) Stop() {
 	numWorkers := cap(p.sem)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		p.stop <- struct{}{}
 	}
 }

@@ -327,7 +327,7 @@ func (h *Hub) run() {
 				return true
 			})
 
-			for i := 0; i < topicCount; i++ {
+			for range topicCount {
 				<-topicsdone
 			}
 
@@ -593,7 +593,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 	statsInc("LiveTopics", -count)
 
 	if alldone != nil {
-		for i := 0; i < count; i++ {
+		for range count {
 			<-done
 		}
 		alldone <- true

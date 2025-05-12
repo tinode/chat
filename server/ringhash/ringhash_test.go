@@ -169,7 +169,7 @@ func benchmarkGet(b *testing.B, keycount int) {
 	ring := ringhash.New(53, nil)
 
 	var ids []string
-	for i := 0; i < keycount; i++ {
+	for i := range keycount {
 		ids = append(ids, fmt.Sprintf("id=%d", i))
 	}
 
@@ -177,7 +177,7 @@ func benchmarkGet(b *testing.B, keycount int) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ring.Get(ids[i&(keycount-1)])
 	}
 }

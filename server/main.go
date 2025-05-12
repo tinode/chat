@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
@@ -63,7 +62,7 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.23"
+	currentVersion = "0.24"
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.19"
 
@@ -407,10 +406,6 @@ func main() {
 		decVersion = base10Version(parseVersion(currentVersion))
 	}
 	statsSet("Version", decVersion)
-
-	// Initialize random state.
-	// This is deprecated, should be removed when support of Go 1.19 is dropped.
-	rand.Seed(time.Now().UnixNano())
 
 	// Initialize serving debug profiles (optional).
 	servePprof(mux, *pprofUrl)

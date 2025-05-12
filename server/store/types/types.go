@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"slices"
 )
 
 // StoreError satisfies Error interface but allows constant values for
@@ -276,7 +277,7 @@ func (us *UidSlice) Rem(uid Uid) bool {
 	if idx == len(*us)-1 {
 		*us = (*us)[:idx]
 	} else {
-		*us = append((*us)[:idx], (*us)[idx+1:]...)
+		*us = slices.Delete((*us), idx, idx+1)
 	}
 	return true
 }
@@ -603,7 +604,7 @@ func ParseAcs(b []byte) (AccessMode, error) {
 	m0 := ModeUnset
 
 Loop:
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		switch b[i] {
 		case 'J', 'j':
 			m0 |= ModeJoin

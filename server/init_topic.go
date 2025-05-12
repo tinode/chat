@@ -279,7 +279,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 
 	if stopic != nil && len(subs) == 2 {
 		// Case 4.
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
 				// Adapter has already swapped the state, public, defaultAccess, lastSeen values.

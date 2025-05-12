@@ -958,7 +958,7 @@ func pbTopicSubSliceSerialize(subs []MsgTopicSub) []*pbx.TopicSub {
 	}
 
 	out := make([]*pbx.TopicSub, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = pbTopicSubSerialize(&subs[i])
 	}
 	return out
@@ -994,7 +994,7 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 	}
 
 	out := make([]MsgTopicSub, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = MsgTopicSub{
 			UpdatedAt: int64ToTime(subs[i].GetUpdatedAt()),
 			DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
@@ -1029,7 +1029,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 	}
 
 	out := make([]types.Subscription, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = types.Subscription{
 			ObjHeader: types.ObjHeader{
 				UpdatedAt: *int64ToTime(subs[i].GetUpdatedAt()),

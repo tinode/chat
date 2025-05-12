@@ -133,7 +133,7 @@ func (f *Feature) UnmarshalText(b []byte) error {
 			f0, err = strconv.Atoi(string(b))
 		} else {
 		Loop:
-			for i := 0; i < len(b); i++ {
+			for i := range b {
 				switch b[i] {
 				case 'V', 'v':
 					f0 |= int(FeatureValidated)
