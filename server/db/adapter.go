@@ -146,7 +146,7 @@ type Adapter interface {
 	// FindTopics searches for group topics given a list of tags.
 	FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
 	// FindAny returns topics and/or users which match the given tag, with optional partial matching.
-	FindAny(user t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error)
+	FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error)
 
 	// Messages
 

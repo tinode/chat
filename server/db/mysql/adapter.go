@@ -2554,12 +2554,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 
 // FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
 //
-//	uid - caller ID. If this ID is found as matching, skip it.
 //	tag - tag to find
-//	limit - number of results to return; limit = 1 is a special case, which only checks for result existence.
+//	limit - number of results to return; limit = 0 is a special case, which only checks for result's existence.
 //	partialMatch - use tag as prefix to match.
 //	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
-func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
+func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
 	var args []any
 	var tagMatcher func(needle, haystack string) bool
 	var compareOp string
@@ -2581,7 +2580,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 	}
 
 	query := "SELECT t.name AS topic"
-	if limit > 1 {
+	if limit > 0 {
 		query += ",t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags"
 	}
 	query += " FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
@@ -2595,7 +2594,7 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 	query += " UNION ALL "
 
 	query += "SELECT u.id AS topic"
-	if limit > 1 {
+	if limit > 0 {
 		query += ",u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags "
 	}
 	query += " FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
@@ -2607,7 +2606,11 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 
 	// LIMIT is applied to all resultant rows.
 	query += " LIMIT ?"
-	args = append(args, limit)
+	if limit > 0 {
+		args = append(args, limit)
+	} else {
+		args = append(args, 1)
+	}
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -2624,9 +2627,8 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 	var isChan int
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := uid.UserId()
 	for rows.Next() {
-		if limit == 1 {
+		if limit == 0 {
 			if err = rows.Scan(&sub.Topic); err != nil {
 				subs = nil
 				break
@@ -2640,21 +2642,17 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 		// User IDs are returned as decoded decimal strings.
 		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
 			sub.Topic = store.EncodeUid(id).UserId()
-
-			// Skip the caller.
-			if sub.Topic == thisUser {
-				continue
-			}
 		}
 
-		if isChan != 0 {
-			sub.Topic = t.GrpToChn(sub.Topic)
-		}
-
-		if limit == 1 {
+		if limit == 0 {
 			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
+		}
+
+		// Not converting when limit == 0 because the caller is always a topic owner.
+		if isChan != 0 {
+			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		sub.SetPublic(common.FromJSON(public))

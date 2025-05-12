@@ -2035,12 +2035,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 
 // FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
 //
-//	uid - caller ID. If this ID is found as matching, skip it.
 //	tag - tag to find
-//	limit - number of results to return; limit = 1 is a special case, which only checks for result existence.
+//	limit - number of results to return; limit = 0 is a special case, which only checks for result existence.
 //	partialMatch - use tag as prefix to match.
 //	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
-func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
+func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
 	var tagMatcher func(needle, haystack string) bool
 	query := rdb.DB(a.dbName)
 	if partialMatch {
@@ -2067,12 +2066,11 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 		limit = a.maxResults
 	}
 
-	if limit == 1 {
-		query = query.Pluck("Id")
+	if limit > 0 {
+		query = query.Pluck("Id", "CreatedAt", "UpdatedAt", "UseBt", "Access", "Public", "Trusted", "Tags").Limit(limit)
 	} else {
-		query = query.Pluck("Id", "CreatedAt", "UpdatedAt", "UseBt", "Access", "Public", "Trusted", "Tags")
+		query = query.Pluck("Id").Limit(1)
 	}
-	query = query.Limit(limit)
 
 	// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
 	cursor, err := query.Run(a.conn)
@@ -2087,21 +2085,19 @@ func (a *adapter) FindAny(uid t.Uid, tag string, limit int, partialMatch, active
 	for cursor.Next(&topic) {
 		if user := t.ParseUid(topic.Id); !user.IsZero() {
 			sub.Topic = user.UserId()
-			if user == uid {
-				continue
-			}
 		} else {
 			sub.Topic = topic.Id
 		}
 
-		if topic.UseBt {
-			sub.Topic = t.GrpToChn(sub.Topic)
-		}
-
-		if limit == 1 {
+		if limit == 0 {
 			subs = append(subs, sub)
 			// That's it, one result is found, done.
 			break
+		}
+
+		// Not converting when limit == 0 because the caller is always a topic owner.
+		if topic.UseBt {
+			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		sub.CreatedAt = topic.CreatedAt

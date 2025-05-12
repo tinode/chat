@@ -2819,8 +2819,11 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 		if tag, ok := raw.(string); ok && tag != "" {
 			tag, subs, err := pluginFind(asUid, tag)
 			if err == nil && subs == nil && tag != "" {
-				// Check soft-deleted and suspended topics too: they can be reactivated.
-				subs, err = store.Users.Find(asUid, tag, 1, false, true)
+				if prefix, _ := validateTag(tag); prefix != "" {
+					// Check only if a fully-qualified tag was sent. Otherwise ignore the request.
+					// Check soft-deleted and suspended topics too: they can be reactivated.
+					subs, err = store.Users.Find(tag, 0, false, true)
+				}
 			}
 
 			if err != nil {
@@ -2902,7 +2905,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 				// It's not inside a transaction, so a race may happen.
 				for _, tag := range unique {
 					var result []types.Subscription
-					if result, err = store.Users.Find(asUid, tag, 1, false, false); err != nil {
+					if result, err = store.Users.Find(tag, 0, false, false); err != nil {
 						resp = ErrUnknownReply(msg, now)
 						break
 					} else if len(result) > 0 {
