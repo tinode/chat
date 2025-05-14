@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 
 	fbase "firebase.google.com/go"
 	legacy "firebase.google.com/go/messaging"
@@ -142,7 +143,7 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 			for _, err := range decodingErrs {
 				logs.Info.Println("fcm googleapi.Error decoding:", err)
 			}
-			switch gerr.FcmErrCode {
+			switch strings.ToUpper(gerr.FcmErrCode) {
 			case "": // no error
 			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
 				// Transient errors. Stop sending this batch.

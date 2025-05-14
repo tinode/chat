@@ -481,10 +481,8 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 		// HTTP status code.
 		decoded.HttpCode = gerr.Code
 		decoded.ErrMessage = gerr.Message
-		if len(gerr.Errors) > 0 {
-			for _, errInfo := range gerr.Errors {
-				decoded.ErrMessage += "; " + errInfo.Reason + "/" + errInfo.Message
-			}
+		for _, errInfo := range gerr.Errors {
+			decoded.ErrMessage += "; " + errInfo.Reason + "/" + errInfo.Message
 		}
 
 		// Decode the FCM error.
@@ -531,15 +529,14 @@ func DecodeGoogleApiError(err error) (decoded *GApiError, errs []error) {
 				errs = append(errs, fmt.Errorf("unknown error '@type': %v", details))
 			}
 		}
-
-		if decoded.FcmErrCode == "" {
-			decoded.FcmErrCode = string(ErrorUnspecified)
-		}
 	} else {
 		decoded.HttpCode = http.StatusBadRequest
-		decoded.FcmErrCode = string(ErrorUnspecified)
 		decoded.ErrMessage = err.Error()
 		errs = append(errs, fmt.Errorf("not googleapi.Error %w", err))
+	}
+
+	if decoded.FcmErrCode == "" {
+		decoded.FcmErrCode = string(ErrorUnspecified)
 	}
 
 	return
