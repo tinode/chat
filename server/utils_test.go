@@ -503,22 +503,22 @@ func TestFilterTags(t *testing.T) {
 func TestHasDuplicateNamespaceTags(t *testing.T) {
 	cases := []struct {
 		tags     []string
-		ns       map[string]bool
+		ns       string
 		expected bool
 	}{
 		{
 			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
-			ns:       map[string]bool{"ns1": true, "ns2": false, "xtra": true, "nons": true},
+			ns:       "ns1",
 			expected: false,
 		},
 		{
 			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: ", "ns1:tag2"},
-			ns:       map[string]bool{"ns1": true, "ns2": false, "xtra": true},
+			ns:       "ns1",
 			expected: true,
 		},
 		{
 			tags:     []string{"ns1:tag1", "ns2:tag3", "nons", "inval::tag", ":tag3", "tag4:", "tag5: "},
-			ns:       map[string]bool{},
+			ns:       "",
 			expected: false,
 		},
 	}

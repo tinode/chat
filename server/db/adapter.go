@@ -141,12 +141,16 @@ type Adapter interface {
 
 	// Search
 
-	// FindUsers searches for new contacts given a list of tags.
-	FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
-	// FindTopics searches for group topics given a list of tags.
-	FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
-	// FindAny returns topics and/or users which match the given tag, with optional partial matching.
-	FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error)
+	// Find searches for users or topics given a list of tags.
+	// - caller is the user or topic who is doing the searching, it will be skipped from results.
+	// - prefix if present will cause match rank highest in the results.
+	// - req is a list of required tag sets. Each set is a list of tags. The search will return
+	//   all users/topics which have at least one tag from each set.
+	// - opt is a list of optional tags; if present the result will rank higher.
+	// - activeOnly if true will return only active subscriptions.
+	Find(caller, prefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
+	// FindOne returns topic or user which matches the given tag.
+	FindOne(tag string) (string, error)
 
 	// Messages
 

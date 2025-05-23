@@ -79,8 +79,25 @@ func RangesToSql(in []t.Range) (string, []any) {
 	}
 
 	// Optimizing for a special case of single range low..hi.
-	// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
+	// SQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
 	return "BETWEEN ? AND ?", []any{in[0].Low, in[0].Hi - 1}
+}
+
+// DisjunctionSql converts a slice of disjunctions to SQL HAVING clause and arguments.
+func DisjunctionSql(req [][]string, fieldName string) (string, []any) {
+	var args []any
+	counts := make([]string, 0, len(req))
+	for _, reqDisjunction := range req {
+		// At least one of the tags must be present.
+		if len(reqDisjunction) == 0 {
+			continue
+		}
+		counts = append(counts, "COUNT("+fieldName+" IN (?"+strings.Repeat(",?", len(reqDisjunction)-1)+") OR NULL)>=1")
+		for _, tag := range reqDisjunction {
+			args = append(args, tag)
+		}
+	}
+	return "HAVING " + strings.Join(counts, " AND ") + " ", args
 }
 
 // Convert to JSON before storing to JSON field.

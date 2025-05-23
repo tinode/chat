@@ -1872,9 +1872,8 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	return err
 }
 
-// FindUsers returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
-// Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+// Find returns a list of users and topics who match the given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	allReq := t.FlattenDoubleSlice(req)
 	var allTags []any
@@ -1888,90 +1887,23 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string, activeOnly 
 		r.db('tinode').
 			table('users').
 			getAll(<all tags here>, {index: "Tags"}).
+			union(r.table('topics').
+				getAll(<tags again>, {index: "Tags"})).
 			pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
-			group("Id").ungroup().
+			group("Id").
+			ungroup().
 			map(function(row) { return row.getField('reduction').nth(0).merge({matchedCount: row.getField('reduction').count()}); }).
 			filter(function(row) { return row.getField("Tags").setIntersection([<required tags here>]).count().ne(0); }).
 			orderBy(r.desc('matchedCount')).
 			limit(20);
 	*/
 
-	// Get users matched by tags, sort by number of matches from high to low.
+	// Get users and topics matched by tags, sort by number of matches from high to low.
 	query := rdb.DB(a.dbName).
 		Table("users").
-		GetAllByIndex("Tags", allTags...)
-	if activeOnly {
-		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
-	}
-	query = query.Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Trusted", "Tags").
-		Group("Id").
-		Ungroup().
-		Map(func(row rdb.Term) rdb.Term {
-			return row.Field("reduction").
-				Nth(0).
-				Merge(map[string]any{"MatchedTagsCount": row.Field("reduction").Count()})
-		})
-
-	for _, l := range req {
-		var reqTags []any
-		for _, tag := range l {
-			reqTags = append(reqTags, tag)
-		}
-		query = query.Filter(func(row rdb.Term) rdb.Term {
-			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
-		})
-	}
-	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(a.maxResults).Run(a.conn)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	var user t.User
-	var sub t.Subscription
-	var subs []t.Subscription
-	for cursor.Next(&user) {
-		if user.Id == uid.String() {
-			// Skip the callee
-			continue
-		}
-		sub.CreatedAt = user.CreatedAt
-		sub.UpdatedAt = user.UpdatedAt
-		sub.User = user.Id
-		sub.SetPublic(user.Public)
-		sub.SetTrusted(user.Trusted)
-		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
-		tags := make([]string, 0, 1)
-		for _, tag := range user.Tags {
-			if _, ok := index[tag]; ok {
-				tags = append(tags, tag)
-			}
-		}
-		sub.Private = tags
-		subs = append(subs, sub)
-	}
-
-	if err = cursor.Err(); err != nil {
-		return nil, err
-	}
-
-	return subs, nil
-
-}
-
-// FindTopics returns a list of topics with matching tags.
-// Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
-	index := make(map[string]struct{})
-	allReq := t.FlattenDoubleSlice(req)
-	var allTags []any
-	for _, tag := range append(allReq, opt...) {
-		allTags = append(allTags, tag)
-		index[tag] = struct{}{}
-	}
-	query := rdb.DB(a.dbName).
-		Table("topics").
-		GetAllByIndex("Tags", allTags...)
+		GetAllByIndex("Tags", allTags...).
+		Union(rdb.DB(a.dbName).Table("topics").
+			GetAllByIndex("Tags", allTags...))
 	if activeOnly {
 		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
 	}
@@ -1984,18 +1916,19 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 				Merge(map[string]any{"MatchedTagsCount": row.Field("reduction").Count()})
 		})
 
-	if len(allReq) > 0 {
-		for _, l := range req {
-			var reqTags []any
-			for _, tag := range l {
-				reqTags = append(reqTags, tag)
-			}
-			query = query.Filter(func(row rdb.Term) rdb.Term {
-				return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
-			})
+	for _, reqDisjunction := range req {
+		if len(reqDisjunction) == 0 {
+			continue
 		}
+		var reqTags []any
+		for _, tag := range reqDisjunction {
+			reqTags = append(reqTags, tag)
+		}
+		// Filter out objects which do not match at least one of the required tags.
+		query = query.Filter(func(row rdb.Term) rdb.Term {
+			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
+		})
 	}
-
 	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(a.maxResults).Run(a.conn)
 	if err != nil {
 		return nil, err
@@ -2005,99 +1938,17 @@ func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t
 	var topic t.Topic
 	var sub t.Subscription
 	var subs []t.Subscription
+	thisUser := caller.UserId()
 	for cursor.Next(&topic) {
-		sub.CreatedAt = topic.CreatedAt
-		sub.UpdatedAt = topic.UpdatedAt
+		if topic.Id == thisUser {
+			// Skip the caller
+			continue
+		}
+
 		if topic.UseBt {
 			sub.Topic = t.GrpToChn(topic.Id)
 		} else {
 			sub.Topic = topic.Id
-		}
-		sub.SetPublic(topic.Public)
-		sub.SetPublic(topic.Trusted)
-		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
-		tags := make([]string, 0, 1)
-		for _, tag := range topic.Tags {
-			if _, ok := index[tag]; ok {
-				tags = append(tags, tag)
-			}
-		}
-		sub.Private = tags
-		subs = append(subs, sub)
-	}
-
-	if err = cursor.Err(); err != nil {
-		return nil, err
-	}
-	return subs, nil
-
-}
-
-// FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
-//
-//	tag - tag to find
-//	limit - number of results to return; limit = 0 is a special case, which only checks for result existence.
-//	partialMatch - use tag as prefix to match.
-//	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
-func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
-	var tagMatcher func(needle, haystack string) bool
-	query := rdb.DB(a.dbName)
-	if partialMatch {
-		// This is seriously inefficient.
-		query = query.Table("users").Union(rdb.Table("topics")).Filter(func(row rdb.Term) any {
-			return row.Field("Tags").Default([]any{}).Contains(
-				func(df rdb.Term) any {
-					// Case-insensitive regex match.
-					return df.Field("User").Match("(?i)^" + tag)
-				})
-		})
-		tagMatcher = strings.HasPrefix
-	} else {
-		query = query.Table("users").GetAllByIndex("Tags", tag).Union(rdb.Table("topics").GetAllByIndex("Tags", tag))
-		tagMatcher = func(needle, haystack string) bool {
-			return needle == haystack
-		}
-	}
-
-	if activeOnly {
-		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
-	}
-	if limit > a.maxResults {
-		limit = a.maxResults
-	}
-
-	if limit > 0 {
-		query = query.Pluck("Id", "CreatedAt", "UpdatedAt", "UseBt", "Access", "Public", "Trusted", "Tags").Limit(limit)
-	} else {
-		query = query.Pluck("Id").Limit(1)
-	}
-
-	// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
-	cursor, err := query.Run(a.conn)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	var topic t.Topic
-	var sub t.Subscription
-	var subs []t.Subscription
-	for cursor.Next(&topic) {
-		if user := t.ParseUid(topic.Id); !user.IsZero() {
-			sub.Topic = user.UserId()
-		} else {
-			sub.Topic = topic.Id
-		}
-
-		if limit == 0 {
-			subs = append(subs, sub)
-			// That's it, one result is found, done.
-			break
-		}
-
-		// Not converting when limit == 0 because the caller is always a topic owner.
-		if topic.UseBt {
-			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
 		sub.CreatedAt = topic.CreatedAt
@@ -2105,20 +1956,49 @@ func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) 
 		sub.SetPublic(topic.Public)
 		sub.SetTrusted(topic.Trusted)
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
-
-		if len(topic.Tags) > 0 {
-			foundTags := make([]string, 0, 1)
-			for _, tt := range topic.Tags {
-				if tagMatcher(tag, tt) {
-					foundTags = append(foundTags, tt)
-				}
+		// Indicating that the mode is not set, not 'N'.
+		sub.ModeGiven = t.ModeUnset
+		sub.ModeWant = t.ModeUnset
+		foundTags := make([]string, 0, 1)
+		for _, tag := range topic.Tags {
+			if _, ok := index[tag]; ok {
+				foundTags = append(foundTags, tag)
 			}
-			sub.Private = foundTags
 		}
+		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
 
-	return subs, nil
+	return subs, cursor.Err()
+
+}
+
+// FindOne returns topic or user which matches the given tag.
+func (a *adapter) FindOne(tag string) (string, error) {
+	query := rdb.DB(a.dbName).
+		Table("users").GetAllByIndex("Tags", tag).
+		Union(rdb.DB(a.dbName).Table("topics").GetAllByIndex("Tags", tag)).
+		Field("Id").
+		Limit(1)
+	cursor, err := query.Run(a.conn)
+	if err != nil {
+		return "", err
+	}
+	defer cursor.Close()
+
+	var found string
+	if err = cursor.One(&found); err != nil {
+		if err == rdb.ErrEmptyResult {
+			return "", nil
+		}
+		return "", err
+	}
+
+	if user := t.ParseUid(found); !user.IsZero() {
+		found = user.UserId()
+	}
+
+	return found, nil
 }
 
 // Messages

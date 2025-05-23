@@ -2441,55 +2441,49 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 		}
 	case types.TopicCatFnd:
-		// Try rewriting tags as login pattern i.e. "abcd" -> "basic:abcd"
-		rewriteLogin := true
-		// Select public or private query. Public has priority.
-		raw := t.fndGetPublic(sess)
-		if raw == nil {
-			raw = userData.private
-			// Private: not rewriting.
-			rewriteLogin = false
+		// Select public or private query. Public is set interactively and has priority.
+		query := t.fndGetPublic(sess)
+		if query == "" {
+			query, _ = userData.private.(string)
 		}
 
-		if query, ok := raw.(string); ok && len(query) > 0 {
-			query, subs, err = pluginFind(asUid, query)
-			if err == nil && subs == nil && query != "" {
-				if and, opt, err := parseSearchQuery(query); err == nil {
-					var req [][]string
-					for _, tag := range and {
-						rewritten := rewriteTag(tag, sess.countryCode, rewriteLogin)
-						if len(rewritten) > 0 {
-							req = append(req, rewritten)
-						}
+		if query == "" {
+			// Query parsing error or no query. Report it externally as a generic ErrMalformed.
+			sess.queueOut(ErrMalformedReply(msg, now))
+			return errors.New("failed to parse search query; " + err.Error())
+		}
+
+		query, subs, err = pluginFind(asUid, query)
+		if err == nil && subs == nil && query != "" {
+			if and, opt, err := parseSearchQuery(query); err == nil {
+				var req [][]string
+				for _, tag := range and {
+					rewritten := rewriteTag(tag, sess.countryCode)
+					if len(rewritten) > 0 {
+						req = append(req, rewritten)
 					}
-					opt = rewriteTagSlice(opt, sess.countryCode, rewriteLogin)
-					if len(req) > 0 || len(opt) > 0 {
-						// Check if the query contains terms that the user is not allowed to use.
-						allReq := types.FlattenDoubleSlice(req)
-						restr, _, _ := stringSliceDelta(t.tags, filterTags(append(allReq, opt...), globals.maskedTagNS))
+				}
+				opt = rewriteTagSlice(opt, sess.countryCode)
 
-						if len(restr) > 0 {
-							sess.queueOut(ErrPermissionDeniedReply(msg, now))
-							return errors.New("attempt to search by restricted tags")
-						}
-
-						// Ordinary users: find only active topics and accounts.
-						// Root users: find all topics and accounts, including suspended and soft-deleted.
-						subs, err = store.Users.FindSubs(asUid, req, opt, sess.authLvl != auth.LevelRoot)
-						if err != nil {
-							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
-							return err
-						}
-
-					} else {
-						// Query string is empty.
-						sess.queueOut(ErrMalformedReply(msg, now))
-						return errors.New("empty search query")
-					}
-				} else {
-					// Query parsing error. Report it externally as a generic ErrMalformed.
+				if len(req) == 0 && len(opt) == 0 {
+					// Query string is empty.
 					sess.queueOut(ErrMalformedReply(msg, now))
-					return errors.New("failed to parse search query; " + err.Error())
+					return errors.New("empty search query")
+				}
+
+				// Check if the query contains terms that the user is not allowed to use.
+				if restr, _, _ := stringSliceDelta(t.tags,
+					filterTags(append(types.FlattenDoubleSlice(req), opt...), globals.maskedTagNS)); len(restr) > 0 {
+					sess.queueOut(ErrPermissionDeniedReply(msg, now))
+					return errors.New("attempt to search by restricted tags")
+				}
+
+				// Ordinary users: find only active topics and accounts.
+				// Root users: find all topics and accounts, including suspended and soft-deleted.
+				subs, err = store.Users.FindSubs(asUid, globals.aliasTagNS, req, opt, sess.authLvl != auth.LevelRoot)
+				if err != nil {
+					sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
+					return err
 				}
 			}
 		}
@@ -2530,165 +2524,170 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		return err
 	}
 
-	if len(subs) > 0 {
-		meta := &MsgServerMeta{Id: id, Topic: msg.Original, Timestamp: &now}
-		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		presencer := (userData.modeGiven & userData.modeWant).IsPresencer()
-		sharer := (userData.modeGiven & userData.modeWant).IsSharer()
+	if len(subs) == 0 {
+		// Inform the client that there are no subscriptions.
+		sess.queueOut(NoContentParamsReply(msg, now, map[string]any{"what": "sub"}))
+		return nil
+	}
 
-		for i := range subs {
-			sub := &subs[i]
-			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
-			var sendPubPriv bool
-			var banned bool
-			var mts MsgTopicSub
-			deleted := sub.DeletedAt != nil
+	meta := &MsgServerMeta{
+		Id:        id,
+		Topic:     msg.Original,
+		Sub:       make([]MsgTopicSub, 0, len(subs)),
+		Timestamp: &now}
+	presencer := (userData.modeGiven & userData.modeWant).IsPresencer()
+	sharer := (userData.modeGiven & userData.modeWant).IsSharer()
 
-			if ifModified.IsZero() {
-				sendPubPriv = true
-			} else {
-				// Skip sending deleted subscriptions if they were deleted before the cut off date.
-				// If they are freshly deleted send minimum info
-				if deleted {
-					if !sub.DeletedAt.After(ifModified) {
-						continue
-					}
-					mts.DeletedAt = sub.DeletedAt
+	for i := range subs {
+		sub := &subs[i]
+		// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
+		var sendPubPriv bool
+		var banned bool
+		var mts MsgTopicSub
+		deleted := sub.DeletedAt != nil
+
+		if ifModified.IsZero() {
+			sendPubPriv = true
+		} else {
+			// Skip sending deleted subscriptions if they were deleted before the cut off date.
+			// If they are freshly deleted send minimum info
+			if deleted {
+				if !sub.DeletedAt.After(ifModified) {
+					continue
 				}
-				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
+				mts.DeletedAt = sub.DeletedAt
+			}
+			sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
+		}
+
+		uid := types.ParseUid(sub.User)
+		subMode := sub.ModeGiven & sub.ModeWant
+		isReader := subMode.IsReader()
+		if t.cat == types.TopicCatMe {
+			// Mark subscriptions that the user does not care about.
+			if !subMode.IsJoiner() {
+				banned = true
 			}
 
-			uid := types.ParseUid(sub.User)
-			subMode := sub.ModeGiven & sub.ModeWant
-			isReader := subMode.IsReader()
-			if t.cat == types.TopicCatMe {
-				// Mark subscriptions that the user does not care about.
-				if !subMode.IsJoiner() {
-					banned = true
-				}
-
-				// Reporting user's subscriptions to other topics. P2P topic name is the
-				// UID of the other user.
-				with := sub.GetWith()
-				if with != "" {
-					mts.Topic = with
-					mts.Online = t.perSubs[with].online && !deleted && presencer
-				} else if strings.HasPrefix(sub.Topic, "slf") {
-					mts.Topic = "slf"
-					// Not reporting Online as it makes no sense for slf.
-				} else {
-					mts.Topic = sub.Topic
-					mts.Online = t.perSubs[sub.Topic].online && !deleted && presencer
-				}
-
-				if !deleted && !banned {
-					if isReader {
-						touchedAt := sub.GetTouchedAt()
-						if touchedAt.IsZero() {
-							mts.TouchedAt = nil
-						} else {
-							mts.TouchedAt = &touchedAt
-						}
-						mts.SeqId = sub.GetSeqId()
-						mts.DelId = sub.DelId
-					} else if !sub.UpdatedAt.IsZero() {
-						mts.TouchedAt = &sub.UpdatedAt
-					}
-
-					lastSeen := sub.GetLastSeen()
-					if lastSeen != nil && !mts.Online {
-						mts.LastSeen = &MsgLastSeenInfo{
-							When:      lastSeen,
-							UserAgent: sub.GetUserAgent(),
-						}
-					}
-				}
+			// Reporting user's subscriptions to other topics. P2P topic name is the
+			// UID of the other user.
+			with := sub.GetWith()
+			if with != "" {
+				mts.Topic = with
+				mts.Online = t.perSubs[with].online && !deleted && presencer
+			} else if strings.HasPrefix(sub.Topic, "slf") {
+				mts.Topic = "slf"
+				// Not reporting Online as it makes no sense for slf.
 			} else {
-				// Mark subscriptions that the user does not care about.
-				if t.cat == types.TopicCatGrp && !subMode.IsJoiner() {
-					banned = true
-				}
+				mts.Topic = sub.Topic
+				mts.Online = t.perSubs[sub.Topic].online && !deleted && presencer
+			}
 
-				// Reporting subscribers to fnd, a group or a p2p topic
-				mts.User = uid.UserId()
-				if t.cat == types.TopicCatFnd {
-					mts.Topic = sub.Topic
-				}
-
-				if !deleted {
-					if uid == asUid && isReader && !banned {
-						// Report deleted ID for own subscriptions only
-						mts.DelId = sub.DelId
+			if !deleted && !banned {
+				if isReader {
+					touchedAt := sub.GetTouchedAt()
+					if touchedAt.IsZero() {
+						mts.TouchedAt = nil
+					} else {
+						mts.TouchedAt = &touchedAt
 					}
+					mts.SeqId = sub.GetSeqId()
+					mts.DelId = sub.DelId
+				} else if !sub.UpdatedAt.IsZero() {
+					mts.TouchedAt = &sub.UpdatedAt
+				}
 
-					if t.cat == types.TopicCatGrp {
-						pud := t.perUser[uid]
-						mts.Online = pud.online > 0 && presencer
+				lastSeen := sub.GetLastSeen()
+				if lastSeen != nil && !mts.Online {
+					mts.LastSeen = &MsgLastSeenInfo{
+						When:      lastSeen,
+						UserAgent: sub.GetUserAgent(),
 					}
 				}
+			}
+		} else {
+			// Mark subscriptions that the user does not care about.
+			if t.cat == types.TopicCatGrp && !subMode.IsJoiner() {
+				banned = true
+			}
+
+			// Reporting subscribers to fnd, a group or a p2p topic
+			mts.User = uid.UserId()
+			if t.cat == types.TopicCatFnd {
+				mts.Topic = sub.Topic
 			}
 
 			if !deleted {
-				if !sub.UpdatedAt.IsZero() {
-					mts.UpdatedAt = &sub.UpdatedAt
-				}
-				if isReader && !banned {
-					mts.ReadSeqId = sub.ReadSeqId
-					mts.RecvSeqId = sub.RecvSeqId
+				if uid == asUid && isReader && !banned {
+					// Report deleted ID for own subscriptions only
+					mts.DelId = sub.DelId
 				}
 
-				if t.cat != types.TopicCatFnd {
-					// p2p and grp
-					if !sub.IsDummy() && (sharer || uid == asUid || subMode.IsAdmin()) {
-						// If user is not a sharer, the access mode of other ordinary users if not accessible.
-						// Own and admin permissions only are visible to non-sharers.
-						mts.Acs.Mode = subMode.String()
-						mts.Acs.Want = sub.ModeWant.String()
-						mts.Acs.Given = sub.ModeGiven.String()
-					}
-				} else {
-					// Topic 'fnd'
-					// sub.ModeXXX may be defined by the plugin.
-					if sub.ModeGiven.IsDefined() && sub.ModeWant.IsDefined() {
-						mts.Acs.Mode = subMode.String()
-						mts.Acs.Want = sub.ModeWant.String()
-						mts.Acs.Given = sub.ModeGiven.String()
-					} else if types.IsChannel(sub.Topic) {
-						mts.Acs.Mode = types.ModeCChnReader.String()
-					} else if defacs := sub.GetDefaultAccess(); defacs != nil {
-						switch authLevel {
-						case auth.LevelAnon:
-							mts.Acs.Mode = defacs.Anon.String()
-						case auth.LevelAuth, auth.LevelRoot:
-							mts.Acs.Mode = defacs.Auth.String()
-						}
+				if t.cat == types.TopicCatGrp {
+					pud := t.perUser[uid]
+					mts.Online = pud.online > 0 && presencer
+				}
+			}
+		}
+
+		if !deleted {
+			if !sub.UpdatedAt.IsZero() {
+				mts.UpdatedAt = &sub.UpdatedAt
+			}
+			if isReader && !banned {
+				mts.ReadSeqId = sub.ReadSeqId
+				mts.RecvSeqId = sub.RecvSeqId
+			}
+
+			if t.cat != types.TopicCatFnd {
+				// p2p and grp
+				if !sub.IsDummy() && (sharer || uid == asUid || subMode.IsAdmin()) {
+					// If user is not a sharer, the access mode of other ordinary users if not accessible.
+					// Own and admin permissions only are visible to non-sharers.
+					mts.Acs.Mode = subMode.String()
+					mts.Acs.Want = sub.ModeWant.String()
+					mts.Acs.Given = sub.ModeGiven.String()
+				}
+			} else {
+				// Topic 'fnd'
+				// sub.ModeXXX may be defined by the plugin.
+				if sub.ModeGiven.IsDefined() && sub.ModeWant.IsDefined() {
+					mts.Acs.Mode = subMode.String()
+					mts.Acs.Want = sub.ModeWant.String()
+					mts.Acs.Given = sub.ModeGiven.String()
+				} else if types.IsChannel(sub.Topic) {
+					mts.Acs.Mode = types.ModeCChnReader.String()
+				} else if defacs := sub.GetDefaultAccess(); defacs != nil {
+					switch authLevel {
+					case auth.LevelAnon:
+						mts.Acs.Mode = defacs.Anon.String()
+					case auth.LevelAuth, auth.LevelRoot:
+						mts.Acs.Mode = defacs.Auth.String()
 					}
 				}
+			}
 
-				// Returning public and private only if they have changed since ifModified
-				if sendPubPriv {
-					// 'sub' has nil 'public'/'trusted' in P2P topics which is OK.
-					mts.Public = sub.GetPublic()
-					mts.Trusted = sub.GetTrusted()
-					// Reporting 'private' only if it's user's own subscription.
-					if uid == asUid {
-						mts.Private = sub.Private
-					}
-				}
-
-				// Always reporting 'private' for fnd topic.
-				if t.cat == types.TopicCatFnd {
+			// Returning public and private only if they have changed since ifModified
+			if sendPubPriv {
+				// 'sub' has nil 'public'/'trusted' in P2P topics which is OK.
+				mts.Public = sub.GetPublic()
+				mts.Trusted = sub.GetTrusted()
+				// Reporting 'private' only if it's user's own subscription.
+				if uid == asUid {
 					mts.Private = sub.Private
 				}
 			}
 
-			meta.Sub = append(meta.Sub, mts)
+			// Always reporting 'private' for fnd topic.
+			if t.cat == types.TopicCatFnd {
+				mts.Private = sub.Private
+			}
 		}
-		sess.queueOut(&ServerComMessage{Meta: meta})
-	} else {
-		// Inform the client that there are no subscriptions.
-		sess.queueOut(NoContentParamsReply(msg, now, map[string]any{"what": "sub"}))
+
+		meta.Sub = append(meta.Sub, mts)
 	}
+
+	sess.queueOut(&ServerComMessage{Meta: meta})
 
 	return nil
 }
@@ -2815,14 +2814,18 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 		// Fnd: checking for alias availability.
 
 		// Checking public (session) data only.
-		raw := t.fndGetPublic(sess)
-		if tag, ok := raw.(string); ok && tag != "" {
+		if tag := t.fndGetPublic(sess); tag != "" {
+			var found string
 			tag, subs, err := pluginFind(asUid, tag)
-			if err == nil && subs == nil && tag != "" {
-				if prefix, _ := validateTag(tag); prefix != "" {
-					// Check only if a fully-qualified tag was sent. Otherwise ignore the request.
-					// Check soft-deleted and suspended topics too: they can be reactivated.
-					subs, err = store.Users.Find(tag, 0, false, true)
+			if err == nil {
+				if subs == nil {
+					if prefix, _ := validateTag(tag); prefix != "" {
+						// Check only if a fully-qualified tag was sent. Otherwise ignore the request.
+						found, err = store.Users.FindOne(tag)
+					}
+				} else {
+					// The plugin returned a list of topics. Send the first one.
+					found = subs[0].Topic
 				}
 			}
 
@@ -2831,13 +2834,13 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 				return err
 			}
 
-			if len(subs) > 0 {
+			if found != "" {
 				sess.queueOut(&ServerComMessage{
 					Meta: &MsgServerMeta{
 						Id:        msg.Id,
 						Topic:     msg.Original,
 						Timestamp: &now,
-						Tags:      []string{subs[0].Topic},
+						Tags:      []string{found},
 					},
 				})
 				return nil
@@ -2878,78 +2881,97 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 // replySetTags updates topic's tags - tokens used for discovery.
 func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
-	var resp *ServerComMessage
-	var err error
-	set := msg.Set
-
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		resp = ErrOperationNotAllowedReply(msg, now)
-		err = errors.New("invalid topic category to assign tags")
-
-	} else if t.cat == types.TopicCatGrp && t.owner != asUid {
-		resp = ErrPermissionDeniedReply(msg, now)
-		err = errors.New("tags update by non-owner")
-
-	} else if tags := normalizeTags(set.Tags, globals.maxTagCount); tags != nil {
-		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
-			err = errors.New("attempt to mutate restricted tags")
-			resp = ErrPermissionDeniedReply(msg, now)
-		} else if hasDuplicateNamespaceTags(tags, globals.uniqueTagNS) {
-			err = errors.New("duplicate unique tags")
-			resp = ErrMalformedReply(msg, now)
-		} else if added, removed, _ := stringSliceDelta(t.tags, tags); len(added) > 0 || len(removed) > 0 {
-			if unique := filterTags(added, globals.uniqueTagNS); len(unique) > 0 {
-				// Check for global uniqueness.
-				// It's not inside a transaction, so a race may happen.
-				for _, tag := range unique {
-					var result []types.Subscription
-					if result, err = store.Users.Find(tag, 0, false, false); err != nil {
-						resp = ErrUnknownReply(msg, now)
-						break
-					} else if len(result) > 0 {
-						err = errors.New("globally duplicate unique tags")
-						resp = ErrMalformedReply(msg, now)
-						break
-					}
-				}
-			}
-
-			if err == nil {
-				update := map[string]any{"Tags": tags, "UpdatedAt": now}
-				if t.cat == types.TopicCatMe {
-					err = store.Users.Update(asUid, update)
-				} else if t.cat == types.TopicCatGrp {
-					err = store.Topics.Update(t.name, update)
-				}
-
-				if err != nil {
-					resp = ErrUnknownReply(msg, now)
-				} else {
-					t.tags = tags
-					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, sess.sid)
-
-					params := make(map[string]any)
-					if len(added) > 0 {
-						params["added"] = len(added)
-					}
-					if len(removed) > 0 {
-						params["removed"] = len(removed)
-					}
-					resp = NoErrParamsReply(msg, now, params)
-				}
-			}
-		} else {
-			resp = InfoNotModifiedReply(msg, now)
-		}
-	} else {
-		resp = InfoNotModifiedReply(msg, now)
+		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
+		return errors.New("invalid topic category to assign tags")
 	}
 
-	sess.queueOut(resp)
+	if t.cat == types.TopicCatGrp && t.owner != asUid {
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
+		return errors.New("tags update by non-owner")
+	}
 
-	return err
+	tags := normalizeTags(msg.Set.Tags, globals.maxTagCount)
+	if len(tags) == 0 {
+		sess.queueOut(InfoNotModifiedReply(msg, now))
+		return nil
+	}
+
+	if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
+		return errors.New("attempt to mutate restricted tags")
+	}
+
+	if hasDuplicateNamespaceTags(tags, globals.aliasTagNS) {
+		sess.queueOut(ErrMalformedReply(msg, now))
+		return errors.New("duplicate unique tags")
+	}
+
+	added, removed, _ := stringSliceDelta(t.tags, tags)
+
+	if t.cat == types.TopicCatMe && len(added) > 0 {
+		// User tags must all be prefixed. Users are not rearchable by generic tags.
+		var prefixed []string
+		for _, tag := range added {
+			if prefix, _ := validateTag(tag); prefix != "" {
+				prefixed = append(prefixed, prefix)
+			}
+		}
+		added = prefixed
+	}
+
+	if len(added) == 0 && len(removed) == 0 {
+		sess.queueOut(InfoNotModifiedReply(msg, now))
+		return nil
+	}
+
+	// Remove unprefixed tags
+	if unique := filterTags(added, map[string]bool{globals.aliasTagNS: true}); len(unique) > 0 {
+		// Check for global uniqueness.
+		// It's not inside a transaction, so a race may happen.
+		for _, tag := range unique {
+			result, err := store.Users.FindOne(tag)
+
+			if err != nil {
+				sess.queueOut(ErrUnknownReply(msg, now))
+				return err
+			}
+
+			if result != "" {
+				sess.queueOut(ErrMalformedReply(msg, now))
+				return errors.New("globally duplicate unique tags")
+			}
+		}
+	}
+
+	update := map[string]any{"Tags": tags, "UpdatedAt": now}
+	var err error
+	if t.cat == types.TopicCatMe {
+		err = store.Users.Update(asUid, update)
+	} else if t.cat == types.TopicCatGrp {
+		err = store.Topics.Update(t.name, update)
+	}
+
+	if err != nil {
+		sess.queueOut(ErrUnknownReply(msg, now))
+		return err
+	}
+
+	t.tags = tags
+	t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, sess.sid)
+
+	params := make(map[string]any)
+	if len(added) > 0 {
+		params["added"] = len(added)
+	}
+	if len(removed) > 0 {
+		params["removed"] = len(removed)
+	}
+
+	sess.queueOut(NoErrParamsReply(msg, now, params))
+	return nil
 }
 
 // replyGetCreds returns user's credentials such as email and phone numbers.
@@ -3739,13 +3761,16 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 }
 
 // Get per-session value of fnd.Public
-func (t *Topic) fndGetPublic(sess *Session) any {
+func (t *Topic) fndGetPublic(sess *Session) string {
 	if t.cat == types.TopicCatFnd {
 		if t.public == nil {
-			return nil
+			return ""
 		}
 		if pubmap, ok := t.public.(map[string]any); ok {
-			return pubmap[sess.sid]
+			if public, ok := pubmap[sess.sid].(string); ok {
+				return public
+			}
+			return ""
 		}
 		panic("Invalid Fnd.Public type")
 	}

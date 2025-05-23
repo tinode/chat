@@ -201,7 +201,7 @@ func TestUserGet(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, users[0]) {
-		t.Errorf(mismatchErrorString("User", got, users[0]))
+		t.Error(mismatchErrorString("User", got, users[0]))
 	}
 }
 
@@ -248,7 +248,7 @@ func TestCredGetActive(t *testing.T) {
 		t.Error(err)
 	}
 	if !reflect.DeepEqual(got, creds[3]) {
-		t.Errorf(mismatchErrorString("Credential", got, creds[3]))
+		t.Error(mismatchErrorString("Credential", got, creds[3]))
 	}
 
 	// Test not found
@@ -264,22 +264,22 @@ func TestCredGetAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 3 {
-		t.Errorf(mismatchErrorString("Credentials length", len(got), 3))
+		t.Error(mismatchErrorString("Credentials length", len(got), 3))
 	}
 
 	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", false)
 	if len(got) != 2 {
-		t.Errorf(mismatchErrorString("Credentials length", len(got), 2))
+		t.Error(mismatchErrorString("Credentials length", len(got), 2))
 	}
 
 	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "", true)
 	if len(got) != 1 {
-		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
+		t.Error(mismatchErrorString("Credentials length", len(got), 1))
 	}
 
 	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", true)
 	if len(got) != 1 {
-		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
+		t.Error(mismatchErrorString("Credentials length", len(got), 1))
 	}
 }
 
@@ -326,7 +326,7 @@ func TestAuthGetUniqueRecord(t *testing.T) {
 
 		got := fmt.Sprintf("%v %v %v %v", uid, authLvl, secret, expires)
 		want := fmt.Sprintf("%v %v %v %v", recs[0].UserId, recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
-		t.Errorf(mismatchErrorString("Auth record", got, want))
+		t.Error(mismatchErrorString("Auth record", got, want))
 	}
 
 	// Test not found
@@ -348,7 +348,7 @@ func TestAuthGetRecord(t *testing.T) {
 
 		got := fmt.Sprintf("%v %v %v %v", recId, authLvl, secret, expires)
 		want := fmt.Sprintf("%v %v %v %v", recs[0].Id, recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
-		t.Errorf(mismatchErrorString("Auth record", got, want))
+		t.Error(mismatchErrorString("Auth record", got, want))
 	}
 
 	// Test not found
@@ -364,7 +364,7 @@ func TestTopicGet(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, topics[0]) {
-		t.Errorf(mismatchErrorString("Topic", got, topics[0]))
+		t.Error(mismatchErrorString("Topic", got, topics[0]))
 	}
 	// Test not found
 	got, err = adp.TopicGet("asdfasdfasdf")
@@ -386,7 +386,7 @@ func TestTopicsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 1 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 
 	gotSubs, err = adp.TopicsForUser(types.ParseUserId("usr"+users[1].Id), true, nil)
@@ -394,7 +394,7 @@ func TestTopicsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("Subs length (2)", len(gotSubs), 2))
+		t.Error(mismatchErrorString("Subs length (2)", len(gotSubs), 2))
 	}
 
 	qOpts.Topic = ""
@@ -405,7 +405,7 @@ func TestTopicsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 1 {
-		t.Errorf(mismatchErrorString("Subs length (IMS)", len(gotSubs), 1))
+		t.Error(mismatchErrorString("Subs length (IMS)", len(gotSubs), 1))
 	}
 
 	ims = time.Now().Add(15 * time.Minute)
@@ -414,7 +414,7 @@ func TestTopicsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 0 {
-		t.Errorf(mismatchErrorString("Subs length (IMS 2)", len(gotSubs), 0))
+		t.Error(mismatchErrorString("Subs length (IMS 2)", len(gotSubs), 0))
 	}
 }
 
@@ -428,7 +428,7 @@ func TestUsersForTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 1 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 
 	gotSubs, err = adp.UsersForTopic("grpgRXf0rU4uR4", true, nil)
@@ -436,7 +436,7 @@ func TestUsersForTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 2))
 	}
 
 	gotSubs, err = adp.UsersForTopic("p2p9AVDamaNCRbfKzGSh3mE0w", false, nil)
@@ -444,7 +444,7 @@ func TestUsersForTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 2))
 	}
 }
 
@@ -468,7 +468,7 @@ func TestSubscriptionGet(t *testing.T) {
 	}
 	opts := cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{})
 	if !cmp.Equal(got, subs[0], opts) {
-		t.Errorf(mismatchErrorString("Subs", got, subs[0]))
+		t.Error(mismatchErrorString("Subs", got, subs[0]))
 	}
 	// Test not found
 	got, err = adp.SubscriptionGet("dummytopic", types.ParseUserId("dummyuserid"), false)
@@ -486,7 +486,7 @@ func TestSubsForUser(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 
 	// Test not found
@@ -495,7 +495,7 @@ func TestSubsForUser(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gotSubs) != 0 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 0))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 0))
 	}
 }
 
@@ -509,7 +509,7 @@ func TestSubsForTopic(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gotSubs) != 1 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 	// Test not found
 	gotSubs, err = adp.SubsForTopic("dummytopicid", false, nil)
@@ -517,29 +517,18 @@ func TestSubsForTopic(t *testing.T) {
 		t.Error(err)
 	}
 	if len(gotSubs) != 0 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 0))
+		t.Error(mismatchErrorString("Subs length", len(gotSubs), 0))
 	}
 }
 
-func TestFindUsers(t *testing.T) {
-	reqTags := [][]string{{"alice", "bob", "carol"}}
-	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil, true)
+func TestFind(t *testing.T) {
+	reqTags := [][]string{{"alice", "bob", "carol", "travel", "qwer", "asdf", "zxcv"}}
+	gotSubs, err := adp.Find(types.ParseUserId("usr"+users[2].Id), reqTags, nil, true)
 	if err != nil {
 		t.Error(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("result length", len(gotSubs), 3))
-	}
-}
-
-func TestFindTopics(t *testing.T) {
-	reqTags := [][]string{{"travel", "qwer", "asdf", "zxcv"}}
-	gotSubs, err := adp.FindTopics(reqTags, nil, true)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(gotSubs) != 3 {
-		t.Fatal(mismatchErrorString("result length", len(gotSubs), 3))
+		t.Error(mismatchErrorString("result length", len(gotSubs), 3))
 	}
 }
 
@@ -595,7 +584,7 @@ func TestUserUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.UserAgent != "Test Agent v0.11" {
-		t.Errorf(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
+		t.Error(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
 	}
 	if got.UpdatedAt == got.CreatedAt {
 		t.Error("UpdatedAt field not updated")
@@ -612,31 +601,31 @@ func TestUserUpdateTags(t *testing.T) {
 	}
 	want := []string{"alice", "tag1", "Alice"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(mismatchErrorString("Tags", got, want))
+		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
 	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, removeTags, nil)
 	want = []string{"Alice"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(mismatchErrorString("Tags", got, want))
+		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
 	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, nil, resetTags)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(mismatchErrorString("Tags", got, want))
+		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
 	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(mismatchErrorString("Tags", got, want))
+		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
 	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(mismatchErrorString("Tags", got, want))
+		t.Error(mismatchErrorString("Tags", got, want))
 	}
 }
 
@@ -653,7 +642,7 @@ func TestCredFail(t *testing.T) {
 		"method": "tel",
 		"value":  creds[3].Value}).Decode(&got)
 	if got.Retries != 1 {
-		t.Errorf(mismatchErrorString("Retries count", got.Retries, 1))
+		t.Error(mismatchErrorString("Retries count", got.Retries, 1))
 	}
 	if got.UpdatedAt == got.CreatedAt {
 		t.Error("UpdatedAt field not updated")
@@ -699,7 +688,7 @@ func TestAuthUpdRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
 	}
 
 	// Test with auth ID (unique) change
@@ -715,10 +704,10 @@ func TestAuthUpdRecord(t *testing.T) {
 		t.Errorf("Unique not changed. Got error: %v; ID: %v", err, got.Id)
 	}
 	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
 	}
 	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
 	}
 }
 
@@ -739,8 +728,8 @@ func TestTopicUpdateOnMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.TouchedAt != msg.CreatedAt || got.SeqId != msg.SeqId {
-		t.Errorf(mismatchErrorString("TouchedAt", got.TouchedAt, msg.CreatedAt))
-		t.Errorf(mismatchErrorString("SeqId", got.SeqId, msg.SeqId))
+		t.Error(mismatchErrorString("TouchedAt", got.TouchedAt, msg.CreatedAt))
+		t.Error(mismatchErrorString("SeqId", got.SeqId, msg.SeqId))
 	}
 }
 
@@ -755,7 +744,7 @@ func TestTopicUpdate(t *testing.T) {
 	var got types.Topic
 	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
 }
 
@@ -767,7 +756,7 @@ func TestTopicOwnerChange(t *testing.T) {
 	var got types.Topic
 	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
 	if got.Owner != users[1].Id {
-		t.Errorf(mismatchErrorString("Owner", got.Owner, users[1].Id))
+		t.Error(mismatchErrorString("Owner", got.Owner, users[1].Id))
 	}
 }
 
@@ -782,7 +771,7 @@ func TestSubsUpdate(t *testing.T) {
 	var got types.Subscription
 	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[0].Id + ":" + users[0].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
 
 	err = adp.SubsUpdate(topics[1].Id, types.ZeroUid, update)
@@ -791,7 +780,7 @@ func TestSubsUpdate(t *testing.T) {
 	}
 	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
 }
 
@@ -803,7 +792,7 @@ func TestSubsDelete(t *testing.T) {
 	var got types.Subscription
 	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[1].Id + ":" + users[0].Id}).Decode(&got)
 	if got.DeletedAt == nil {
-		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+		t.Error(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
 	}
 }
 
@@ -982,13 +971,13 @@ func TestAuthDelAllRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	if delCount != 1 {
-		t.Errorf(mismatchErrorString("delCount", delCount, 1))
+		t.Error(mismatchErrorString("delCount", delCount, 1))
 	}
 
 	// With dummy user
 	delCount, _ = adp.AuthDelAllRecords(types.ParseUserId("dummyuserid"))
 	if delCount != 0 {
-		t.Errorf(mismatchErrorString("delCount", delCount, 0))
+		t.Error(mismatchErrorString("delCount", delCount, 0))
 	}
 }
 

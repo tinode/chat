@@ -165,8 +165,8 @@ var globals struct {
 	// Tag namespaces which are immutable on User and partially mutable on Topic:
 	// user can only mutate tags he owns.
 	maskedTagNS map[string]bool
-	// Tag namespaces enforced to be unique.
-	uniqueTagNS map[string]bool
+	// Na,espace used for unique user and topic aliases.
+	aliasTagNS string
 
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
@@ -286,8 +286,8 @@ type configType struct {
 	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Masked tags namespaces: tags immutable on User (mask), mutable on Topic only within the mask.
 	MaskedTagNamespaces []string `json:"masked_tags"`
-	// Unique tags: tags in these namespaces must be globally unique.
-	UniqueTagNamespaces []string `json:"unique_tags"`
+	// Tag namespace used for unique user and topic aliases.
+	AliasTagNamespace string `json:"alias_tag"`
 	// Maximum number of indexable tags.
 	MaxTagCount int `json:"max_tag_count"`
 	// If true, ordinary users cannot delete their accounts.
@@ -541,13 +541,14 @@ func main() {
 		globals.maskedTagNS[tag] = true
 	}
 
-	// Unique tag namespaces.
-	globals.uniqueTagNS = make(map[string]bool, len(config.UniqueTagNamespaces))
-	for _, tag := range config.UniqueTagNamespaces {
-		if strings.Contains(tag, ":") {
-			logs.Err.Fatal("unique_tags namespaces should not contain character ':'", tag)
+	// Alias namespace.
+	config.AliasTagNamespace = strings.TrimSpace(config.AliasTagNamespace)
+	if config.AliasTagNamespace != "" {
+		if prefix, _ := validateTag(config.AliasTagNamespace + ":testing"); prefix == "" {
+			logs.Err.Fatal("alias_tag namespace should contain only alphanumeric characters and '_'",
+				config.AliasTagNamespace)
 		}
-		globals.uniqueTagNS[tag] = true
+		globals.aliasTagNS = config.AliasTagNamespace
 	}
 
 	var tags []string
@@ -564,12 +565,8 @@ func main() {
 	if len(tags) > 0 {
 		logs.Info.Println("Masked tags:", tags)
 	}
-	tags = nil
-	for tag := range globals.uniqueTagNS {
-		tags = append(tags, "'"+tag+"'")
-	}
-	if len(tags) > 0 {
-		logs.Info.Println("Unique tags:", tags)
+	if len(globals.aliasTagNS) > 0 {
+		logs.Info.Println("Alias tag:", globals.aliasTagNS)
 	}
 
 	// Maximum message size

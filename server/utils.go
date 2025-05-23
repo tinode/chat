@@ -19,7 +19,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
@@ -370,12 +369,12 @@ func filterTags(tags []string, namespaces map[string]bool) []string {
 	return out
 }
 
-// rewriteTag attempts to match the original token against the email, telephone number and optionally login patterns.
+// rewriteTag attempts to match the original token against the email and telephone number.
 // The tag is expected to be in lowercase.
-// On success, it returns a slice with the original tag and thr tag with the corresponding prefix. It returns an
+// On success, it returns a slice with the original tag and the tag with the corresponding prefix. It returns an
 // empty slice if the tag is invalid.
 // TODO: consider inferring country code from user location.
-func rewriteTag(orig, countryCode string, withLogin bool) []string {
+func rewriteTag(orig, countryCode string) []string {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if prefixedTagRegexp.MatchString(orig) {
 		return []string{orig}
@@ -392,31 +391,20 @@ func rewriteTag(orig, countryCode string, withLogin bool) []string {
 		}
 	}
 
-	// Try authenticators now.
-	if withLogin {
-		auths := store.Store.GetAuthNames()
-		for _, name := range auths {
-			auth := store.Store.GetAuthHandler(name)
-			if tag := auth.AsTag(orig); tag != "" {
-				return []string{orig, tag}
-			}
-		}
-	}
-
 	if tagRegexp.MatchString(orig) {
 		return []string{orig}
 	}
 
-	logs.Warn.Printf("invalid generic tag '%s'", orig)
+	// invalid generic tag
 
 	return nil
 }
 
-// Call rewriteTag for each slice member and return a new slice with original and converted values.
-func rewriteTagSlice(tags []string, countryCode string, withLogin bool) []string {
+// rewriteTagSlice calls rewriteTag for each slice member and return a new slice with original and converted values.
+func rewriteTagSlice(tags []string, countryCode string) []string {
 	var result []string
 	for _, tag := range tags {
-		rewritten := rewriteTag(tag, countryCode, withLogin)
+		rewritten := rewriteTag(tag, countryCode)
 		if len(rewritten) != 0 {
 			result = append(result, rewritten...)
 		}
@@ -515,16 +503,16 @@ func validateTag(tag string) (string, string) {
 // hasDuplicateNamespaceTags checks for duplication of unique NS tags.
 // Each namespace can have only one tag. This does not prevent tags from
 // being duplicate accross requests, just saves an extra DB call.
-func hasDuplicateNamespaceTags(src []string, uniqueNS map[string]bool) bool {
+func hasDuplicateNamespaceTags(src []string, uniqueNS string) bool {
 	found := map[string]bool{}
 	for _, tag := range src {
 		parts := prefixedTagRegexp.FindStringSubmatch(tag)
-		if len(parts) < 2 {
+		if len(parts) != 3 {
 			// Invalid tag, ignored.
 			continue
 		}
 
-		if uniqueNS[parts[1]] && found[parts[1]] {
+		if uniqueNS == parts[1] && found[parts[1]] {
 			return true
 		}
 		found[parts[1]] = true

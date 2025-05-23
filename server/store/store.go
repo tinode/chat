@@ -265,8 +265,8 @@ type UsersPersistenceInterface interface {
 	UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error)
 	UpdateState(uid types.Uid, state types.ObjState) error
 	GetSubs(id types.Uid) ([]types.Subscription, error)
-	FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error)
-	Find(tag string, limit int, partialMatch, activeOnly bool) ([]types.Subscription, error)
+	FindSubs(caller types.Uid, prefPrefix string, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error)
+	FindOne(tag string) (string, error)
 	GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetOwnTopics(id types.Uid) ([]string, error)
@@ -424,29 +424,13 @@ func (usersMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 // `required` specifies an AND of ORs for required terms:
 // at least one element of every sublist in `required` must be present in the object's tags list.
 // `optional` specifies a list of optional terms.
-func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
-	usubs, err := adp.FindUsers(id, required, optional, activeOnly)
-	if err != nil {
-		return nil, err
-	}
-	tsubs, err := adp.FindTopics(required, optional, activeOnly)
-	if err != nil {
-		return nil, err
-	}
-
-	allSubs := append(usubs, tsubs...)
-	for i := range allSubs {
-		// Indicate that the returned access modes are not 'N', but rather undefined.
-		allSubs[i].ModeGiven = types.ModeUnset
-		allSubs[i].ModeWant = types.ModeUnset
-	}
-
-	return allSubs, nil
+func (usersMapper) FindSubs(caller types.Uid, prefPrefix string, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
+	return adp.Find(caller.UserId(), prefPrefix, required, optional, activeOnly)
 }
 
 // Find returns topics and/or users which match the given tag, with optional partial matching.
-func (usersMapper) Find(tag string, limit int, partialMatch, activeOnly bool) ([]types.Subscription, error) {
-	return adp.FindAny(tag, limit, partialMatch, activeOnly)
+func (usersMapper) FindOne(tag string) (string, error) {
+	return adp.FindOne(tag)
 }
 
 // GetTopics load a list of user's subscriptions with Public+Trusted fields copied to subscription

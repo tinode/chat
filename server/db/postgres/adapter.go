@@ -2268,9 +2268,8 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 }
 
-// FindUsers returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
-// Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+// Find returns a list of users and group topics which match teh given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
 	stateConstraint := ""
@@ -2285,25 +2284,34 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 	}
 	args = append(args, allTags)
 
-	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
-		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE " + stateConstraint + "t.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat"
+	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
+		"FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
+		"WHERE " + stateConstraint + "ut.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags"
 	if len(allReq) > 0 {
-		query += " HAVING"
-		first := true
-		for _, reqDisjunction := range req {
-			if len(reqDisjunction) > 0 {
-				if !first {
-					query += " AND"
-				} else {
-					first = false
-				}
-				// At least one of the tags must be present.
-				query += " COUNT(t.tag IN (?) OR NULL)>=1"
-				args = append(args, reqDisjunction)
-			}
-		}
+		q, a := common.DisjunctionSql(req, "ut.tag")
+		query += q
+		args = append(args, a)
 	}
+
+	query += "UNION ALL "
+
+	if activeOnly {
+		args = append(args, t.StateOK)
+		stateConstraint = "t.state=? AND "
+	} else {
+		stateConstraint = ""
+	}
+	args = append(args, allTags)
+
+	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
+		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags"
+	if len(allReq) > 0 {
+		q, a := common.DisjunctionSql(req, "tt.tag")
+		query += q
+		args = append(args, a)
+	}
+
 	query, args = expandQuery(query+" ORDER BY matches DESC LIMIT ?", args, a.maxResults)
 
 	ctx, cancel := a.getContext()
@@ -2317,31 +2325,41 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 	}
 	defer rows.Close()
 
-	var userId int64
 	var public, trusted any
 	var access t.DefaultAccess
-	var userTags t.StringSlice
+	var setTags t.StringSlice
 	var ignored int
+	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := store.DecodeUid(user)
+	thisUser := caller.UserId()
 	for rows.Next() {
-		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access,
-			&public, &trusted, &userTags, &ignored); err != nil {
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
+			&public, &trusted, &setTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
 
-		if userId == thisUser {
-			// Skip the callee
-			continue
+		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
+			sub.Topic = store.EncodeUid(id).UserId()
+			if sub.Topic == thisUser {
+				// Skip the callee
+				continue
+			}
 		}
-		sub.User = store.EncodeUid(userId).String()
+
+		if isChan {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
 		sub.SetPublic(public)
 		sub.SetTrusted(trusted)
 		sub.SetDefaultAccess(access.Auth, access.Anon)
+		// Indicating that the mode is not set, not 'N'.
+		sub.ModeGiven = t.ModeUnset
+		sub.ModeWant = t.ModeUnset
 		foundTags := make([]string, 0, 1)
-		for _, tag := range userTags {
+		for _, tag := range setTags {
 			if _, ok := index[tag]; ok {
 				foundTags = append(foundTags, tag)
 			}
@@ -2349,6 +2367,7 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
+
 	if err == nil {
 		err = rows.Err()
 	}
@@ -2357,153 +2376,21 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 
 }
 
-// FindTopics return a list of topics with matching tags.
-// Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
-	index := make(map[string]struct{})
+// FindOne returns topic or user which matches the given tag.
+func (a *adapter) FindOne(tag string) (string, error) {
 	var args []any
-	stateConstraint := ""
-	if activeOnly {
-		args = append(args, t.StateOK)
-		stateConstraint = "t.state=? AND "
-	}
-	allReq := t.FlattenDoubleSlice(req)
-	allTags := append(allReq, opt...)
-	for _, tag := range allTags {
-		index[tag] = struct{}{}
-	}
-	args = append(args, allTags)
-
-	query := "SELECT t.id,t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
-		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.id,t.name,t.createdat,t.updatedat,t.usebt"
-	if len(allReq) > 0 {
-		query += " HAVING"
-		first := true
-		for _, reqDisjunction := range req {
-			if len(reqDisjunction) > 0 {
-				if !first {
-					query += " AND"
-				} else {
-					first = false
-				}
-				// At least one of the tags must be present.
-				query += " COUNT(tt.tag IN (?) OR NULL)>=1"
-				args = append(args, reqDisjunction)
-			}
-		}
-	}
-	query, args = expandQuery(query+" ORDER BY matches DESC LIMIT ?", args, a.maxResults)
-
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	rows, err := a.db.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var access t.DefaultAccess
-	var public, trusted any
-	var topicTags t.StringSlice
-	var id int
-	var ignored int
-	var isChan bool
-	var sub t.Subscription
-	var subs []t.Subscription
-	for rows.Next() {
-		if err = rows.Scan(&id, &sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
-			&public, &trusted, &topicTags, &ignored); err != nil {
-			subs = nil
-			break
-		}
-
-		if isChan {
-			sub.Topic = t.GrpToChn(sub.Topic)
-		}
-		sub.SetPublic(public)
-		sub.SetTrusted(trusted)
-		sub.SetDefaultAccess(access.Auth, access.Anon)
-		foundTags := make([]string, 0, 1)
-		for _, tag := range topicTags {
-			if _, ok := index[tag]; ok {
-				foundTags = append(foundTags, tag)
-			}
-		}
-		sub.Private = foundTags
-		subs = append(subs, sub)
-	}
-	if err == nil {
-		err = rows.Err()
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return subs, nil
-
-}
-
-// FindAny returns topics and users which match the given tag, with optional partial matching or just checking for tag existence.
-//
-//	tag - tag to find
-//	limit - number of results to return; limit = 0 is a special case, which only checks for result existence.
-//	partialMatch - use tag as prefix to match.
-//	activeOnly - find only those users & topics which are active, i.e. not soft-deleted or suspended.
-func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) ([]t.Subscription, error) {
-	var args []any
-	var tagMatcher func(needle, haystack string) bool
-	var compareOp string
-	if partialMatch {
-		tagMatcher = strings.HasPrefix
-		compareOp = " LIKE CONCAT(?, '%')"
-	} else {
-		tagMatcher = func(needle, haystack string) bool {
-			return needle == haystack
-		}
-		compareOp = "=?"
-	}
-	stateConstraint := ""
-	if activeOnly {
-		stateConstraint = "state=? AND "
-	}
-	if limit > a.maxResults {
-		limit = a.maxResults
-	}
-
-	query := "SELECT t.name AS topic"
-	if limit > 0 {
-		query += ",t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags"
-	}
-	query += " FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE " + stateConstraint + "tt.tag" + compareOp
-	if activeOnly {
-		args = append(args, t.StateOK)
-	}
+	query := "SELECT t.name AS topic FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE tt.tag=?"
 	args = append(args, tag)
 
 	query += " UNION ALL "
 
-	query += "SELECT CAST(u.id AS VARCHAR) AS topic"
-	if limit > 1 {
-		query += ",u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags "
-	}
-	query += " FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
-		"WHERE " + stateConstraint + "ut.tag" + compareOp
-	if activeOnly {
-		args = append(args, t.StateOK)
-	}
+	query += "SELECT CAST(u.id AS VARCHAR) AS topic FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
+		"WHERE ut.tag=?"
 	args = append(args, tag)
 
 	// LIMIT is applied to all resultant rows.
-	query += " LIMIT ?"
-	if limit > 0 {
-		args = append(args, limit)
-	} else {
-		args = append(args, 1)
-	}
+	query += " LIMIT 1"
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -2513,64 +2400,28 @@ func (a *adapter) FindAny(tag string, limit int, partialMatch, activeOnly bool) 
 	query, args = expandQuery(query, args)
 	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
+	defer rows.Close()
 
-	var access t.DefaultAccess
-	var public, trusted any
-	var topicTags t.StringSlice
-	var isChan int
-	var sub t.Subscription
-	var subs []t.Subscription
-	for rows.Next() {
-		if limit == 0 {
-			if err = rows.Scan(&sub.Topic); err != nil {
-				subs = nil
-				break
-			}
-		} else if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
-			&public, &trusted, &topicTags); err != nil {
-			subs = nil
-			break
+	var found string
+	if rows.Next() {
+		if err = rows.Scan(&found); err != nil {
+			return "", err
 		}
 
+		// Check if the found value is a topic name or a user ID.
 		// User IDs are returned as decoded decimal strings.
-		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
-			sub.Topic = store.EncodeUid(id).UserId()
+		if id, err := strconv.ParseInt(found, 10, 64); err == nil {
+			found = store.EncodeUid(id).UserId()
 		}
-
-		if limit == 0 {
-			subs = append(subs, sub)
-			// That's it, one result is found, done.
-			break
-		}
-
-		// Not converting when limit == 0 because the caller is always a topic owner.
-		if isChan != 0 {
-			sub.Topic = t.GrpToChn(sub.Topic)
-		}
-
-		sub.SetPublic(common.FromJSON(public))
-		sub.SetTrusted(common.FromJSON(trusted))
-		sub.SetDefaultAccess(access.Auth, access.Anon)
-		foundTags := make([]string, 0, 1)
-		for _, tt := range topicTags {
-			if tagMatcher(tag, tt) {
-				foundTags = append(foundTags, tt)
-			}
-		}
-		sub.Private = foundTags
-		subs = append(subs, sub)
 	}
+
 	if err == nil {
 		err = rows.Err()
 	}
-	rows.Close()
 
-	if err != nil {
-		return nil, err
-	}
-	return subs, nil
+	return "", err
 }
 
 // Messages
@@ -3632,6 +3483,8 @@ func setConnStr(c configType) (string, error) {
 	return connStr, nil
 }
 
+// expandQuery replaces the placeholders in the query with the actual values and returns
+// the expanded query and the arguments to be used in the query.
 func expandQuery(query string, args ...any) (string, []any) {
 	var expandedArgs []any
 	var expandedQuery string
