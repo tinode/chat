@@ -1873,7 +1873,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 }
 
 // Find returns a list of users and topics who match the given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
-func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	allReq := t.FlattenDoubleSlice(req)
 	var allTags []any
@@ -1886,16 +1886,22 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 	/*
 		r.db('tinode').
 			table('users').
-			getAll(<all tags here>, {index: "Tags"}).
-			union(r.table('topics').
-				getAll(<tags again>, {index: "Tags"})).
-			pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
-			group("Id").
+			getAll('basic:alice', 'travel', {index: "Tags"}).
+			union(r.db('tinode').table('topics').getAll('basic:alice', 'travel', {index: "Tags"})).
+			pluck('Id', 'Access', 'CreatedAt', 'UpdatedAt', 'UseBt', 'Public', 'Trusted', 'Tags').
+			group('Id').
 			ungroup().
-			map(function(row) { return row.getField('reduction').nth(0).merge({matchedCount: row.getField('reduction').count()}); }).
-			filter(function(row) { return row.getField("Tags").setIntersection([<required tags here>]).count().ne(0); }).
+			map(row => row.getField('reduction').nth(0).merge(
+				{matchedCount: row.getField('reduction').
+					getField('Tags').
+					nth(0).
+					setIntersection(['alias:aliassa', 'basic:alice', 'travel']).
+					map(tag => r.branch(tag.match('^alias:'), 20, 1)).
+					sum()
+				})).
+			filter(row => row.getField('Tags').setIntersection(['basic:alice', 'travel']).count().ne(0)).
 			orderBy(r.desc('matchedCount')).
-			limit(20);
+			limit(20)
 	*/
 
 	// Get users and topics matched by tags, sort by number of matches from high to low.
@@ -1913,7 +1919,17 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 		Map(func(row rdb.Term) rdb.Term {
 			return row.Field("reduction").
 				Nth(0).
-				Merge(map[string]any{"MatchedTagsCount": row.Field("reduction").Count()})
+				Merge(map[string]any{"MatchedTagsCount": row.Field("reduction").
+					Field("Tags").
+					Nth(0).
+					SetIntersection(allTags).
+					Map(func(tag rdb.Term) any {
+						return rdb.Branch(
+							tag.Match("^"+promoPrefix),
+							20, // If the tag matches the promo prefix, count it as 20.
+							1)  // Otherwise count it as 1.
+					}).
+					Sum()})
 		})
 
 	for _, reqDisjunction := range req {
@@ -1938,11 +1954,13 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 	var topic t.Topic
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := caller.UserId()
 	for cursor.Next(&topic) {
-		if topic.Id == thisUser {
-			// Skip the caller
-			continue
+		if uid := t.ParseUid(topic.Id); !uid.IsZero() {
+			topic.Id = uid.UserId()
+			if topic.Id == caller {
+				// Skip the caller
+				continue
+			}
 		}
 
 		if topic.UseBt {

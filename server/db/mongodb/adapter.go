@@ -2064,7 +2064,7 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 }
 
 // Find searches for contacts and topics given a list of tags.
-func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	allReq := t.FlattenDoubleSlice(req)
 	var allTags []any
@@ -2131,12 +2131,14 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 		if topic.UseBt {
 			sub.Topic = t.GrpToChn(topic.Id)
 		} else {
-			uid := t.ParseUid(topic.Id)
-			if uid.IsZero() || uid == caller {
-				// Skip the caller
-				continue
+			if uid := t.ParseUid(topic.Id); !uid.IsZero() {
+				topic.Id = uid.UserId()
+				if topic.Id == caller {
+					// Skip the caller.
+					continue
+				}
 			}
-			sub.Topic = uid.UserId()
+			sub.Topic = topic.Id
 		}
 
 		sub.CreatedAt = topic.CreatedAt

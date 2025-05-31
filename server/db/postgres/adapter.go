@@ -2269,7 +2269,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 }
 
 // Find returns a list of users and group topics which match teh given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
-func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
 	stateConstraint := ""
@@ -2284,7 +2284,15 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 	}
 	args = append(args, allTags)
 
-	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
+	var matcher string
+	if promoPrefix != "" {
+		// The max number of tags is 16. Using 20 to make sure one prefix match is greater than all non-prefix matches.
+		matcher = "SUM(CASE WHEN POSITION('" + promoPrefix + "' IN tg.tag)=1 THEN 20 ELSE 1 END)"
+	} else {
+		matcher = "COUNT(*)"
+	}
+
+	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags," + matcher + " AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
 		"WHERE " + stateConstraint + "ut.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags"
 	if len(allReq) > 0 {
@@ -2303,7 +2311,7 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 	}
 	args = append(args, allTags)
 
-	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
+	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags," + matcher + " AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags"
 	if len(allReq) > 0 {
@@ -2332,7 +2340,6 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := caller.UserId()
 	for rows.Next() {
 		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
 			&public, &trusted, &setTags, &ignored); err != nil {
@@ -2342,8 +2349,8 @@ func (a *adapter) Find(caller t.Uid, req [][]string, opt []string, activeOnly bo
 
 		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
 			sub.Topic = store.EncodeUid(id).UserId()
-			if sub.Topic == thisUser {
-				// Skip the callee
+			if sub.Topic == caller {
+				// Skip the caller.
 				continue
 			}
 		}
