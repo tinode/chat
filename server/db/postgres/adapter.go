@@ -2365,13 +2365,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 		// Indicating that the mode is not set, not 'N'.
 		sub.ModeGiven = t.ModeUnset
 		sub.ModeWant = t.ModeUnset
-		foundTags := make([]string, 0, 1)
-		for _, tag := range setTags {
-			if _, ok := index[tag]; ok {
-				foundTags = append(foundTags, tag)
-			}
-		}
-		sub.Private = foundTags
+		sub.Private = common.FilterFoundTags(setTags, index)
 		subs = append(subs, sub)
 	}
 

@@ -2065,6 +2065,70 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 
 // Find searches for contacts and topics given a list of tags.
 func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+	/*
+		// MongoDB aggregation pipeline using unionWith.
+		[
+			{ $match: { tags: { $in: ["basic:alice", "travel"] } } },
+			{ $unionWith: {
+					coll: "topics",
+					pipeline: [ { $match: { tags: { $in: ["basic:alice", "travel"] } } } ]
+				}
+			},
+			{ $project: { _id: 1, access: 1, createdat: 1, updatedat: 1, usebt: 1, public: 1, trusted: 1, tags: 1, _source: 1 } },
+			{ $addFields: { matchedCount: { $sum: { $map: {
+				input: { $setIntersection: [ "$tags", [ "alias:aliassa", "basic:alice", "travel" ] ] },
+				as: "tag",
+				in: { $cond: { if: { $regexMatch: { input: "$$tag", regex: "^alias:"} }, then: 20, else: 1 } }
+			} }}}},
+			{ $match: { $expr: { $ne: [ { $size: { $setIntersection: [ "$tags", ["basic:alice", "travel"] ] } }, 0 ] } } },
+			{ $sort: { matchedCount: -1 } },
+			{ $limit: 20 }
+		]
+
+		// Alternative approach using $facet for (supposedly) better performance:
+		[ { $facet: {
+					users: [
+						{ $match: { tags: { $in: [ "alias:alice", "basic:alice", "travel" ] } } },
+						{ $project: { _id: 1, access: 1, createdat: 1, updatedat: 1, usebt: 1, public: 1, trusted: 1, tags: 1 } }
+					],
+					topics: [
+						{ $lookup: {
+							from: "topics",
+							pipeline: [
+								{ $match: { tags: { $in: [ "alias:alice", "basic:alice", "travel" ] } } },
+								{ $project: { _id: 1, access: 1, createdat: 1, updatedat: 1, usebt: 1, public: 1, trusted: 1, tags: 1 } } }
+							],
+							as: "topicDocs"
+						}},
+						{ $unwind: "$topicDocs" },
+						{ $replaceRoot: { newRoot: "$topicDocs" } }
+					]
+				}
+			},
+			{ $project: { combined: { $concatArrays: ["$users", "$topics"] } } },
+			{ $unwind: "$combined" },
+			{ $replaceRoot: { newRoot: "$combined" } },
+			{ $group: { _id: "$_id", doc: { $first: "$$ROOT" } } },
+			{ $replaceRoot: { newRoot: "$doc" } },
+			{ $addFields: { matchedCount:
+				{ $sum: { $map: { input:
+					{ $setIntersection: [ "$tags", [ "alias:alice", "basic:alice", "travel" ] ] },
+					as: "tag",
+					in: {
+					$cond: {
+						if: { $regexMatch: { input: "$$tag", regex: "^alias:" } }, then: 20, else: 1 }
+					}
+				} }
+			} } },
+			{ $match: { $expr: { $ne: [
+				{ $size: { $setIntersection: [ "$tags", [ "alias:alice", "basic:alice", "travel" ] ] } },
+				0
+			] } } },
+			{ $sort: { matchedCount: -1 } },
+			{ $limit: 20 }
+		]
+	*/
+
 	index := make(map[string]struct{})
 	allReq := t.FlattenDoubleSlice(req)
 	var allTags []any
@@ -2073,26 +2137,99 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 		index[tag] = struct{}{}
 	}
 
-	matchOn := b.M{"tags": b.M{"$in": allTags}}
-	if activeOnly {
-		matchOn["state"] = b.M{"$eq": t.StateOK}
-	}
-	commonPipe := b.A{
-		b.M{"$match": matchOn},
-		b.M{"$project": b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1, "access": 1, "public": 1, "trusted": 1, "tags": 1}},
-		b.M{"$unwind": "$tags"},
-		b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
-		b.M{"$group": b.M{
-			"_id":              "$_id",
-			"createdat":        b.M{"$first": "$createdat"},
-			"updatedat":        b.M{"$first": "$updatedat"},
-			"usebt":            b.M{"$first": "$usebt"},
-			"access":           b.M{"$first": "$access"},
-			"public":           b.M{"$first": "$public"},
-			"trusted":          b.M{"$first": "$trusted"},
-			"tags":             b.M{"$addToSet": "$tags"},
-			"matchedTagsCount": b.M{"$sum": 1},
-		}},
+	/*
+		matchOn := b.M{"tags": b.M{"$in": allTags}}
+		if activeOnly {
+			matchOn["state"] = b.M{"$eq": t.StateOK}
+		}
+		commonPipe := b.A{
+			b.M{"$match": matchOn},
+			b.M{"$project": b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1, "access": 1, "public": 1, "trusted": 1, "tags": 1}},
+			b.M{"$unwind": "$tags"},
+			b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
+			b.M{"$group": b.M{
+				"_id":              "$_id",
+				"createdat":        b.M{"$first": "$createdat"},
+				"updatedat":        b.M{"$first": "$updatedat"},
+				"usebt":            b.M{"$first": "$usebt"},
+				"access":           b.M{"$first": "$access"},
+				"public":           b.M{"$first": "$public"},
+				"trusted":          b.M{"$first": "$trusted"},
+				"tags":             b.M{"$addToSet": "$tags"},
+				"matchedTagsCount": b.M{"$sum": 1},
+			}},
+		}
+
+		for _, reqDisjunction := range req {
+			if len(reqDisjunction) == 0 {
+				continue
+			}
+			var reqTags []any
+			for _, tag := range reqDisjunction {
+				reqTags = append(reqTags, tag)
+			}
+			// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
+			commonPipe = append(commonPipe,
+				b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
+		}
+
+		// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
+		pipeline := append(slices.Clone(commonPipe),
+			b.M{"$unionWith": b.M{"coll": "topics", "pipeline": commonPipe}},
+			b.M{"$sort": b.M{"matchedTagsCount": -1}},
+			b.M{"$limit": a.maxResults})
+	*/
+
+	projectFields := b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1,
+		"access": 1, "public": 1, "trusted": 1, "tags": 1}
+
+	pipeline := b.A{
+		// Stage 1: $facet
+		b.M{
+			"$facet": b.D{
+				{"users", b.A{
+					b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
+					b.M{"$project": projectFields},
+				}},
+				{"topics", b.A{
+					b.M{"$lookup": b.D{
+						{"from", "topics"},
+						{"pipeline", b.A{
+							b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
+							b.M{"$project": projectFields},
+						}},
+						{"as", "topicDocs"},
+					}},
+					b.M{"$unwind": "$topicDocs"},
+					b.M{"$replaceRoot": b.M{"newRoot": "$topicDocs"}},
+				}},
+			},
+		},
+		// Stage 2: $project
+		b.M{"$project": b.M{"combined": b.M{"$concatArrays": b.A{"$users", "$topics"}}}},
+		// Stage 3: $unwind
+		b.M{"$unwind": "$combined"},
+		// Stage 4: $replaceRoot
+		b.M{"$replaceRoot": b.M{"newRoot": "$combined"}},
+		// Stage 5: $group
+		b.M{"$group": b.D{{"_id", "$_id"}, {"doc", b.M{"$first": "$$ROOT"}}}},
+		// Stage 6: $replaceRoot
+		b.M{"$replaceRoot": b.M{"newRoot": "$doc"}},
+		// Stage 7: $addFields
+		b.M{"$addFields": b.M{"matchedCount": b.M{"$sum": b.M{"$map": b.D{
+			{"input", b.M{"$setIntersection": b.A{"$tags", allTags}}},
+			{"as", "tag"},
+			{"in", b.D{
+				{"$cond", b.D{
+					{"if", b.M{"$regexMatch": b.D{
+						{"input", "$$tag"},
+						{"regex", "^alias:"},
+					},
+					}},
+					{"then", 20},
+					{"else", 1},
+				}}}}},
+		}}}},
 	}
 
 	for _, reqDisjunction := range req {
@@ -2103,16 +2240,17 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 		for _, tag := range reqDisjunction {
 			reqTags = append(reqTags, tag)
 		}
-		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
-		commonPipe = append(commonPipe,
+		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array.
+		pipeline = append(pipeline,
 			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
-	// Must create a copy of commonPipe so the original commonPipe can be used unmodified in $unionWith.
-	pipeline := append(slices.Clone(commonPipe),
-		b.M{"$unionWith": b.M{"coll": "topics", "pipeline": commonPipe}},
-		b.M{"$sort": b.M{"matchedTagsCount": -1}},
-		b.M{"$limit": a.maxResults})
+	pipeline = append(pipeline,
+		// Stage 9: $sort
+		b.M{"$sort": b.M{"matchedCount": -1}},
+		// Stage 10: $limit
+		b.M{"$limit": a.maxResults},
+	)
 
 	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
 	if err != nil {
@@ -2149,13 +2287,7 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 		// Indicating that the mode is not set, not 'N'.
 		sub.ModeGiven = t.ModeUnset
 		sub.ModeWant = t.ModeUnset
-		foundTags := make([]string, 0, 1)
-		for _, tag := range topic.Tags {
-			if _, ok := index[tag]; ok {
-				foundTags = append(foundTags, tag)
-			}
-		}
-		sub.Private = foundTags
+		sub.Private = common.FilterFoundTags(topic.Tags, index)
 		subs = append(subs, sub)
 	}
 

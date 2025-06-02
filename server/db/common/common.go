@@ -100,6 +100,17 @@ func DisjunctionSql(req [][]string, fieldName string) (string, []any) {
 	return "HAVING " + strings.Join(counts, " AND ") + " ", args
 }
 
+// FilterFoundTags keeps only those tags in setTags that are present in the index.
+func FilterFoundTags(setTags t.StringSlice, index map[string]struct{}) []string {
+	foundTags := make([]string, 0, 1)
+	for _, tag := range setTags {
+		if _, ok := index[tag]; ok {
+			foundTags = append(foundTags, tag)
+		}
+	}
+	return foundTags
+}
+
 // Convert to JSON before storing to JSON field.
 func ToJSON(src any) []byte {
 	if src == nil {

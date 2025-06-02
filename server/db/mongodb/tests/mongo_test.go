@@ -523,7 +523,7 @@ func TestSubsForTopic(t *testing.T) {
 
 func TestFind(t *testing.T) {
 	reqTags := [][]string{{"alice", "bob", "carol", "travel", "qwer", "asdf", "zxcv"}}
-	gotSubs, err := adp.Find(types.ParseUserId("usr"+users[2].Id), reqTags, nil, true)
+	gotSubs, err := adp.Find("usr"+users[2].Id, "", reqTags, nil, true)
 	if err != nil {
 		t.Error(err)
 	}
