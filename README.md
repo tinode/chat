@@ -142,6 +142,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
+| Arabic |   | &check; |   |   |
 | Chinese simplified | &check; | &check; | &check; | &check; |
 | Chinese traditional |   | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
@@ -156,7 +157,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Ukrainian | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; |   |   |   |
 
-More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
 
 ## Third-Party
 
