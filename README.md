@@ -144,7 +144,7 @@ All client software has support for [internationalization](docs/translations.md)
 | English | &check; | &check; | &check; | &check; |
 | Arabic |   | &check; |   |   |
 | Chinese simplified | &check; | &check; | &check; | &check; |
-| Chinese traditional |   | &check; | &check; | &check; |
+| Chinese traditional | &check; | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |

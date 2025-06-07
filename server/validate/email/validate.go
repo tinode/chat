@@ -274,7 +274,12 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 
 	var template *textt.Template
 	if v.langMatcher != nil {
-		_, idx := i18n.MatchStrings(v.langMatcher, lang)
+		// Find the template for the requested language.
+		// Make sure the language tag is standartized. Matcher is a bit dumber than Parse().
+		normalized, _ := i18n.Parse(lang)
+		// The matched tag is usualy not in the list of available languages (e.g. es_ES -> es-u-rg-eszzzz).
+		// Use index to find the template instead of tag.
+		_, idx := i18n.MatchStrings(v.langMatcher, normalized.String())
 		template = v.validationTempl[idx]
 	} else {
 		template = v.validationTempl[0]
