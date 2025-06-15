@@ -79,6 +79,16 @@ type configType struct {
 	// Maximum amount of time a connection may be reused (in seconds).
 	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"`
 
+	// SSL mode determines how SSL connections are handled.
+	// Supported values:
+	//   - "disable": No SSL connection (default)
+	//   - "require": Require SSL connection but don't verify server certificate
+	//   - "verify-ca": Require SSL and verify that the server certificate is issued by a trusted CA
+	//   - "verify-full": Require SSL and verify that the server certificate matches the server hostname
+	//   - "prefer": Try SSL first, fallback to non-SSL if SSL fails
+	//   - "allow": Try non-SSL first, fallback to SSL if non-SSL fails
+	SSLMode string `json:"ssl_mode,omitempty"`
+
 	// DB request timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
 	SqlTimeout int `json:"sql_timeout,omitempty"`
@@ -3469,16 +3479,23 @@ func decodeUidString(str string) int64 {
 
 // Converting a structure with data to enter a connection string
 func setConnStr(c configType) (string, error) {
+	// Default to disable SSL mode.
+	sslMode := "disable"
+	if c.SSLMode != "" {
+		sslMode = c.SSLMode
+	}
+
 	if c.User == "" || c.Passwd == "" || c.Host == "" || c.Port == "" || c.DBName == "" {
 		return "", errors.New("adapter postgres invalid config value")
 	}
-	connStr := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable&connect_timeout=%d",
+	connStr := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d",
 		"postgres",
 		c.User,
 		c.Passwd,
 		c.Host,
 		c.Port,
 		c.DBName,
+		c.SSLMode,
 		c.SqlTimeout)
 
 	return connStr, nil
