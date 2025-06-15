@@ -3488,14 +3488,13 @@ func setConnStr(c configType) (string, error) {
 	if c.User == "" || c.Passwd == "" || c.Host == "" || c.Port == "" || c.DBName == "" {
 		return "", errors.New("adapter postgres invalid config value")
 	}
-	connStr := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d",
-		"postgres",
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d",
 		c.User,
 		c.Passwd,
 		c.Host,
 		c.Port,
 		c.DBName,
-		c.SSLMode,
+		sslMode,
 		c.SqlTimeout)
 
 	return connStr, nil
