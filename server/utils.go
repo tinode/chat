@@ -502,7 +502,7 @@ func validateTag(tag string) (string, string) {
 
 // hasDuplicateNamespaceTags checks for duplication of unique NS tags.
 // Each namespace can have only one tag. This does not prevent tags from
-// being duplicate accross requests, just saves an extra DB call.
+// being duplicate across requests, just saves an extra DB call.
 func hasDuplicateNamespaceTags(src []string, uniqueNS string) bool {
 	found := map[string]bool{}
 	for _, tag := range src {

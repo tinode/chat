@@ -4,9 +4,11 @@ package common
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
 
@@ -156,4 +158,18 @@ func ExtractTags(update map[string]any) []string {
 	}
 
 	return []string(tags)
+}
+
+// EncodeUidString takes decoded string representation of int64, produce UID.
+// UIDs are stored as decoded int64 values.
+func EncodeUidString(str string) t.Uid {
+	unum, _ := strconv.ParseInt(str, 10, 64)
+	return store.EncodeUid(unum)
+}
+
+// DecodeUidString takes UID as string, converts it to int64 representation.
+// UIDs are stored as decoded int64 values.
+func DecodeUidString(str string) int64 {
+	uid := t.ParseUid(str)
+	return store.DecodeUid(uid)
 }

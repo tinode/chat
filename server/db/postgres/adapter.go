@@ -2278,7 +2278,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 }
 
-// Find returns a list of users and group topics which match teh given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+// Find returns a list of users and group topics which match the given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
@@ -2693,7 +2693,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 	// Now make log entries. Needed for both hard- and soft-deleting.
 
 	// Prepare statement is not needed because the driver prepares the statement on first use then caches it.
-	forUser := decodeUidString(toDel.DeletedFor)
+	forUser := common.DecodeUidString(toDel.DeletedFor)
 	for _, rng := range toDel.SeqIdRanges {
 		if rng.Hi == 0 {
 			// Dellog must contain valid Low and *Hi*.
@@ -2895,7 +2895,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}()
 
 	now := t.TimeNow()
-	userId := decodeUidString(cred.User)
+	userId := common.DecodeUidString(cred.User)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
@@ -3466,18 +3466,7 @@ func isMissingDb(err error) bool {
 	return strings.Contains(msg, "SQLSTATE 3D000")
 }
 
-// UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
-func encodeUidString(str string) t.Uid {
-	unum, _ := strconv.ParseInt(str, 10, 64)
-	return store.EncodeUid(unum)
-}
-
-func decodeUidString(str string) int64 {
-	uid := t.ParseUid(str)
-	return store.DecodeUid(uid)
-}
-
-// Converting a structure with data to enter a connection string
+// setConnStr converts a config structure to a DSN connection string.
 func setConnStr(c configType) (string, error) {
 	// Default to disable SSL mode.
 	sslMode := "disable"

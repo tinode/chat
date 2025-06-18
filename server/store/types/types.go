@@ -8,10 +8,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
-	"slices"
 )
 
 // StoreError satisfies Error interface but allows constant values for
