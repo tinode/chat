@@ -232,3 +232,9 @@ CREATE TABLE filemsglinks(
 	FOREIGN KEY(topicid) REFERENCES topics(id) ON DELETE CASCADE,
 	FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 );
+
+# Find relevant subscriptions for given users efficiently, and use the join key too.
+CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat);
+
+# Optimizes join; state filters; seqid supports the SUM operation.
+CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid);
