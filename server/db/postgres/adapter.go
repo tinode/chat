@@ -47,7 +47,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 114
+	adpVersion  = 115
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -586,6 +586,16 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// Find relevant subscriptions for given users efficiently, and use the join key too.
+	if _, err = tx.Exec(ctx, "CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+		return err
+	}
+
+	// Optimizes join; state filters; seqid supports the SUM operation.
+	if _, err = tx.Exec(ctx, "CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
 }
 
@@ -652,6 +662,24 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 114); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 114 {
+		// Perform database upgrade from version 114 to version 115.
+
+		// Find relevant subscriptions for given users efficiently, and use the join key too.
+		if _, err := a.db.Exec(ctx, "CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+			return err
+		}
+
+		// Optimizes join; state filters; seqid supports the SUM operation.
+		if _, err := a.db.Exec(ctx, "CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
