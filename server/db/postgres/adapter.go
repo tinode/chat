@@ -2415,6 +2415,7 @@ func (a *adapter) FindOne(tag string) (string, error) {
 		// User IDs are returned as decoded decimal strings.
 		if id, err := strconv.ParseInt(found, 10, 64); err == nil {
 			found = store.EncodeUid(id).UserId()
+			return found, nil
 		}
 	}
 
