@@ -2448,9 +2448,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		}
 
 		if query == "" {
-			// Query parsing error or no query. Report it externally as a generic ErrMalformed.
+			// No query. Report it externally as a generic ErrMalformed.
 			sess.queueOut(ErrMalformedReply(msg, now))
-			return errors.New("failed to parse search query; err is nil")
+			return errors.New("no search query")
 		}
 
 		query, subs, err = pluginFind(asUid, query)
