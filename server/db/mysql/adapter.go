@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"net/url"
 	"sort"
@@ -407,6 +408,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
+			subcnt		INT DEFAULT 0,
 			public    JSON,
 			trusted   JSON,
 			tags      JSON,
@@ -790,6 +792,29 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 114); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 114 {
+		// Perform database upgrade from version 114 to version 115.
+
+		// Find relevant subscriptions for given users efficiently, and use the join key too.
+		if _, err := a.db.Exec("CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+			return err
+		}
+
+		// Optimizes join; state filters; seqid supports the SUM operation.
+		if _, err := a.db.Exec("CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
+			return err
+		}
+
+		// Add column for storing subscriber count.
+		if _, err := a.db.Exec("ALTER TABLE topics ADD subcnt INT DEFAULT 0 AFTER delid"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 115); err != nil {
 			return err
 		}
 	}
@@ -1566,6 +1591,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	topic.TouchedAt = initiator.GetTouchedAt()
+	topic.SubCnt = 2
 	err = a.topicCreate(tx, topic)
 	if err != nil {
 		return err
@@ -1582,12 +1608,10 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	}
 	// Fetch topic by name
 	var tt = new(t.Topic)
-	err := a.db.GetContext(ctx, tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags,aux "+
+	if err := a.db.GetContext(ctx, tt,
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,subcnt,public,trusted,tags,aux "+
 			"FROM topics WHERE name=?",
-		topic)
-
-	if err != nil {
+		topic); err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
 			err = nil
@@ -1595,7 +1619,14 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 
-	tt.Owner = encodeUidString(tt.Owner).String()
+	// Topic found, get subsription count. Try both topic and channel names.
+	channel := t.GrpToChn(topic)
+	if err := a.db.GetContext(ctx, &tt.SubCnt,
+		"SELECT COUNT(*) FROM subscriptions WHERE topic IN (?,?) AND deletedat IS NULL", topic, channel); err != nil {
+		return nil, err
+	}
+
+	tt.Owner = common.EncodeUidString(tt.Owner).String()
 	tt.Public = common.FromJSON(tt.Public)
 	tt.Trusted = common.FromJSON(tt.Trusted)
 
@@ -1987,6 +2018,10 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 }
 
 func (a *adapter) TopicShare(shares []*t.Subscription) error {
+	if len(shares) == 0 {
+		return nil // Nothing to do
+	}
+
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -2001,11 +2036,19 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 		}
 	}()
 
+	topic := shares[0].Topic
 	for _, sub := range shares {
+		if sub.Topic != topic {
+			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
+		}
 		err = createSubscription(tx, sub, true)
 		if err != nil {
 			return err
 		}
+	}
+
+	if _, err = tx.Exec("UPDATE topics SET subcnt=subcnt+? WHERE name=?", len(shares), topic); err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -2386,7 +2429,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 		matcher = "COUNT(*)"
 	}
 
-	query := "SELECT u.id,u.createdat,u.updatedat,0,u.access,u.public,u.trusted,u.tags," + matcher + " AS matches " +
+	query := "SELECT u.id,u.createdat,u.updatedat,0,u.access,0,u.public,u.trusted,u.tags," + matcher + " AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS tg ON tg.userid=u.id " +
 		"WHERE " + stateConstraint + "tg.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
@@ -2408,10 +2451,10 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 		args = append(args, tag)
 	}
 
-	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags," + matcher + " AS matches " +
+	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags," + matcher + " AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tg ON t.name=tg.topic " +
 		"WHERE " + stateConstraint + "tg.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
-		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags "
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags "
 	if len(allReq) > 0 {
 		q, a := common.DisjunctionSql(req, "tg.tag")
 		query += q
@@ -2435,13 +2478,14 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	// Fetch subscriptions
 	var public, trusted any
 	var access t.DefaultAccess
+	var subcnt int
 	var setTags t.StringSlice
 	var ignored int
 	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
-		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access, &subcnt,
 			&public, &trusted, &setTags, &ignored); err != nil {
 			subs = nil
 			break
@@ -2460,6 +2504,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 
+		sub.SetSubCnt(subcnt)
 		sub.SetPublic(common.FromJSON(public))
 		sub.SetTrusted(common.FromJSON(trusted))
 		sub.SetDefaultAccess(access.Auth, access.Anon)

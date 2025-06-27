@@ -7,6 +7,7 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -1190,6 +1191,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	topic.TouchedAt = initiator.GetTouchedAt()
+	topic.SubCnt = 2
 	return a.TopicCreate(topic)
 }
 
@@ -1200,17 +1202,38 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close()
-
-	if cursor.IsNil() {
-		return nil, nil
-	}
 
 	var tt = new(t.Topic)
 	if err = cursor.One(tt); err != nil {
+		if err == rdb.ErrEmptyResult {
+			err = nil // No error if topic is not found.
+		}
 		return nil, err
 	}
 
+	// The cursor is automatically closed by executing cursor.One.
+
+	// Topic found, get subsription count. Try both topic and channel names.
+	if cursor, err = rdb.DB(a.dbName).Table("subscriptions").
+		GetAllByIndex("Topic", topic, t.GrpToChn(topic)).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Count().Run(a.conn); err != nil {
+		return nil, err
+	}
+	subCnt := 0
+	if err = cursor.One(&subCnt); err != nil {
+		return nil, err
+	}
+	// No need to close the cursor.
+
+	if subCnt != tt.SubCnt {
+		// Update the topic with the correct subscription count.
+		tt.SubCnt = subCnt
+		if _, err = rdb.DB(a.dbName).Table("topics").Get(topic).
+			Update(map[string]any{"SubCnt": subCnt}).RunWrite(a.conn); err != nil {
+			return nil, err
+		}
+	}
 	return tt, nil
 }
 
@@ -1541,9 +1564,17 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 
 // TopicShare creates topic subscriptions.
 func (a *adapter) TopicShare(shares []*t.Subscription) error {
-	// Assign Ids.
-	for i := 0; i < len(shares); i++ {
-		shares[i].Id = shares[i].Topic + ":" + shares[i].User
+	if len(shares) == 0 {
+		return nil // Nothing to do.
+	}
+
+	// Check that all shares have the same topic, assign Ids.
+	topic := shares[0].Topic
+	for _, sub := range shares {
+		if sub.Topic != topic {
+			return fmt.Errorf("all shares must have the same topic, got %s vs %s", topic, sub.Topic)
+		}
+		sub.Id = sub.Topic + ":" + sub.User
 	}
 
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
@@ -1561,6 +1592,12 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 				"RecvSeqId": 0})
 		}}).RunWrite(a.conn)
 
+	if err == nil {
+		_, err = rdb.DB(a.dbName).Table("topics").
+			Get(topic).
+			Update(map[string]any{"SubCnt": rdb.Row.Field("SubCnt").Default(0).Sub(len(shares))}).
+			RunWrite(a.conn)
+	}
 	return err
 }
 
@@ -1913,7 +1950,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	if activeOnly {
 		query = query.Filter(rdb.Row.Field("State").Eq(t.StateOK))
 	}
-	query = query.Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Trusted", "Tags").
+	query = query.Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "SubCnt", "Public", "Trusted", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {
@@ -1971,6 +2008,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
+		sub.SetSubCnt(topic.SubCnt)
 		sub.SetPublic(topic.Public)
 		sub.SetTrusted(topic.Trusted)
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)

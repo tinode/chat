@@ -115,9 +115,9 @@ type Adapter interface {
 	OwnTopics(uid t.Uid) ([]string, error)
 	// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 	ChannelsForUser(uid t.Uid) ([]string, error)
-	// TopicShare creates topc subscriptions
+	// TopicShare creates topic subscriptions.
 	TopicShare(subs []*t.Subscription) error
-	// TopicDelete deletes topic, subscription, messages
+	// TopicDelete deletes topic, subscription, messages.
 	TopicDelete(topic string, isChan, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error

@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
 	"strconv"
@@ -1449,7 +1450,9 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 	topic := &t.Topic{
 		ObjHeader: t.ObjHeader{Id: initiator.Topic},
-		TouchedAt: initiator.GetTouchedAt()}
+		TouchedAt: initiator.GetTouchedAt(),
+		SubCnt:    2,
+	}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
@@ -1463,6 +1466,17 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		}
 		return nil, err
 	}
+	// Topic found, get subsription count. Try both topic and channel names.
+	if err := a.db.Collection("subscriptions").FindOne(a.ctx, b.A{
+		b.M{"$match": b.M{
+			"topic":     b.M{"$in": b.A{topic, t.GrpToChn(topic)}},
+			"deletedat": b.M{"$exists": false},
+		}},
+		b.M{"$count": "subCnt"},
+	}).Decode(&tpc.SubCnt); err != nil {
+		return nil, err
+	}
+
 	tpc.Public = unmarshalBsonD(tpc.Public)
 	tpc.Trusted = unmarshalBsonD(tpc.Trusted)
 	// tpc.Aux = unmarshalBsonD(tpc.Aux)
@@ -1822,16 +1836,24 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 }
 
 // TopicShare creates topic subscriptions
-func (a *adapter) TopicShare(subs []*t.Subscription) error {
+func (a *adapter) TopicShare(shares []*t.Subscription) error {
+	if len(shares) == 0 {
+		return nil
+	}
+
 	// Assign Ids.
-	for i := 0; i < len(subs); i++ {
-		subs[i].Id = subs[i].Topic + ":" + subs[i].User
+	topic := shares[0].Topic
+	for _, sub := range shares {
+		if sub.Topic != topic {
+			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
+		}
+		sub.Id = sub.Topic + ":" + sub.User
 	}
 
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
 	// updating times and ModeGiven.
-	for _, sub := range subs {
+	for _, sub := range shares {
 		_, err := a.db.Collection("subscriptions").InsertOne(a.ctx, sub)
 		if err != nil {
 			if isDuplicateErr(err) {
@@ -1843,6 +1865,12 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 			}
 		}
 	}
+
+	// Update topic's subscription count.
+	// The error is ignored because the subvscriptions have been created already.
+	a.db.Collection("topics").UpdateOne(a.ctx,
+		b.M{"_id": topic},
+		b.M{"$set": map[string]any{"subcnt": }})
 
 	return nil
 }
@@ -2181,7 +2209,7 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 	*/
 
 	projectFields := b.M{"_id": 1, "createdat": 1, "updatedat": 1, "usebt": 1,
-		"access": 1, "public": 1, "trusted": 1, "tags": 1}
+		"access": 1, "subcnt": 1, "public": 1, "trusted": 1, "tags": 1}
 
 	pipeline := b.A{
 		// Stage 1: $facet
@@ -2281,6 +2309,7 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
+		sub.SetSubCnt(topic.SubCnt)
 		sub.SetPublic(unmarshalBsonD(topic.Public))
 		sub.SetTrusted(unmarshalBsonD(topic.Trusted))
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)

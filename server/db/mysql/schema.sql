@@ -100,6 +100,7 @@ CREATE TABLE topics(
 	access		JSON,
 	seqid		INT NOT NULL DEFAULT 0,
 	delid		INT DEFAULT 0,
+	subcnt  INT DEFAULT 0,
 	public	JSON,
 	trusted	JSON,
 	tags		JSON, -- Denormalized array of tags
@@ -108,7 +109,8 @@ CREATE TABLE topics(
 	PRIMARY KEY(id),
 	UNIQUE INDEX topics_name (name),
 	INDEX topics_owner(owner),
-	INDEX topics_state_stateat(state, stateat)
+	INDEX topics_state_stateat(state, stateat),
+	INDEX topics_name_state_seqid ON topics(name, state, seqid)
 );
 
 # Indexed topic tags.
@@ -142,7 +144,8 @@ CREATE TABLE subscriptions(
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX subscriptions_topic_userid(topic, userid),
 	INDEX subscriptions_topic(topic),
-	INDEX subscriptions_deletedat(deletedat)
+	INDEX subscriptions_deletedat(deletedat),
+	INDEX subscriptions_user_topic_deletedat ON subscriptions(userid, topic, deletedat)
 );
 
 # Messages
@@ -232,3 +235,4 @@ CREATE TABLE filemsglinks(
 	FOREIGN KEY(topicid) REFERENCES topics(id) ON DELETE CASCADE,
 	FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 );
+

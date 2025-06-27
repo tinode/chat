@@ -925,6 +925,9 @@ type Subscription struct {
 	// Timestamp & user agent of when the user was last online.
 	lastSeenUA *LastSeenUA
 
+	// Group topics only: count of subscribers.
+	subCnt int
+
 	// P2P only. ID of the other user
 	with string
 	// P2P only. Default access: this is the mode given by the other user to this user
@@ -995,6 +998,16 @@ func (s *Subscription) GetSeqId() int {
 // SetSeqId sets seqId field.
 func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
+}
+
+// GetSubCnt returns subCnt (subscriber count).
+func (s *Subscription) GetSubCnt() int {
+	return s.subCnt
+}
+
+// SetSubCnt sets subCnt (subscriber count).
+func (s *Subscription) SetSubCnt(cnt int) {
+	s.subCnt = cnt
 }
 
 // GetLastSeen returns lastSeen.
@@ -1111,6 +1124,9 @@ type Topic struct {
 	SeqId int
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
+
+	// Count of topic subscribers.
+	SubCnt int `json:"SubCnt,omitempty" bson:",omitempty"`
 
 	Public  any
 	Trusted any
