@@ -2422,7 +2422,7 @@ func (a *adapter) FindOne(tag string) (string, error) {
 		err = rows.Err()
 	}
 
-	return "", err
+	return found, err
 }
 
 // Messages
