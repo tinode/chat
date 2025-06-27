@@ -46,7 +46,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 114
+	adpVersion = 115
 
 	adapterName = "mysql"
 
@@ -316,7 +316,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		}
 	}
 
-	if _, err = tx.Exec("CREATE DATABASE " + a.dbName + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
+	if _, err = tx.Exec("CREATE DATABASE " + a.dbName + " CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"); err != nil {
 		return err
 	}
 
@@ -574,6 +574,16 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// Find relevant subscriptions for given users efficiently, and use the join key too.
+	if _, err = tx.Exec("CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+		return err
+	}
+
+	// Optimizes join; state filters; seqid supports the SUM operation.
+	if _, err = tx.Exec("CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -806,11 +816,6 @@ func (a *adapter) UpgradeDb() error {
 
 		// Optimizes join; state filters; seqid supports the SUM operation.
 		if _, err := a.db.Exec("CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
-			return err
-		}
-
-		// Add column for storing subscriber count.
-		if _, err := a.db.Exec("ALTER TABLE topics ADD subcnt INT DEFAULT 0 AFTER delid"); err != nil {
 			return err
 		}
 
@@ -1116,7 +1121,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			continue
 		}
 
-		user.SetUid(encodeUidString(user.Id))
+		user.SetUid(common.EncodeUidString(user.Id))
 		user.Public = common.FromJSON(user.Public)
 		user.Trusted = common.FromJSON(user.Trusted)
 
@@ -1829,7 +1834,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				break
 			}
 
-			joinOn := uid.P2PName(encodeUidString(usr2.Id))
+			joinOn := uid.P2PName(common.EncodeUidString(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
 				sub.UpdatedAt = common.SelectLatestTime(sub.UpdatedAt, usr2.UpdatedAt)
 				sub.SetState(usr2.State)
@@ -1928,7 +1933,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			break
 		}
 
-		sub.User = encodeUidString(sub.User).String()
+		sub.User = common.EncodeUidString(sub.User).String()
 		sub.Private = common.FromJSON(sub.Private)
 		sub.SetPublic(common.FromJSON(public))
 		sub.SetTrusted(common.FromJSON(trusted))
@@ -2281,7 +2286,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 			break
 		}
 
-		ss.User = encodeUidString(ss.User).String()
+		ss.User = common.EncodeUidString(ss.User).String()
 		ss.Private = common.FromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
@@ -2644,7 +2649,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		if err = rows.StructScan(&msg); err != nil {
 			break
 		}
-		msg.From = encodeUidString(msg.From).String()
+		msg.From = common.EncodeUidString(msg.From).String()
 		msg.Content = common.FromJSON(msg.Content)
 		msgs = append(msgs, msg)
 	}
@@ -2816,7 +2821,7 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 		return err
 	}
 
-	forUser := decodeUidString(toDel.DeletedFor)
+	forUser := common.DecodeUidString(toDel.DeletedFor)
 	for _, rng := range delRanges {
 		if rng.Hi == 0 {
 			// Dellog must contain valid Low and *Hi*.
@@ -3016,7 +3021,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}()
 
 	now := t.TimeNow()
-	userId := decodeUidString(cred.User)
+	userId := common.DecodeUidString(cred.User)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
@@ -3322,8 +3327,8 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		return nil, err
 	}
 
-	fd.Id = encodeUidString(fd.Id).String()
-	fd.User = encodeUidString(fd.User).String()
+	fd.Id = common.EncodeUidString(fd.Id).String()
+	fd.User = common.EncodeUidString(fd.User).String()
 
 	return &fd, nil
 
@@ -3565,17 +3570,6 @@ func isMissingDb(err error) bool {
 
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1049
-}
-
-// UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
-func encodeUidString(str string) t.Uid {
-	unum, _ := strconv.ParseInt(str, 10, 64)
-	return store.EncodeUid(unum)
-}
-
-func decodeUidString(str string) int64 {
-	uid := t.ParseUid(str)
-	return store.DecodeUid(uid)
 }
 
 func init() {

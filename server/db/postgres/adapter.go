@@ -47,7 +47,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 114
+	adpVersion  = 115
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -78,6 +78,16 @@ type configType struct {
 	MaxIdleConns int `json:"max_idle_conns,omitempty"`
 	// Maximum amount of time a connection may be reused (in seconds).
 	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"`
+
+	// SSL mode determines how SSL connections are handled.
+	// Supported values:
+	//   - "disable": No SSL connection (default)
+	//   - "require": Require SSL connection but don't verify server certificate
+	//   - "verify-ca": Require SSL and verify that the server certificate is issued by a trusted CA
+	//   - "verify-full": Require SSL and verify that the server certificate matches the server hostname
+	//   - "prefer": Try SSL first, fallback to non-SSL if SSL fails
+	//   - "allow": Try non-SSL first, fallback to SSL if non-SSL fails
+	SSLMode string `json:"ssl_mode,omitempty"`
 
 	// DB request timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
@@ -574,6 +584,16 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO kvmeta("key", "value") VALUES($1, $2)`, "version", strconv.Itoa(adpVersion)); err != nil {
+		return err
+	}
+
+	// Find relevant subscriptions for given users efficiently, and use the join key too.
+	if _, err = tx.Exec(ctx, "CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+		return err
+	}
+
+	// Optimizes join; state filters; seqid supports the SUM operation.
+	if _, err = tx.Exec(ctx, "CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
 		return err
 	}
 
@@ -2343,7 +2363,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 }
 
-// Find returns a list of users and group topics which match teh given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+// Find returns a list of users and group topics which match the given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
@@ -2760,7 +2780,7 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 	// Now make log entries. Needed for both hard- and soft-deleting.
 
 	// Prepare statement is not needed because the driver prepares the statement on first use then caches it.
-	forUser := decodeUidString(toDel.DeletedFor)
+	forUser := common.DecodeUidString(toDel.DeletedFor)
 	for _, rng := range toDel.SeqIdRanges {
 		if rng.Hi == 0 {
 			// Dellog must contain valid Low and *Hi*.
@@ -2962,7 +2982,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}()
 
 	now := t.TimeNow()
-	userId := decodeUidString(cred.User)
+	userId := common.DecodeUidString(cred.User)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
@@ -3533,29 +3553,24 @@ func isMissingDb(err error) bool {
 	return strings.Contains(msg, "SQLSTATE 3D000")
 }
 
-// UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
-func encodeUidString(str string) t.Uid {
-	unum, _ := strconv.ParseInt(str, 10, 64)
-	return store.EncodeUid(unum)
-}
-
-func decodeUidString(str string) int64 {
-	uid := t.ParseUid(str)
-	return store.DecodeUid(uid)
-}
-
-// Converting a structure with data to enter a connection string
+// setConnStr converts a config structure to a DSN connection string.
 func setConnStr(c configType) (string, error) {
+	// Default to disable SSL mode.
+	sslMode := "disable"
+	if c.SSLMode != "" {
+		sslMode = c.SSLMode
+	}
+
 	if c.User == "" || c.Passwd == "" || c.Host == "" || c.Port == "" || c.DBName == "" {
 		return "", errors.New("adapter postgres invalid config value")
 	}
-	connStr := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable&connect_timeout=%d",
-		"postgres",
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d",
 		c.User,
 		c.Passwd,
 		c.Host,
 		c.Port,
 		c.DBName,
+		sslMode,
 		c.SqlTimeout)
 
 	return connStr, nil

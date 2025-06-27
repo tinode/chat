@@ -1870,7 +1870,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	// The error is ignored because the subvscriptions have been created already.
 	a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
-		b.M{"$set": map[string]any{"subcnt": }})
+		b.M{"$inc": map[string]any{"subcnt": len(shares)}})
 
 	return nil
 }
