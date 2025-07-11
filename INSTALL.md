@@ -6,7 +6,7 @@ The config file [`tinode.conf`](./server/tinode.conf) contains extensive instruc
 
 1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
 
-2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. In case of PostgreSQL, Tinode will try connect as `postgres` with the password `postgres`. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required (use InnoDB, not MyISAM storage engine). MySQL 5.6 or below **will not work**. PostgreSQL 13 or above is required. PostgreSQL 12 or below **will not work**.
+2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. In case of PostgreSQL, Tinode will try connect as `postgres` with the password `postgres`. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required (use InnoDB, not MyISAM storage engine). MySQL 5.6 or below **will not work**, use of MyISAM **will cause problems**. PostgreSQL 13 or above is required. PostgreSQL 12 or below **will not work**.
 
 3. Run the database initializer `init-db` (or `init-db.exe` on Windows):
 	```
