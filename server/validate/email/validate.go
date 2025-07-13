@@ -394,7 +394,18 @@ func (v *validator) TempAuthScheme() (string, error) {
 
 // SendMail replacement
 func (v *validator) sendMail(rcpt []string, msg []byte) error {
-	client, err := smtp.Dial(v.SMTPAddr + ":" + v.SMTPPort)
+	addr := v.SMTPAddr + ":" + v.SMTPPort
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: v.TLSInsecureSkipVerify,
+		ServerName:         v.SMTPAddr,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return err
+	}
+
+	client, err := smtp.NewClient(conn, v.SMTPAddr)
 	if err != nil {
 		return err
 	}
