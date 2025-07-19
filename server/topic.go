@@ -2453,43 +2453,34 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			query, _ = userData.private.(string)
 		}
 
-		if query == "" {
-			// No query. Report it externally as a generic ErrMalformed.
-			sess.queueOut(ErrMalformedReply(msg, now))
-			return errors.New("no search query")
-		}
-
-		query, subs, err = pluginFind(asUid, query)
-		if err == nil && subs == nil && query != "" {
-			if and, opt, err := parseSearchQuery(query); err == nil {
-				var req [][]string
-				for _, tag := range and {
-					rewritten := rewriteTag(tag, sess.countryCode)
-					if len(rewritten) > 0 {
-						req = append(req, rewritten)
+		// Empty queries are ignored with "NoContent".
+		if query != "" {
+			query, subs, err = pluginFind(asUid, query)
+			if err == nil && subs == nil && query != "" {
+				if and, opt, err := parseSearchQuery(query); err == nil {
+					var req [][]string
+					for _, tag := range and {
+						rewritten := rewriteTag(tag, sess.countryCode)
+						if len(rewritten) > 0 {
+							req = append(req, rewritten)
+						}
 					}
-				}
-				opt = rewriteTagSlice(opt, sess.countryCode)
+					opt = rewriteTagSlice(opt, sess.countryCode)
 
-				if len(req) == 0 && len(opt) == 0 {
-					// Query string is empty.
-					sess.queueOut(ErrMalformedReply(msg, now))
-					return errors.New("empty search query")
-				}
+					// Check if the query contains terms that the user is not allowed to use.
+					if restr, _, _ := stringSliceDelta(t.tags,
+						filterTags(append(types.FlattenDoubleSlice(req), opt...), globals.maskedTagNS)); len(restr) > 0 {
+						sess.queueOut(ErrPermissionDeniedReply(msg, now))
+						return errors.New("attempt to search by restricted tags")
+					}
 
-				// Check if the query contains terms that the user is not allowed to use.
-				if restr, _, _ := stringSliceDelta(t.tags,
-					filterTags(append(types.FlattenDoubleSlice(req), opt...), globals.maskedTagNS)); len(restr) > 0 {
-					sess.queueOut(ErrPermissionDeniedReply(msg, now))
-					return errors.New("attempt to search by restricted tags")
-				}
-
-				// Ordinary users: find only active topics and accounts.
-				// Root users: find all topics and accounts, including suspended and soft-deleted.
-				subs, err = store.Users.FindSubs(asUid, globals.aliasTagNS, req, opt, sess.authLvl != auth.LevelRoot)
-				if err != nil {
-					sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
-					return err
+					// Ordinary users: find only active topics and accounts.
+					// Root users: find all topics and accounts, including suspended and soft-deleted.
+					subs, err = store.Users.FindSubs(asUid, globals.aliasTagNS, req, opt, sess.authLvl != auth.LevelRoot)
+					if err != nil {
+						sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
+						return err
+					}
 				}
 			}
 		}
