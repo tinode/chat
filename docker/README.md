@@ -203,9 +203,9 @@ You can specify the following environment variables when issuing `docker run` co
 | `FS_CORS_ORIGINS`[^2] | string | `["*"]` | Cors origins when media is served from the file system. See `AWS_CORS_ORIGINS` for details. |
 | `ICE_SERVERS_FILE`[^2] | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
 | `MEDIA_HANDLER`[^2] | string | `fs` | Handler of large files, either `fs` or `s3`. |
-| `MYSQL_DSN`[^2] | string | <code>'root@tcp(mysql)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci'</code> | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
+| `MYSQL_DSN`[^2] | string | <code style="word-break: break-all">'root@tcp(mysql)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci'</code> | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED`[^2] | bool | `false` | Enable calling into the plugin provided by Python chatbot. |
-| `POSTGRES_DSN`[^2] | string | <code>'postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10'</code> |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
+| `POSTGRES_DSN`[^2] | string | <code style="word-break: break-all">'postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10'</code> |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
 | `SAMPLE_DATA` | string |  _see comment →_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `` (empty string) to disable. |
 | `SMTP_AUTH_MECHANISM`[^2] | string | `"plain"` | SMTP authentication mechanism to use; one of "login", "cram-md5", "plain". |
