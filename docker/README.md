@@ -93,7 +93,8 @@ $ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 		--env EXT_CONFIG=/tinode.conf \
 		tinode/tinode-mysql:latest
 ```
-If you set `EXT_CONFIG` all other environment variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored.
+When `EXT_CONFIG` is set, most other environment variables are ignored. Consult [the table](#supported-environment-variables) below for a full list.
+
 
 ### Resetting or upgrading the database
 
@@ -176,56 +177,59 @@ The chatbot password is generated only when the database is initialized or reset
 
 You can specify the following environment variables when issuing `docker run` command:
 
-| Variable | Type | Default | Function |
+| Variable | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `ACC_GC_ENABLED` | bool | `false` | Enable/diable automatic deletion of unfinished account registrations. |
-| `AUTH_TOKEN_KEY` | string | `wfaY2RgF2S1OQI/ZlK+LS​rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
-| `AWS_ACCESS_KEY_ID` | string |  | AWS Access Key ID when using `s3` media handler. |
-| `AWS_CORS_ORIGINS` | string | `["*"]` | Allowed origins ([CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin)) URL for downloads. Generally use your server URL and its aliases. |
-| `AWS_REGION` | string |  | AWS Region when using `s3` media handler |
-| `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler. |
-| `AWS_S3_ENDPOINT` | string |  | An endpoint URL (hostname only or fully qualified URI) to override the default endpoint; can be of any S3-compatible service, such as `minio-api.x.io` |
-| `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler. |
+| `ACC_GC_ENABLED`[^2] | bool | `false` | Enable/diable automatic deletion of unfinished account registrations. |
+| `AUTH_TOKEN_KEY`[^2] | string | `wfaY2RgF2S1OQI/ZlK+LS​rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
+| `AWS_ACCESS_KEY_ID`[^2] | string |  | AWS Access Key ID when using `s3` media handler. |
+| `AWS_CORS_ORIGINS`[^2] | string | `["*"]` | Allowed origins ([CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin)) URL for downloads. Generally use your server URL and its aliases. |
+| `AWS_REGION`[^2] | string |  | AWS Region when using `s3` media handler |
+| `AWS_S3_BUCKET`[^2] | string |  | Name of the AWS S3 bucket when using `s3` media handler. |
+| `AWS_S3_ENDPOINT`[^2] | string |  | An endpoint URL (hostname only or fully qualified URI) to override the default endpoint; can be of any S3-compatible service, such as `minio-api.x.io` |
+| `AWS_SECRET_ACCESS_KEY`[^2] | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler. |
 | `CLUSTER_SELF` | string |  | Node name if the server is running in a Tinode cluster. |
-| `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
-| `DEFAULT_COUNTRY_CODE` | string | `US` | 2-letter country code to assign to sessions by default when the country isn't specified by the client explicitly and it's impossible to infer it. |
-| `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
+| `DEBUG_EMAIL_VERIFICATION_CODE`[^2] | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
+| `DEFAULT_COUNTRY_CODE`[^2] | string | `US` | 2-letter country code to assign to sessions by default when the country isn't specified by the client explicitly and it's impossible to infer it. |
+| `EXT_CONFIG`[^1] | string |  | Path to external config file to use instead of the built-in one. If this parameter is used, most other variables are ignored[^1]. |
 | `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files). |
-| `FCM_CRED_FILE` | string |  | Path to JSON file with FCM server-side service account credentials which will be used to send push notifications. |
+| `FCM_CRED_FILE`[^2] | string |  | Path to JSON file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_API_KEY` | string |  | Firebase API key; required for receiving push notifications in the web client. |
 | `FCM_APP_ID` | string |  | Firebase web app ID; required for receiving push notifications in the web client. |
 | `FCM_PROJECT_ID` | string |  | Firebase project ID; required for receiving push notifications in the web client. |
 | `FCM_SENDER_ID` | string |  | Firebase FCM sender ID; required for receiving push notifications in the web client. |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
-| `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
+| `FCM_INCLUDE_ANDROID_NOTIFICATION`[^2] | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
 | `FCM_MEASUREMENT_ID` | string |  | Google Analytics ID of the form `G-123ABCD789`. |
-| `FS_CORS_ORIGINS` | string | `["*"]` | Cors origins when media is served from the file system. See `AWS_CORS_ORIGINS` for details. |
-| `ICE_SERVERS_FILE` | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
-| `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3`. |
-| `MYSQL_DSN` | string | <code>'root@tcp(mysql)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci'</code> | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
-| `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot. |
-| `POSTGRES_DSN` | string | <code>'postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10'</code> |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
+| `FS_CORS_ORIGINS`[^2] | string | `["*"]` | Cors origins when media is served from the file system. See `AWS_CORS_ORIGINS` for details. |
+| `ICE_SERVERS_FILE`[^2] | string |  | Path to JSON file with configuration of ICE servers to be used for video calls. |
+| `MEDIA_HANDLER`[^2] | string | `fs` | Handler of large files, either `fs` or `s3`. |
+| `MYSQL_DSN`[^2] | string | <code>'root@tcp(mysql)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci'</code> | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
+| `PLUGIN_PYTHON_CHAT_BOT_ENABLED`[^2] | bool | `false` | Enable calling into the plugin provided by Python chatbot. |
+| `POSTGRES_DSN`[^2] | string | <code>'postgresql://postgres:postgres@localhost:5432/tinode?sslmode=disable&connect_timeout=10'</code> |  PostgreSQL [DSN](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
 | `SAMPLE_DATA` | string |  _see comment →_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `` (empty string) to disable. |
-| `SMTP_AUTH_MECHANISM` | string | `"plain"` | SMTP authentication mechanism to use; one of "login", "cram-md5", "plain". |
-| `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
-| `SMTP_HELO_HOST` | string | _see comment →_ | FQDN to use in SMTP HELO/EHLO command; if missing, the hostname from `SMTP_HOST_URL` is used. |
-| `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
-| `SMTP_LOGIN` | string |  | Optional login to use for authentication with the SMTP server (email verification). |
-| `SMTP_PASSWORD` | string |  | Optional password to use for authentication with the SMTP server (email verification). |
-| `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
+| `SMTP_AUTH_MECHANISM`[^2] | string | `"plain"` | SMTP authentication mechanism to use; one of "login", "cram-md5", "plain". |
+| `SMTP_DOMAINS`[^2] | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
+| `SMTP_HELO_HOST`[^2] | string | _see comment →_ | FQDN to use in SMTP HELO/EHLO command; if missing, the hostname from `SMTP_HOST_URL` is used. |
+| `SMTP_HOST_URL`[^2] | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
+| `SMTP_LOGIN`[^2] | string |  | Optional login to use for authentication with the SMTP server (email verification). |
+| `SMTP_PASSWORD`[^2] | string |  | Optional password to use for authentication with the SMTP server (email verification). |
+| `SMTP_PORT`[^2] | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
 | `SMTP_SENDER` | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails, e.g. `'"John Doe" <jdoe@example.com>'`. |
-| `SMTP_SERVER` | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
-| `STORE_USE_ADAPTER` | string |  | DB adapter name (specify with `tinode/tinode` container only). |
-| `TEL_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running for phone verification. |
-| `TEL_SENDER` | string |  | Sender name to pass to SMS sending service. |
-| `TLS_CONTACT_ADDRESS` | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
-| `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
+| `SMTP_SERVER`[^2] | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
+| `STORE_USE_ADAPTER`[^2] | string |  | DB adapter name (specify with `tinode/tinode` container only). |
+| `TEL_HOST_URL`[^2] | string | `'http://localhost:6060/'` | URL of the host where the webapp is running for phone verification. |
+| `TEL_SENDER`[^2] | string |  | Sender name to pass to SMS sending service. |
+| `TLS_CONTACT_ADDRESS`[^2] | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
+| `TLS_DOMAIN_NAME`[^2] | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `TNPG_AUTH_TOKEN` | string |  | Tinode Push Gateway authentication token. |
-| `TNPG_ORG` | string |  | Tinode Push Gateway organization name as registered at https://console.tinode.co |
-| `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
+| `TNPG_ORG`[^2] | string |  | Tinode Push Gateway organization name as registered at https://console.tinode.co |
+| `UID_ENCRYPTION_KEY`[^2] | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
 | `UPGRADE_DB` | bool | `false` | Upgrade database schema, if necessary. |
 | `WAIT_FOR` | string |  | If non-empty, waits for the specified database `host:port` to be available before starting the server. |
+
+[^1]: If set, variables marked with the footnote `[2]` are ignored.
+[^2]: Ignored if `EXT_CONFIG` is set.
 
 A convenient way to generate a desired number of random bytes and base64-encode them on Linux and Mac:
 ```
