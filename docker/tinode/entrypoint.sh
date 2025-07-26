@@ -48,7 +48,7 @@ else
 		while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
 			LHS=${BASH_REMATCH[1]}
 			RHS="$(eval echo "\"$LHS\"")"
-			line=${line//$LHS/$RHS}
+			line=${line//$LHS/"$RHS"}
 		done
 		echo "$line" >> working.config
 	done < config.template
