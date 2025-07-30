@@ -148,6 +148,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
+| Italian |   | &check; |   |   |
 | Korean |   | &check; | &check; |   |
 | Portuguese | &check; |   | &check; |   |
 | Romanian |   | &check; | &check; |   |
