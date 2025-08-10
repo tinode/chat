@@ -425,6 +425,10 @@ func (usersMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 // at least one element of every sublist in `required` must be present in the object's tags list.
 // `optional` specifies a list of optional terms.
 func (usersMapper) FindSubs(caller types.Uid, prefPrefix string, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
+	if len(required) == 0 && len(optional) == 0 {
+		// No tags specified, return empty list.
+		return nil, nil
+	}
 	return adp.Find(caller.UserId(), prefPrefix, required, optional, activeOnly)
 }
 

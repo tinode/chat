@@ -508,10 +508,11 @@ func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNoti
 	// Topic timeout
 	hub.unreg <- &topicUnreg{rcptTo: t.name}
 	defrNotifTimer.Stop()
-	if t.cat == types.TopicCatMe {
+	switch t.cat {
+	case types.TopicCatMe:
 		uaTimer.Stop()
 		t.presUsersOfInterest("off", currentUA)
-	} else if t.cat == types.TopicCatGrp {
+	case types.TopicCatGrp:
 		t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 	}
 }
@@ -523,7 +524,8 @@ func (t *Topic) handleTopicTermination(sd *shutDown) {
 	// 3. System shutdown (reason == StopShutdown, done != nil).
 	// 4. Cluster rehashing (reason == StopRehashing)
 
-	if sd.reason == StopDeleted {
+	switch sd.reason {
+	case StopDeleted:
 		if t.cat == types.TopicCatGrp {
 			t.presSubsOffline("gone", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 		}
@@ -532,7 +534,7 @@ func (t *Topic) handleTopicTermination(sd *shutDown) {
 		// Inform plugins that the topic is deleted
 		pluginTopic(t, plgActDel)
 
-	} else if sd.reason == StopRehashing {
+	case StopRehashing:
 		// Must send individual messages to sessions because normal sending through the topic's
 		// broadcast channel won't work - it will be shut down too soon.
 		t.presSubsOnlineDirect("term", nilPresParams, nilPresFilters, "")
@@ -1166,7 +1168,8 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 	var read, recv, unread, seq int
 
-	if msg.Note.What == "read" {
+	switch msg.Note.What {
+	case "read":
 		if msg.Note.SeqId <= pud.readID {
 			// No need to report stale or bogus read status.
 			return
@@ -1180,7 +1183,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		}
 		read = pud.readID
 		seq = read
-	} else if msg.Note.What == "recv" {
+	case "recv":
 		if msg.Note.SeqId <= pud.recvID {
 			// Stale or bogus recv status.
 			return
@@ -1713,11 +1716,12 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 				}
 			}
 
-			if t.cat == types.TopicCatP2P {
+			switch t.cat {
+			case types.TopicCatP2P:
 				// For P2P topics ignore requests exceeding the maximum allowed. Otherwise it will generate
 				// a useless announcement.
 				modeWant = (modeWant & globals.typesModeCP2P) | types.ModeApprove
-			} else if t.cat == types.TopicCatSys {
+			case types.TopicCatSys:
 				// Anyone can always write to Sys topic.
 				modeWant &= (modeWant & types.ModeCSys) | types.ModeWrite
 			}
@@ -2059,7 +2063,7 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *MsgGetOpts, msg *ClientComMessage) error {
+func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, _ bool, opts *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	id := msg.Id
 
@@ -2124,9 +2128,10 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 		}
 
 		if (pud.modeGiven & pud.modeWant).IsPresencer() {
-			if t.cat == types.TopicCatGrp {
+			switch t.cat {
+			case types.TopicCatGrp:
 				desc.Online = t.isOnline()
-			} else if t.cat == types.TopicCatP2P {
+			case types.TopicCatP2P:
 				// This is the timestamp when the other user logged off last time.
 				// It does not change while the topic is loaded into memory and that's OK most of the time
 				// because to stay in memory at least one of the users must be connected to topic.
@@ -2321,7 +2326,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 	}
 
 	// Update values cached in the topic object
-	if t.cat == types.TopicCatMe || t.cat == types.TopicCatGrp {
+	switch t.cat {
+	case types.TopicCatMe, types.TopicCatGrp:
 		if tmp, ok := core["Access"]; ok {
 			access := tmp.(types.DefaultAccess)
 			t.accessAuth = access.Auth
@@ -2333,7 +2339,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 		if trusted, ok := core["Trusted"]; ok {
 			t.trusted = trusted
 		}
-	} else if t.cat == types.TopicCatFnd {
+	case types.TopicCatFnd:
 		// Assign per-session fnd.Public.
 		t.fndSetPublic(sess, core["Public"])
 	}
@@ -2447,43 +2453,34 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			query, _ = userData.private.(string)
 		}
 
-		if query == "" {
-			// No query. Report it externally as a generic ErrMalformed.
-			sess.queueOut(ErrMalformedReply(msg, now))
-			return errors.New("no search query")
-		}
-
-		query, subs, err = pluginFind(asUid, query)
-		if err == nil && subs == nil && query != "" {
-			if and, opt, err := parseSearchQuery(query); err == nil {
-				var req [][]string
-				for _, tag := range and {
-					rewritten := rewriteTag(tag, sess.countryCode)
-					if len(rewritten) > 0 {
-						req = append(req, rewritten)
+		// Empty queries are ignored with "NoContent".
+		if query != "" {
+			query, subs, err = pluginFind(asUid, query)
+			if err == nil && subs == nil && query != "" {
+				if and, opt, err := parseSearchQuery(query); err == nil {
+					var req [][]string
+					for _, tag := range and {
+						rewritten := rewriteTag(tag, sess.countryCode)
+						if len(rewritten) > 0 {
+							req = append(req, rewritten)
+						}
 					}
-				}
-				opt = rewriteTagSlice(opt, sess.countryCode)
+					opt = rewriteTagSlice(opt, sess.countryCode)
 
-				if len(req) == 0 && len(opt) == 0 {
-					// Query string is empty.
-					sess.queueOut(ErrMalformedReply(msg, now))
-					return errors.New("empty search query")
-				}
+					// Check if the query contains terms that the user is not allowed to use.
+					if restr, _, _ := stringSliceDelta(t.tags,
+						filterTags(append(types.FlattenDoubleSlice(req), opt...), globals.maskedTagNS)); len(restr) > 0 {
+						sess.queueOut(ErrPermissionDeniedReply(msg, now))
+						return errors.New("attempt to search by restricted tags")
+					}
 
-				// Check if the query contains terms that the user is not allowed to use.
-				if restr, _, _ := stringSliceDelta(t.tags,
-					filterTags(append(types.FlattenDoubleSlice(req), opt...), globals.maskedTagNS)); len(restr) > 0 {
-					sess.queueOut(ErrPermissionDeniedReply(msg, now))
-					return errors.New("attempt to search by restricted tags")
-				}
-
-				// Ordinary users: find only active topics and accounts.
-				// Root users: find all topics and accounts, including suspended and soft-deleted.
-				subs, err = store.Users.FindSubs(asUid, globals.aliasTagNS, req, opt, sess.authLvl != auth.LevelRoot)
-				if err != nil {
-					sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
-					return err
+					// Ordinary users: find only active topics and accounts.
+					// Root users: find all topics and accounts, including suspended and soft-deleted.
+					subs, err = store.Users.FindSubs(asUid, globals.aliasTagNS, req, opt, sess.authLvl != auth.LevelRoot)
+					if err != nil {
+						sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
+						return err
+					}
 				}
 			}
 		}
@@ -2948,9 +2945,10 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	update := map[string]any{"Tags": tags, "UpdatedAt": now}
 	var err error
-	if t.cat == types.TopicCatMe {
+	switch t.cat {
+	case types.TopicCatMe:
 		err = store.Users.Update(asUid, update)
-	} else if t.cat == types.TopicCatGrp {
+	case types.TopicCatGrp:
 		err = store.Topics.Update(t.name, update)
 	}
 
