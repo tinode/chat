@@ -65,7 +65,7 @@ x-exporter-env-vars: &exporter-env-vars
 
 services:
   db:
-    image: mysql:5.7
+    image: mysql:8.0
     container_name: mysql
     restart: always
     # Use your own volume.
@@ -77,6 +77,8 @@ services:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
       timeout: 5s
       retries: 10
+    security_opt:
+      - seccomp=unconfined
 
   # Tinode servers.
   tinode-0:
