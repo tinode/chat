@@ -1821,7 +1821,7 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	return names, err
 }
 
-// TopicShare creates topic subscriptions
+// TopicShare creates topic subscriptions.
 func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	// Assign Ids.
 	for i := 0; i < len(subs); i++ {
@@ -1847,7 +1847,7 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	return nil
 }
 
-// TopicDelete deletes topic, subscription, messages
+// TopicDelete deletes topic, subscriptions, messages.
 func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	filter := b.M{}
 	if isChan {

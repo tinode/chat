@@ -1935,7 +1935,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	return tx.Commit(ctx)
 }
 
-// TopicDelete deletes specified topic.
+// TopicDelete deletes topic, subscriptions, messages.
 func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
