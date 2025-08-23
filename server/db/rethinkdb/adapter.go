@@ -36,7 +36,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 114
+	adpVersion = 116
 
 	adapterName = "rethinkdb"
 
@@ -559,10 +559,13 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
-	if a.version == 113 {
+	if a.version < 116 {
 		// Version 114: topics.aux added, fileuploads.etag added.
+		// Version 115: SQL indexes added.
+		// Version 116: topics.subcnt added.
+
 		// Just bump the version.
-		if err := bumpVersion(a, 114); err != nil {
+		if err := bumpVersion(a, 116); err != nil {
 			return err
 		}
 	}

@@ -44,7 +44,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 114
+	adpVersion  = 116
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -534,9 +534,11 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
-	if a.version == 113 {
-		// Version 114: topics.aux added, fileuploads.etag added..
-		if err := bumpVersion(a, 114); err != nil {
+	if a.version < 116 {
+		// Version 114: topics.aux added, fileuploads.etag added.
+		// Version 115: SQL indexes added.
+		// Version 116: topics.subcnt added.
+		if err := bumpVersion(a, 116); err != nil {
 			return err
 		}
 	}

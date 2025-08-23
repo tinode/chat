@@ -47,7 +47,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 115
+	adpVersion  = 116
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -680,12 +680,20 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		// Add column for storing subscriber count.
+		if err := bumpVersion(a, 115); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 115 {
+		// Perform database upgrade from version 115 to version 116.
+
+		// Add subscriber count column to the topics table.
 		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD subcnt INT DEFAULT 0"); err != nil {
 			return err
 		}
 
-		if err := bumpVersion(a, 115); err != nil {
+		if err := bumpVersion(a, 116); err != nil {
 			return err
 		}
 	}

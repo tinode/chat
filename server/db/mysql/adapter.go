@@ -46,7 +46,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 115
+	adpVersion = 116
 
 	adapterName = "mysql"
 
@@ -820,6 +820,19 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 115); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 115 {
+		// Perform database upgrade from version 115 to version 116.
+
+		// Add subscriber count column to the topics table.
+		if _, err := a.db.Exec("ALTER TABLE topics ADD COLUMN subcnt INT DEFAULT 0 AFTER delid"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 116); err != nil {
 			return err
 		}
 	}
