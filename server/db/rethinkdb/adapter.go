@@ -1604,7 +1604,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	return err
 }
 
-// TopicDelete deletes topic.
+// TopicDelete deletes topic, subscriptions, messages.
 func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	var err error
 	if err = a.subsDelForTopic(topic, isChan, hard); err != nil {

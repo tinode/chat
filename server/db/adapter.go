@@ -117,7 +117,7 @@ type Adapter interface {
 	ChannelsForUser(uid t.Uid) ([]string, error)
 	// TopicShare creates topic subscriptions.
 	TopicShare(subs []*t.Subscription) error
-	// TopicDelete deletes topic, subscription, messages.
+	// TopicDelete deletes topic, subscriptions, messages.
 	TopicDelete(topic string, isChan, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
@@ -125,6 +125,7 @@ type Adapter interface {
 	TopicUpdate(topic string, update map[string]any) error
 	// TopicOwnerChange updates topic's owner
 	TopicOwnerChange(topic string, newOwner t.Uid) error
+
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
