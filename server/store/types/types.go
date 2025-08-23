@@ -1387,6 +1387,13 @@ func GetTopicCat(name string) TopicCat {
 	}
 }
 
+// IsEphemeralTopic checks if the topic is ephemeral, i.e. it's a reference to the user,
+// it's not stored in the 'topics' table.
+func IsEphemeralTopic(topic string) bool {
+	cat := GetTopicCat(topic)
+	return cat == TopicCatMe || cat == TopicCatFnd
+}
+
 // DeviceDef is the data provided by connected device. Used primarily for
 // push notifications.
 type DeviceDef struct {

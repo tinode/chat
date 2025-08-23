@@ -165,7 +165,7 @@ func TestTopicCreateP2P(t *testing.T) {
 }
 
 func TestTopicShare(t *testing.T) {
-	if err := adp.TopicShare(subs); err != nil {
+	if err := adp.TopicShare(subs[0].Topic, subs); err != nil {
 		t.Fatal(err)
 	}
 }

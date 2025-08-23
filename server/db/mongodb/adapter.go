@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
 	"strconv"
@@ -1838,17 +1837,9 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 }
 
 // TopicShare creates topic subscriptions.
-func (a *adapter) TopicShare(shares []*t.Subscription) error {
-	if len(shares) == 0 {
-		return nil
-	}
-
+func (a *adapter) TopicShare(topic string, shares []*t.Subscription) error {
 	// Assign Ids.
-	topic := shares[0].Topic
 	for _, sub := range shares {
-		if sub.Topic != topic {
-			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
-		}
 		sub.Id = sub.Topic + ":" + sub.User
 	}
 

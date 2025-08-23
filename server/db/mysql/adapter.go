@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"hash/fnv"
 	"net/url"
 	"sort"
@@ -2035,11 +2034,7 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 			"AND INSTR(modewant, 'P')>0 AND INSTR(modegiven, 'P')>0 AND deletedat IS NULL")
 }
 
-func (a *adapter) TopicShare(shares []*t.Subscription) error {
-	if len(shares) == 0 {
-		return nil // Nothing to do
-	}
-
+func (a *adapter) TopicShare(topic string, shares []*t.Subscription) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -2054,19 +2049,17 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 		}
 	}()
 
-	topic := shares[0].Topic
 	for _, sub := range shares {
-		if sub.Topic != topic {
-			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
-		}
 		err = createSubscription(tx, sub, true)
 		if err != nil {
 			return err
 		}
 	}
 
-	if _, err = tx.Exec("UPDATE topics SET subcnt=subcnt+? WHERE name=?", len(shares), topic); err != nil {
-		return err
+	if topic != "" {
+		if _, err = tx.Exec("UPDATE topics SET subcnt=subcnt+? WHERE name=?", len(shares), topic); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

@@ -7,7 +7,6 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -1566,17 +1565,9 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 }
 
 // TopicShare creates topic subscriptions.
-func (a *adapter) TopicShare(shares []*t.Subscription) error {
-	if len(shares) == 0 {
-		return nil // Nothing to do.
-	}
-
-	// Check that all shares have the same topic, assign Ids.
-	topic := shares[0].Topic
+func (a *adapter) TopicShare(topic string, shares []*t.Subscription) error {
+	// Assign Ids.
 	for _, sub := range shares {
-		if sub.Topic != topic {
-			return fmt.Errorf("all shares must have the same topic, got %s vs %s", topic, sub.Topic)
-		}
 		sub.Id = sub.Topic + ":" + sub.User
 	}
 
@@ -1595,7 +1586,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 				"RecvSeqId": 0})
 		}}).RunWrite(a.conn)
 
-	if err == nil {
+	if err == nil && topic != "" {
 		_, err = rdb.DB(a.dbName).Table("topics").
 			Get(topic).
 			Update(map[string]any{"SubCnt": rdb.Row.Field("SubCnt").Default(0).Sub(len(shares))}).

@@ -1954,11 +1954,7 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 }
 
 // TopicShare creates topic subscriptions.
-func (a *adapter) TopicShare(shares []*t.Subscription) error {
-	if len(shares) == 0 {
-		return nil // Nothing to do
-	}
-
+func (a *adapter) TopicShare(topic string, shares []*t.Subscription) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -1973,20 +1969,17 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 		}
 	}()
 
-	topic := shares[0].Topic
 	for _, sub := range shares {
-		if sub.Topic != topic {
-			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
-		}
-
 		err = createSubscription(ctx, tx, sub, true)
 		if err != nil {
 			return err
 		}
 	}
 
-	if _, err = tx.Exec(ctx, "UPDATE topics SET subcnt=subcnt+$1 WHERE name=$2", len(shares), topic); err != nil {
-		return err
+	if topic != "" {
+		if _, err = tx.Exec(ctx, "UPDATE topics SET subcnt=subcnt+$1 WHERE name=$2", len(shares), topic); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit(ctx)

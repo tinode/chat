@@ -4,6 +4,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -616,13 +617,28 @@ type subsMapper struct{}
 // Subs is a singleton ancor object exporting SubsPersistenceInterface.
 var Subs SubsPersistenceInterface
 
-// Create creates multiple subscriptions
+// Create creates multiple subscriptions.
 func (subsMapper) Create(subs ...*types.Subscription) error {
-	for _, sub := range subs {
-		sub.InitTimes()
+	if len(subs) == 0 {
+		// Nothing to do.
+		return nil
 	}
 
-	return adp.TopicShare(subs)
+	topic := subs[0].Topic
+	if types.IsEphemeralTopic(topic) {
+		// Ephemeral topics are not persisted in 'topics' table, don't try to update them.
+		// Mixing ephemeral and real topics is not permitted.
+		topic = ""
+	}
+
+	for _, sub := range subs {
+		sub.InitTimes()
+		if topic != "" && sub.Topic != topic {
+			return fmt.Errorf("all subscriptions must be for the same topic, got %s vs %s", sub.Topic, topic)
+		}
+	}
+
+	return adp.TopicShare(topic, subs)
 }
 
 // Get subscription given topic and user ID.
