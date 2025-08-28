@@ -2390,7 +2390,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 
 	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,0,u.access,0,u.public,u.trusted,u.tags," + matcher + " AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
-		"WHERE " + stateConstraint + "ut.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags"
+		"WHERE " + stateConstraint + "ut.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
 	if len(allReq) > 0 {
 		q, a := common.DisjunctionSql(req, "ut.tag")
 		query += q
