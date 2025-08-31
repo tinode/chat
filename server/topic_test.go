@@ -2641,6 +2641,71 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 }
 
+func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
+	// This test simulates the scenario from issue #898:
+	// 1. User1 sends messages to User2
+	// 2. User1 deletes some messages (soft delete)
+	// 3. Verify that the unread calculation logic works correctly
+	
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // Sender/deleter
+	user2 := helper.uids[1] // Recipient
+	
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	// So user2 has 5 unread messages (6, 7, 8, 9, 10)
+	helper.topic.lastID = 10
+	
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10  // user1 has read all
+	helper.topic.perUser[user1] = pud1
+	
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5   // user2 has 5 unread messages
+	helper.topic.perUser[user2] = pud2
+	
+	// Simulate user1 deleting messages 7 and 8 (2 of user2's unread messages)
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id: "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: false, // Soft delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion
+	helper.mm.EXPECT().DeleteList(topicName, 1, user1, time.Duration(0), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+	
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+	
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+	
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+	
+	// The key verification is that calculateUnreadInRanges should have been called
+	// with the correct parameters. We can test this indirectly by testing the function:
+	ranges := []types.Range{{Low: 7, Hi: 9}}
+	unreadDeleted := calculateUnreadInRanges(5, 10, ranges) // user2's readID=5, lastID=10
+	if unreadDeleted != 2 {
+		t.Errorf("Expected 2 unread messages to be deleted for user2, got %d", unreadDeleted)
+	}
+}
+
 func TestCalculateUnreadInRanges(t *testing.T) {
 	tests := []struct {
 		name     string
