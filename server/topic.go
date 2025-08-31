@@ -3249,6 +3249,19 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 		pud.delID = t.delID
 		t.perUser[asUid] = pud
 
+		// Update unread counters for other users who may have had these messages as unread
+		// Only for soft deletes (when forUser != types.ZeroUid)
+		for uid, otherPud := range t.perUser {
+			if uid != asUid && (otherPud.modeGiven&otherPud.modeWant).IsReader() {
+				// Calculate how many unread messages were deleted for this user
+				unreadDeleted := calculateUnreadInRanges(otherPud.readID, t.lastID, ranges)
+				if unreadDeleted > 0 {
+					// Decrease unread count (negative value)
+					usersUpdateUnread(uid, -unreadDeleted, true)
+				}
+			}
+		}
+
 		// Notify user's other sessions
 		t.presPubMessageDelete(asUid, pud.modeGiven&pud.modeWant, t.delID, dr, sess.sid)
 	}
@@ -3961,4 +3974,36 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 		}
 	}
 	return name
+}
+
+// calculateUnreadInRanges calculates how many unread messages are within the given ranges.
+// unreadStart is the first unread message SeqId (readID + 1), unreadEnd is the last possible message SeqId.
+func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
+	if readID >= lastID {
+		// No unread messages
+		return 0
+	}
+	
+	unreadStart := readID + 1
+	unreadEnd := lastID
+	
+	count := 0
+	for _, r := range ranges {
+		rangeStart := r.Low
+		rangeEnd := r.Hi
+		if rangeEnd == 0 {
+			// Single message range
+			rangeEnd = rangeStart + 1
+		}
+		
+		// Find intersection of [unreadStart, unreadEnd] and [rangeStart, rangeEnd)
+		intersectionStart := max(unreadStart, rangeStart)
+		intersectionEnd := min(unreadEnd+1, rangeEnd) // +1 because unreadEnd is inclusive
+		
+		if intersectionStart < intersectionEnd {
+			count += intersectionEnd - intersectionStart
+		}
+	}
+	
+	return count
 }

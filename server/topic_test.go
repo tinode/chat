@@ -2641,6 +2641,76 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 }
 
+func TestCalculateUnreadInRanges(t *testing.T) {
+	tests := []struct {
+		name     string
+		readID   int
+		lastID   int
+		ranges   []types.Range
+		expected int
+	}{
+		{
+			name:     "no unread messages",
+			readID:   10,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 5, Hi: 15}},
+			expected: 0,
+		},
+		{
+			name:     "no deleted messages in unread range",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 1, Hi: 5}},
+			expected: 0,
+		},
+		{
+			name:     "all unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 6, Hi: 11}},
+			expected: 5,
+		},
+		{
+			name:     "partial unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 9}},
+			expected: 2,
+		},
+		{
+			name:     "single message deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 0}}, // Hi: 0 means single message
+			expected: 1,
+		},
+		{
+			name:     "multiple ranges",
+			readID:   5,
+			lastID:   15,
+			ranges:   []types.Range{{Low: 7, Hi: 9}, {Low: 12, Hi: 14}},
+			expected: 4, // 2 messages in range [7,9) + 2 messages in range [12,14)
+		},
+		{
+			name:     "overlapping with unread boundaries",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 4, Hi: 8}, {Low: 9, Hi: 12}},
+			expected: 4, // [6,8) + [9,11) = 2 + 2 = 4 unread messages deleted
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := calculateUnreadInRanges(tt.readID, tt.lastID, tt.ranges)
+			if result != tt.expected {
+				t.Errorf("calculateUnreadInRanges(%d, %d, %v) = %d; want %d",
+					tt.readID, tt.lastID, tt.ranges, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	logs.Init(os.Stderr, "stdFlags")
 	// Set max subscriber count to effective infinity.
