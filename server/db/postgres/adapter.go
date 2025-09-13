@@ -24,6 +24,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db/common"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -2388,11 +2389,13 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 		matcher = "COUNT(*)"
 	}
 
-	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,0,u.access,0,u.public,u.trusted,u.tags," + matcher + " AS matches " +
-		"FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
-		"WHERE " + stateConstraint + "ut.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
+	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,FALSE,u.access::jsonb,0,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb," +
+		matcher + " AS matches " +
+		"FROM users AS u LEFT JOIN usertags AS tg ON tg.userid=u.id " +
+		"WHERE " + stateConstraint + "tg.tag IN (?) " +
+		"GROUP BY u.id,u.createdat,u.updatedat,u.access::jsonb,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb "
 	if len(allReq) > 0 {
-		q, a := common.DisjunctionSql(req, "ut.tag")
+		q, a := common.DisjunctionSql(req, "tg.tag")
 		query += q
 		args = append(args, a)
 	}
@@ -2407,16 +2410,20 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	}
 	args = append(args, allTags)
 
-	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags," + matcher + " AS matches " +
-		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags"
+	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.subcnt,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb," +
+		matcher + " AS matches " +
+		"FROM topics AS t LEFT JOIN topictags AS tg ON t.name=tg.topic " +
+		"WHERE " + stateConstraint + "tg.tag IN (?) " +
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb "
 	if len(allReq) > 0 {
-		q, a := common.DisjunctionSql(req, "tt.tag")
+		q, a := common.DisjunctionSql(req, "tg.tag")
 		query += q
 		args = append(args, a)
 	}
 
-	query, args = expandQuery(query+" ORDER BY matches DESC LIMIT ?", args, a.maxResults)
+	query, args = expandQuery(query+"ORDER BY matches DESC LIMIT ?", args, a.maxResults)
+
+	logs.Info.Printf("Find: %s; %v", query, args)
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
