@@ -24,7 +24,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db/common"
-	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -2364,8 +2363,6 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	}
 
 	query, args = expandQuery(query+"ORDER BY matches DESC LIMIT ?", args, a.maxResults)
-
-	logs.Info.Printf("Find: %s; %v", query, args)
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
