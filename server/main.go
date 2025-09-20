@@ -214,10 +214,6 @@ var globals struct {
 
 	// Maximum age of messages which can be deleted with 'D' permission.
 	msgDeleteAge time.Duration
-
-	// Message encryption settings
-	encryptionEnabled bool
-	encryptionKey     string
 }
 
 // Credential validator config.
@@ -353,9 +349,6 @@ func main() {
 		"Override the URL path where the server's internal status is displayed. Use '-' to disable.")
 	pprofFile := flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
 	pprofUrl := flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
-	// Encryption flags
-	encryptionEnabled := flag.Bool("encryption_enabled", false, "Enable message encryption")
-	encryptionKey := flag.String("encryption_key", "", "32-byte encryption key (base64 encoded)")
 
 	flag.Parse()
 
@@ -398,10 +391,6 @@ func main() {
 	if *listenOn != "" {
 		config.Listen = *listenOn
 	}
-
-	// Store encryption flags for later use in store initialization
-	globals.encryptionEnabled = *encryptionEnabled
-	globals.encryptionKey = *encryptionKey
 
 	// Set up HTTP server. Must use non-default mux because of expvar.
 	mux := http.NewServeMux()
@@ -446,11 +435,6 @@ func main() {
 		defer pprof.WriteHeapProfile(memf)
 
 		logs.Info.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
-	}
-
-	// Initialize encryption service from command line flags
-	if err := store.InitEncryptionFromFlags(globals.encryptionEnabled, globals.encryptionKey); err != nil {
-		logs.Err.Fatal("Failed to initialize encryption: ", err)
 	}
 
 	err = store.Store.Open(workerId, config.Store)

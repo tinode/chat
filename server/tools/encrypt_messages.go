@@ -60,11 +60,6 @@ func main() {
 	}
 	defer store.Store.Close()
 
-	// Initialize encryption service
-	if err := store.InitEncryptionFromFlags(true, *key); err != nil {
-		log.Fatalf("Failed to initialize encryption: %v", err)
-	}
-
 	// For now, we'll work with a single topic specified by command line
 	// In a real implementation, you might want to iterate through all topics
 	// or implement a TopicsGetAll method in the adapter
@@ -73,8 +68,8 @@ func main() {
 		log.Fatal("Please specify a topic name with -topic flag")
 	}
 
-	// Get messages for the specified topic
-	messages, err := store.Store.GetAdapter().MessageGetAll(*topicName, types.ZeroUid, nil)
+	// Get messages for the specified topic using the store interface
+	messages, err := store.Messages.GetAll(*topicName, types.ZeroUid, nil)
 	if err != nil {
 		log.Fatalf("Failed to get messages for topic %s: %v", *topicName, err)
 	}
@@ -89,7 +84,7 @@ func main() {
 		if *reverse {
 			// Decrypt encrypted messages
 			if isEncrypted(msg.Content) {
-				decryptedContent, err := store.GetEncryptionService().DecryptContent(msg.Content)
+				decryptedContent, err := store.GetMessageEncryptionService().DecryptContent(msg.Content)
 				if err != nil {
 					log.Printf("Failed to decrypt message %s in topic %s: %v", msg.Uid(), *topicName, err)
 					errors++
@@ -101,7 +96,7 @@ func main() {
 		} else {
 			// Encrypt unencrypted messages
 			if !isEncrypted(msg.Content) {
-				encryptedContent, err := store.GetEncryptionService().EncryptContent(msg.Content)
+				encryptedContent, err := store.GetMessageEncryptionService().EncryptContent(msg.Content)
 				if err != nil {
 					log.Printf("Failed to encrypt message %s in topic %s: %v", msg.Uid(), *topicName, err)
 					errors++
@@ -113,8 +108,9 @@ func main() {
 		}
 
 		if !*dryRun {
-			// Save the modified message
-			if err := store.Store.GetAdapter().MessageSave(&msg); err != nil {
+			// Save the modified message using the store interface
+			err, _ := store.Messages.Save(&msg, nil, false)
+			if err != nil {
 				log.Printf("Failed to save message %s in topic %s: %v", msg.Uid(), *topicName, err)
 				errors++
 				continue

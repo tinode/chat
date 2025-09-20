@@ -1,10 +1,16 @@
-# Message Encryption
+# Message Encryption at Rest
 
-This document describes the message encryption feature in Tinode, which allows encrypting message content stored in the database to prevent unauthorized access to message content using database tools.
+This document describes the message encryption at rest feature in Tinode, which allows encrypting message content stored in the database to prevent unauthorized access to message content using database tools.
 
 ## Overview
 
-The encryption feature uses AES-256-GCM symmetric encryption to encrypt only the `content` field of messages. The encryption is transparent to clients - messages are automatically encrypted when saved and decrypted when retrieved.
+The encryption feature uses AES-GCM symmetric encryption to encrypt only the `content` field of messages. The encryption is transparent to clients - messages are automatically encrypted when saved and decrypted when retrieved.
+
+**Supported AES key sizes:**
+
+- AES-128: 16 bytes (128 bits)
+- AES-192: 24 bytes (192 bits)
+- AES-256: 32 bytes (256 bits)
 
 ## Configuration
 
@@ -15,44 +21,56 @@ Add encryption settings to your `tinode.conf` file:
 ```json
 {
   "store_config": {
-    "encryption": {
-      "enabled": true,
-      "key": "base64-encoded-32-byte-key-here"
+    "encrypt_at_rest": {
+      "key": "base64-encoded-key-here"
     }
   }
 }
 ```
 
+**Note:** If no key is provided or the key is empty, encryption is disabled.
+
 ### Command Line Flags
 
-You can also enable encryption via command line flags:
+You can also enable encryption via command line flags (overrides config file):
 
 ```bash
-./tinode-server --encryption_enabled --encryption_key "base64-encoded-32-byte-key-here"
+./tinode-server --message_encrypt_at_rest_key "base64-encoded-key-here"
 ```
 
 ## Key Management
 
 ### Generating an Encryption Key
 
-Generate a 32-byte (256-bit) random key using the built-in keygen tool:
+Generate a random key using the built-in keygen tool:
 
 ```bash
-# Generate 32-byte encryption key
+# Generate 32-byte encryption key (AES-256)
 cd keygen
 ./keygen -encryption
 
-# Generate custom size key
-./keygen -encryption -keysize 32
+# Generate 16-byte encryption key (AES-128)
+./keygen -encryption -keysize 16
 
-# Save key to file
-./keygen -encryption -output encryption.key
+# Generate 24-byte encryption key (AES-192)
+./keygen -encryption -keysize 24
+
+# Save key to file using shell redirection
+./keygen -encryption > encryption.key
 ```
+
+The keygen tool validates that the key size is exactly 16, 24, or 32 bytes.
 
 Alternatively, you can use OpenSSL:
 
 ```bash
-# Generate 32 random bytes and encode in base64
+# Generate 16 random bytes and encode in base64 (AES-128)
+openssl rand -base64 16
+
+# Generate 24 random bytes and encode in base64 (AES-192)
+openssl rand -base64 24
+
+# Generate 32 random bytes and encode in base64 (AES-256)
 openssl rand -base64 32
 ```
 
@@ -83,6 +101,8 @@ go run server/tools/encrypt_messages.go \
   --key_string "your-base64-encoded-key" \
   --topic "your-topic-name"
 ```
+
+**Note:** The migration tool now uses the proper store interface and handles all supported AES key sizes.
 
 ### From Encrypted to Unencrypted
 
@@ -121,22 +141,24 @@ go run server/tools/encrypt_messages.go \
 
 ### Encryption Algorithm
 
-- **Cipher**: AES-256
+- **Cipher**: AES (Advanced Encryption Standard)
 - **Mode**: GCM (Galois/Counter Mode)
-- **Key size**: 256 bits (32 bytes)
+- **Key sizes**: 128, 192, or 256 bits (16, 24, or 32 bytes)
 - **Nonce**: Random 12-byte nonce for each message
 
 ### Storage Format
 
-Encrypted content is stored as a JSON object:
+Encrypted content is stored as a JSON object with automatic base64 encoding:
 
 ```json
 {
   "data": "base64-encoded-encrypted-data",
-  "nonce": "base64-encoded-nonce",
+  "nonce": "base64-encoded-nonce", 
   "encrypted": true
 }
 ```
+
+The `data` and `nonce` fields are automatically base64 encoded/decoded during JSON marshaling/unmarshaling.
 
 ### Performance Impact
 
@@ -148,12 +170,13 @@ Encrypted content is stored as a JSON object:
 
 ### Common Issues
 
-1. **"encryption key is required when encryption is enabled"**
-   - Ensure you've provided a valid base64-encoded 32-byte key
+1. **"encryption key must be 16, 24, or 32 bytes"**
+   - Ensure your key is exactly 16, 24, or 32 bytes when decoded from base64
+   - Use the keygen tool to generate valid keys
 
 2. **"failed to decode base64 encryption key"**
    - Verify your key is properly base64-encoded
-   - Ensure the key is exactly 32 bytes when decoded
+   - Ensure there are no extra spaces or newlines in the key
 
 3. **"failed to create AES cipher"**
    - This usually indicates a system-level issue with crypto libraries
@@ -171,6 +194,31 @@ Encryption-related errors and warnings are logged with the prefix:
 - Hardware security module (HSM) integration
 - Per-topic encryption settings
 - End-to-end encryption support
+
+## Migration from Previous Versions
+
+**New configuration:**
+
+```json
+{
+  "store_config": {
+    "encrypt_at_rest": {
+      "key": "base64-encoded-key"
+    }
+  }
+}
+```
+
+**Key changes:**
+- Support for multiple AES key sizes (16, 24, 32 bytes) instead of just 32 bytes
+- Command line flag renamed from `--encryption_key` to `--message_encrypt_at_rest_key`
+
+### Migration Steps
+
+1. **Update your configuration file** to use the new field names
+2. **Test with a dry run** using the migration tool
+3. **Restart the server** with the new configuration
+4. **Verify encryption is working** by checking logs and database content
 
 ## API Changes
 

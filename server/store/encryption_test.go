@@ -1,44 +1,72 @@
 package store
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"testing"
 )
 
-func TestNewEncryptionService(t *testing.T) {
-	// Test with disabled encryption
-	es, err := NewEncryptionService(false, nil)
+func TestNewMessageEncryptionService(t *testing.T) {
+	// Test with no key (disabled encryption)
+	es, err := NewMessageEncryptionService(nil)
 	if err != nil {
 		t.Fatalf("Failed to create disabled encryption service: %v", err)
 	}
-	if es.IsEnabled() {
-		t.Error("Encryption service should be disabled")
+	if es != nil {
+		t.Error("Encryption service should be nil when no key provided")
 	}
 
-	// Test with valid key
+	// Test with empty key (disabled encryption)
+	es, err = NewMessageEncryptionService([]byte{})
+	if err != nil {
+		t.Fatalf("Failed to create disabled encryption service: %v", err)
+	}
+	if es != nil {
+		t.Error("Encryption service should be nil when empty key provided")
+	}
+
+	// Test with valid 32-byte key
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
 	}
-	es, err = NewEncryptionService(true, key)
+	es, err = NewMessageEncryptionService(key)
 	if err != nil {
 		t.Fatalf("Failed to create enabled encryption service: %v", err)
 	}
-	if !es.IsEnabled() {
+	if es == nil || !es.IsEnabled() {
 		t.Error("Encryption service should be enabled")
 	}
 
-	// Test with invalid key length
-	_, err = NewEncryptionService(true, []byte("short"))
-	if err == nil {
-		t.Error("Should fail with short key")
+	// Test with valid 16-byte key
+	key16 := make([]byte, 16)
+	for i := range key16 {
+		key16[i] = byte(i)
+	}
+	es, err = NewMessageEncryptionService(key16)
+	if err != nil {
+		t.Fatalf("Failed to create enabled encryption service with 16-byte key: %v", err)
+	}
+	if es == nil || !es.IsEnabled() {
+		t.Error("Encryption service should be enabled with 16-byte key")
 	}
 
-	// Test with empty key when enabled
-	_, err = NewEncryptionService(true, nil)
+	// Test with valid 24-byte key
+	key24 := make([]byte, 24)
+	for i := range key24 {
+		key24[i] = byte(i)
+	}
+	es, err = NewMessageEncryptionService(key24)
+	if err != nil {
+		t.Fatalf("Failed to create enabled encryption service with 24-byte key: %v", err)
+	}
+	if es == nil || !es.IsEnabled() {
+		t.Error("Encryption service should be enabled with 24-byte key")
+	}
+
+	// Test with invalid key length
+	_, err = NewMessageEncryptionService([]byte("short"))
 	if err == nil {
-		t.Error("Should fail with empty key when enabled")
+		t.Error("Should fail with short key")
 	}
 }
 
@@ -48,7 +76,7 @@ func TestEncryptDecryptContent(t *testing.T) {
 	for i := range key {
 		key[i] = byte(i)
 	}
-	es, err := NewEncryptionService(true, key)
+	es, err := NewMessageEncryptionService(key)
 	if err != nil {
 		t.Fatalf("Failed to create encryption service: %v", err)
 	}
@@ -72,8 +100,8 @@ func TestEncryptDecryptContent(t *testing.T) {
 				t.Fatalf("Failed to encrypt content: %v", err)
 			}
 
-			// Verify it's encrypted
-			if encrypted == tc.content {
+			// Verify it's encrypted (except for nil content which stays nil)
+			if tc.content != nil && encrypted == tc.content {
 				t.Error("Content should be encrypted")
 			}
 
@@ -106,7 +134,7 @@ func TestEncryptedContentStructure(t *testing.T) {
 	for i := range key {
 		key[i] = byte(i)
 	}
-	es, err := NewEncryptionService(true, key)
+	es, err := NewMessageEncryptionService(key)
 	if err != nil {
 		t.Fatalf("Failed to create encryption service: %v", err)
 	}
@@ -127,22 +155,16 @@ func TestEncryptedContentStructure(t *testing.T) {
 		t.Error("Encrypted flag should be true")
 	}
 
-	if ec.Data == "" {
+	if len(ec.Data) == 0 {
 		t.Error("Data should not be empty")
 	}
 
-	if ec.Nonce == "" {
+	if len(ec.Nonce) == 0 {
 		t.Error("Nonce should not be empty")
 	}
 
-	// Verify data and nonce are valid base64
-	if _, err := base64.StdEncoding.DecodeString(ec.Data); err != nil {
-		t.Errorf("Data is not valid base64: %v", err)
-	}
-
-	if _, err := base64.StdEncoding.DecodeString(ec.Nonce); err != nil {
-		t.Errorf("Nonce is not valid base64: %v", err)
-	}
+	// Data and Nonce are now []byte, so they don't need base64 validation
+	// The JSON marshaling/unmarshaling handles base64 conversion automatically
 }
 
 func TestDecryptUnencryptedContent(t *testing.T) {
@@ -150,7 +172,7 @@ func TestDecryptUnencryptedContent(t *testing.T) {
 	for i := range key {
 		key[i] = byte(i)
 	}
-	es, err := NewEncryptionService(true, key)
+	es, err := NewMessageEncryptionService(key)
 	if err != nil {
 		t.Fatalf("Failed to create encryption service: %v", err)
 	}
@@ -168,7 +190,8 @@ func TestDecryptUnencryptedContent(t *testing.T) {
 }
 
 func TestDisabledEncryptionService(t *testing.T) {
-	es := &EncryptionService{enabled: false}
+	// Test with nil service (no encryption)
+	var es *MessageEncryptionService = nil
 
 	content := "Test message"
 

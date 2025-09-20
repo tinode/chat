@@ -12,8 +12,7 @@ A command-line utility to generate an API key for [Tinode server](../server/)
 **Encryption Key Generation:**
 
  * `encryption`: Generate encryption key instead of API key.
- * `keysize`: Encryption key size in bytes (default: 32 for AES-256).
- * `output`: Output file for the encryption key (optional).
+ * `keysize`: Encryption key size in bytes. Must be 16 (AES-128), 24 (AES-192), or 32 (AES-256). Default: 32.
 
 
 ## Usage
@@ -39,14 +38,17 @@ HMAC salt: TC0Jzr8f28kAspXrb4UYccJUJ63b7CSA16n1qMxxGpw=
 **Generate Encryption Key:**
 
 ```sh
-# Generate 32-byte encryption key
+# Generate 32-byte encryption key (AES-256)
 ./keygen -encryption
 
-# Generate custom size key
-./keygen -encryption -keysize 32
+# Generate 16-byte encryption key (AES-128)
+./keygen -encryption -keysize 16
 
-# Save key to file
-./keygen -encryption -output encryption.key
+# Generate 24-byte encryption key (AES-192)
+./keygen -encryption -keysize 24
+
+# Save key to file using shell redirection
+./keygen -encryption > encryption.key
 ```
 
 Sample encryption key output:
@@ -56,8 +58,7 @@ Generated 32-byte encryption key:
 dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3Q=
 
 Add this to your tinode.conf:
-"encryption": {
-    "enabled": true,
+"encrypt_at_rest": {
     "key": "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3Q="
 }
 ```

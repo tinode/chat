@@ -4,39 +4,33 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 )
 
-// EncryptionService handles encryption and decryption of message content
-type EncryptionService struct {
-	enabled bool
-	key     []byte
-	aead    cipher.AEAD
+// MessageEncryptionService handles encryption and decryption of message content at rest
+type MessageEncryptionService struct {
+	key  []byte
+	aead cipher.AEAD
 }
 
 // EncryptedContent represents encrypted message content with metadata
 type EncryptedContent struct {
-	Data      string `json:"data"`      // Base64 encoded encrypted data
-	Nonce     string `json:"nonce"`     // Base64 encoded nonce
+	Data      []byte `json:"data"`      // Encrypted data (automatically base64 encoded/decoded)
+	Nonce     []byte `json:"nonce"`     // Nonce (automatically base64 encoded/decoded)
 	Encrypted bool   `json:"encrypted"` // Flag to identify encrypted content
 }
 
-// NewEncryptionService creates a new encryption service
-func NewEncryptionService(enabled bool, key []byte) (*EncryptionService, error) {
-	if !enabled {
-		return &EncryptionService{enabled: false}, nil
-	}
-
+// NewMessageEncryptionService creates a new message encryption service
+func NewMessageEncryptionService(key []byte) (*MessageEncryptionService, error) {
 	if len(key) == 0 {
-		return nil, fmt.Errorf("encryption key cannot be empty when encryption is enabled")
+		return nil, nil // No encryption if no key provided
 	}
 
-	// Ensure key is exactly 32 bytes for AES-256
-	if len(key) != 32 {
-		return nil, fmt.Errorf("encryption key must be exactly 32 bytes, got %d", len(key))
+	// Validate key size - AES supports 16, 24, or 32 bytes
+	if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+		return nil, fmt.Errorf("encryption key must be 16, 24, or 32 bytes, got %d", len(key))
 	}
 
 	block, err := aes.NewCipher(key)
@@ -49,21 +43,25 @@ func NewEncryptionService(enabled bool, key []byte) (*EncryptionService, error) 
 		return nil, fmt.Errorf("failed to create GCM mode: %w", err)
 	}
 
-	return &EncryptionService{
-		enabled: true,
-		key:     key,
-		aead:    aead,
+	return &MessageEncryptionService{
+		key:  key,
+		aead: aead,
 	}, nil
 }
 
-// IsEnabled returns whether encryption is enabled
-func (es *EncryptionService) IsEnabled() bool {
-	return es.enabled
+// IsEnabled returns whether encryption is enabled (key is present)
+func (es *MessageEncryptionService) IsEnabled() bool {
+	return es != nil && es.key != nil
 }
 
 // EncryptContent encrypts message content
-func (es *EncryptionService) EncryptContent(content any) (any, error) {
-	if !es.enabled {
+func (es *MessageEncryptionService) EncryptContent(content any) (any, error) {
+	if es == nil || es.key == nil {
+		return content, nil
+	}
+
+	// Handle nil content
+	if content == nil {
 		return content, nil
 	}
 
@@ -84,8 +82,8 @@ func (es *EncryptionService) EncryptContent(content any) (any, error) {
 
 	// Create encrypted content structure
 	encryptedContent := &EncryptedContent{
-		Data:      base64.StdEncoding.EncodeToString(encrypted),
-		Nonce:     base64.StdEncoding.EncodeToString(nonce),
+		Data:      encrypted,
+		Nonce:     nonce,
 		Encrypted: true,
 	}
 
@@ -93,8 +91,8 @@ func (es *EncryptionService) EncryptContent(content any) (any, error) {
 }
 
 // DecryptContent decrypts message content
-func (es *EncryptionService) DecryptContent(content any) (any, error) {
-	if !es.enabled {
+func (es *MessageEncryptionService) DecryptContent(content any) (any, error) {
+	if es == nil || es.key == nil {
 		return content, nil
 	}
 
@@ -120,19 +118,8 @@ func (es *EncryptionService) DecryptContent(content any) (any, error) {
 		return content, nil
 	}
 
-	// Decode base64 data and nonce
-	encryptedData, err := base64.StdEncoding.DecodeString(encryptedContent.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode encrypted data: %w", err)
-	}
-
-	nonce, err := base64.StdEncoding.DecodeString(encryptedContent.Nonce)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode nonce: %w", err)
-	}
-
-	// Decrypt the content
-	decryptedBytes, err := es.aead.Open(nil, nonce, encryptedData, nil)
+	// Decrypt the content (Data and Nonce are already []byte, no need to decode)
+	decryptedBytes, err := es.aead.Open(nil, encryptedContent.Nonce, encryptedContent.Data, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt content: %w", err)
 	}
@@ -148,8 +135,8 @@ func (es *EncryptionService) DecryptContent(content any) (any, error) {
 }
 
 // GetKey returns a copy of the encryption key (for testing purposes)
-func (es *EncryptionService) GetKey() []byte {
-	if !es.enabled {
+func (es *MessageEncryptionService) GetKey() []byte {
+	if es == nil || es.key == nil {
 		return nil
 	}
 	keyCopy := make([]byte, len(es.key))
@@ -157,12 +144,12 @@ func (es *EncryptionService) GetKey() []byte {
 	return keyCopy
 }
 
-// GetEncryptionService returns the current encryption service instance
-func GetEncryptionService() *EncryptionService {
-	return encryptionService
+// GetMessageEncryptionService returns the current message encryption service instance
+func GetMessageEncryptionService() *MessageEncryptionService {
+	return messageEncryptionService
 }
 
-// IsEncryptionEnabled returns whether encryption is currently enabled
-func IsEncryptionEnabled() bool {
-	return encryptionService != nil && encryptionService.IsEnabled()
+// IsMessageEncryptionEnabled returns whether message encryption is currently enabled
+func IsMessageEncryptionEnabled() bool {
+	return messageEncryptionService != nil && messageEncryptionService.IsEnabled()
 }

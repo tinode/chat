@@ -25,8 +25,8 @@ var mediaHandler media.Handler
 // Unique ID generator
 var uGen types.UidGenerator
 
-// Encryption service for message content
-var encryptionService *EncryptionService
+// Message encryption service for content at rest
+var messageEncryptionService *MessageEncryptionService
 
 type configType struct {
 	// 16-byte key for XTEA. Used to initialize types.UidGenerator.
@@ -37,14 +37,13 @@ type configType struct {
 	UseAdapter string `json:"use_adapter"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
-	// Message encryption configuration
-	Encryption *EncryptionConfig `json:"encryption,omitempty"`
+	// Message encryption at rest configuration
+	EncryptAtRest *EncryptAtRestConfig `json:"encrypt_at_rest,omitempty"`
 }
 
-// EncryptionConfig represents message encryption configuration
-type EncryptionConfig struct {
-	Enabled bool   `json:"enabled"`
-	Key     string `json:"key"`
+// EncryptAtRestConfig represents message encryption at rest configuration
+type EncryptAtRestConfig struct {
+	Key string `json:"key"`
 }
 
 func openAdapter(workerId int, jsonconf json.RawMessage) error {
@@ -84,9 +83,9 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 		return errors.New("store: failed to init snowflake: " + err.Error())
 	}
 
-	// Initialize encryption service
-	if err := initEncryption(config.Encryption); err != nil {
-		return errors.New("store: failed to init encryption: " + err.Error())
+	// Initialize message encryption service
+	if err := initMessageEncryption(config.EncryptAtRest); err != nil {
+		return errors.New("store: failed to init message encryption: " + err.Error())
 	}
 
 	if err := adp.SetMaxResults(config.MaxResults); err != nil {
@@ -101,15 +100,11 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	return adp.Open(adapterConfig)
 }
 
-// initEncryption initializes the encryption service
-func initEncryption(encConfig *EncryptionConfig) error {
-	if encConfig == nil || !encConfig.Enabled {
-		encryptionService = &EncryptionService{enabled: false}
+// initMessageEncryption initializes the message encryption service
+func initMessageEncryption(encConfig *EncryptAtRestConfig) error {
+	if encConfig == nil || encConfig.Key == "" {
+		messageEncryptionService = nil
 		return nil
-	}
-
-	if encConfig.Key == "" {
-		return errors.New("encryption key is required when encryption is enabled")
 	}
 
 	// Decode base64 key
@@ -118,25 +113,21 @@ func initEncryption(encConfig *EncryptionConfig) error {
 		return fmt.Errorf("failed to decode base64 encryption key: %w", err)
 	}
 
-	// Create encryption service
-	es, err := NewEncryptionService(true, key)
+	// Create message encryption service
+	es, err := NewMessageEncryptionService(key)
 	if err != nil {
-		return fmt.Errorf("failed to create encryption service: %w", err)
+		return fmt.Errorf("failed to create message encryption service: %w", err)
 	}
 
-	encryptionService = es
+	messageEncryptionService = es
 	return nil
 }
 
-// InitEncryptionFromFlags initializes encryption service from command line flags
-func InitEncryptionFromFlags(enabled bool, key string) error {
-	if !enabled {
-		encryptionService = &EncryptionService{enabled: false}
-		return nil
-	}
-
+// initMessageEncryptionFromFlags initializes message encryption service from command line flags
+func initMessageEncryptionFromFlags(key string) error {
 	if key == "" {
-		return errors.New("encryption key is required when encryption is enabled")
+		messageEncryptionService = nil
+		return nil
 	}
 
 	// Decode base64 key
@@ -145,13 +136,42 @@ func InitEncryptionFromFlags(enabled bool, key string) error {
 		return fmt.Errorf("failed to decode base64 encryption key: %w", err)
 	}
 
-	// Create encryption service
-	es, err := NewEncryptionService(true, keyBytes)
+	// Create message encryption service
+	es, err := NewMessageEncryptionService(keyBytes)
 	if err != nil {
-		return fmt.Errorf("failed to create encryption service: %w", err)
+		return fmt.Errorf("failed to create message encryption service: %w", err)
 	}
 
-	encryptionService = es
+	messageEncryptionService = es
+	return nil
+}
+
+// initMessageEncryptionFromConfig initializes message encryption service from config file
+func initMessageEncryptionFromConfig(jsonconf json.RawMessage) error {
+	var config configType
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return fmt.Errorf("failed to parse store config: %w", err)
+	}
+
+	// Check if encryption is configured
+	if config.EncryptAtRest == nil || config.EncryptAtRest.Key == "" {
+		messageEncryptionService = nil
+		return nil
+	}
+
+	// Decode base64 key
+	keyBytes, err := base64.StdEncoding.DecodeString(config.EncryptAtRest.Key)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 encryption key: %w", err)
+	}
+
+	// Create message encryption service
+	es, err := NewMessageEncryptionService(keyBytes)
+	if err != nil {
+		return fmt.Errorf("failed to create message encryption service: %w", err)
+	}
+
+	messageEncryptionService = es
 	return nil
 }
 
@@ -184,10 +204,15 @@ type storeObj struct{}
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 //
-//		name - name of the adapter rquested in the config file
-//	  jsonconf - configuration string
+//	workerId - worker ID for snowflake initialization
+//	jsonconf - configuration string
 func (storeObj) Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
+		return err
+	}
+
+	// Initialize message encryption from config
+	if err := initMessageEncryptionFromConfig(jsonconf); err != nil {
 		return err
 	}
 
@@ -733,8 +758,8 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 	msg.SetUid(Store.GetUid())
 
 	// Encrypt message content if encryption is enabled
-	if encryptionService != nil && encryptionService.IsEnabled() {
-		encryptedContent, err := encryptionService.EncryptContent(msg.Content)
+	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
+		encryptedContent, err := messageEncryptionService.EncryptContent(msg.Content)
 		if err != nil {
 			logs.Warn.Printf("topic[%s]: failed to encrypt message content (seq: %d) - err: %+v", msg.Topic, msg.SeqId, err)
 			// Continue without encryption rather than failing
@@ -836,9 +861,9 @@ func (messagesMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOp
 	}
 
 	// Decrypt message content if encryption is enabled
-	if encryptionService != nil && encryptionService.IsEnabled() {
+	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
 		for i := range messages {
-			if decryptedContent, err := encryptionService.DecryptContent(messages[i].Content); err != nil {
+			if decryptedContent, err := messageEncryptionService.DecryptContent(messages[i].Content); err != nil {
 				logs.Warn.Printf("topic[%s]: failed to decrypt message content (seq: %d) - err: %+v", topic, messages[i].SeqId, err)
 				// Keep encrypted content if decryption fails
 			} else {

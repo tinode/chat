@@ -28,13 +28,12 @@ func main() {
 
 	// Encryption key generation flags
 	encryptionKey := flag.Bool("encryption", false, "Generate encryption key instead of API key")
-	keySize := flag.Int("keysize", 32, "Encryption key size in bytes (default: 32 for AES-256)")
-	outputFile := flag.String("output", "", "Output file for the encryption key (optional)")
+	keySize := flag.Int("keysize", 32, "Encryption key size in bytes (16, 24, or 32 for AES-128/192/256)")
 
 	flag.Parse()
 
 	if *encryptionKey {
-		os.Exit(generateEncryptionKey(*keySize, *outputFile))
+		os.Exit(generateEncryptionKey(*keySize))
 	} else if *apikey != "" {
 		if *hmacSalt == "" {
 			log.Println("Error: must provide HMAC salt for key validation")
@@ -181,7 +180,13 @@ func validate(apikey string, hmacSaltB64 string) int {
 }
 
 // generateEncryptionKey generates a random encryption key of specified size
-func generateEncryptionKey(keySize int, outputFile string) int {
+func generateEncryptionKey(keySize int) int {
+	// Validate key size - AES supports 16, 24, or 32 bytes
+	if keySize != 16 && keySize != 24 && keySize != 32 {
+		log.Printf("Error: Invalid key size %d. Must be 16 (AES-128), 24 (AES-192), or 32 (AES-256) bytes", keySize)
+		return 1
+	}
+
 	// Generate random key
 	key := make([]byte, keySize)
 	if _, err := rand.Read(key); err != nil {
@@ -193,21 +198,12 @@ func generateEncryptionKey(keySize int, outputFile string) int {
 	encodedKey := base64.StdEncoding.EncodeToString(key)
 
 	// Output
-	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(encodedKey), 0600); err != nil {
-			log.Println("Error: Failed to write key to file", err)
-			return 1
-		}
-		fmt.Printf("Encryption key written to %s\n", outputFile)
-	} else {
-		fmt.Printf("Generated %d-byte encryption key:\n", keySize)
-		fmt.Printf("%s\n", encodedKey)
-		fmt.Printf("\nAdd this to your tinode.conf:\n")
-		fmt.Printf(`"encryption": {
-    "enabled": true,
+	fmt.Printf("Generated %d-byte encryption key:\n", keySize)
+	fmt.Printf("%s\n", encodedKey)
+	fmt.Printf("\nAdd this to your tinode.conf:\n")
+	fmt.Printf(`"encrypt_at_rest": {
     "key": "%s"
 }`, encodedKey)
-	}
 
 	return 0
 }
