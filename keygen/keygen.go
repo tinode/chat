@@ -26,9 +26,16 @@ func main() {
 	apikey := flag.String("validate", "", "API key to validate")
 	hmacSalt := flag.String("salt", "", "HMAC salt, 32 random bytes base64-encoded")
 
+	// Encryption key generation flags
+	encryptionKey := flag.Bool("encryption", false, "Generate encryption key instead of API key")
+	keySize := flag.Int("keysize", 32, "Encryption key size in bytes (default: 32 for AES-256)")
+	outputFile := flag.String("output", "", "Output file for the encryption key (optional)")
+
 	flag.Parse()
 
-	if *apikey != "" {
+	if *encryptionKey {
+		os.Exit(generateEncryptionKey(*keySize, *outputFile))
+	} else if *apikey != "" {
 		if *hmacSalt == "" {
 			log.Println("Error: must provide HMAC salt for key validation")
 			os.Exit(1)
@@ -169,6 +176,38 @@ func validate(apikey string, hmacSaltB64 string) int {
 	}
 
 	fmt.Printf("Valid v%d seq%d, [%s]\n", version, sequence, strIsRoot)
+
+	return 0
+}
+
+// generateEncryptionKey generates a random encryption key of specified size
+func generateEncryptionKey(keySize int, outputFile string) int {
+	// Generate random key
+	key := make([]byte, keySize)
+	if _, err := rand.Read(key); err != nil {
+		log.Println("Error: Failed to generate random key", err)
+		return 1
+	}
+
+	// Encode to base64
+	encodedKey := base64.StdEncoding.EncodeToString(key)
+
+	// Output
+	if outputFile != "" {
+		if err := os.WriteFile(outputFile, []byte(encodedKey), 0600); err != nil {
+			log.Println("Error: Failed to write key to file", err)
+			return 1
+		}
+		fmt.Printf("Encryption key written to %s\n", outputFile)
+	} else {
+		fmt.Printf("Generated %d-byte encryption key:\n", keySize)
+		fmt.Printf("%s\n", encodedKey)
+		fmt.Printf("\nAdd this to your tinode.conf:\n")
+		fmt.Printf(`"encryption": {
+    "enabled": true,
+    "key": "%s"
+}`, encodedKey)
+	}
 
 	return 0
 }
