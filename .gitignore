@@ -1,0 +1,10 @@
+# Ignore environment variable file
+.env
+
+# Conf file with environment variables
+*/tinode.final.conf
+
+# Compiled go binaries
+server/server
+tinode-db/tinode-db
+keygen/keygen
