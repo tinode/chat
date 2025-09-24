@@ -486,7 +486,8 @@ private: {
   arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
   accepted: "JRWS", // string, 'given' mode accepted by the user.
-  priority: 1 // integer, indicates how high the topic should be shown in the list of topics, default 0.
+  tpins: ["grpmiKBkQVXnm3P", "usrIU_LOVwRNsc"] // array of topic IDs to pin to the top of
+              // the contacts list; 'me' topic only.
 }
 ```
 
