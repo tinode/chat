@@ -1,6 +1,8 @@
 linters-settings:
   govet:
     check-shadowing: true
+    disable:
+      - composites
   golint:
     min-confidence: 0
   gocyclo:
