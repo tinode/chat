@@ -189,7 +189,11 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 	}
 
 	var awsReq *request.Request
-	if method == http.MethodGet {
+	switch method {
+	case http.MethodGet:
+		// If the query parameter "asatt" is set to a true, set Content-Disposition to attachment.
+		// This will cause browsers to download the file rather than attempt to display it.
+		// This closes an XSS vulnerability when users upload HTML files.
 		var contentDisposition *string
 		if isAttachment, _ := strconv.ParseBool(url.Query().Get("asatt")); isAttachment {
 			contentDisposition = aws.String("attachment")
@@ -201,7 +205,7 @@ func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, 
 			ResponseContentType:        aws.String(fdef.MimeType),
 			ResponseContentDisposition: contentDisposition,
 		})
-	} else if method == http.MethodHead {
+	case http.MethodHead:
 		awsReq, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
 			Bucket: aws.String(ah.conf.BucketName),
 			Key:    aws.String(fid.String32()),
