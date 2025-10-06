@@ -625,6 +625,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.Public = stopic.Public
 		desc.Trusted = stopic.Trusted
 		desc.IsChan = stopic.UseBt
+		desc.SubCnt = stopic.SubCnt
 		if stopic.Owner == msg.AsUser {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: stopic.Access.Auth.String(),

@@ -922,6 +922,20 @@ func (mr *MockTopicsPersistenceInterfaceMockRecorder) Update(topic, update inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).Update), topic, update)
 }
 
+// UpdateSubCnt mocks base method.
+func (m *MockTopicsPersistenceInterface) UpdateSubCnt(topic string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSubCnt", topic)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateSubCnt indicates an expected call of UpdateSubCnt.
+func (mr *MockTopicsPersistenceInterfaceMockRecorder) UpdateSubCnt(topic interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSubCnt", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).UpdateSubCnt), topic)
+}
+
 // MockSubsPersistenceInterface is a mock of SubsPersistenceInterface interface.
 type MockSubsPersistenceInterface struct {
 	ctrl     *gomock.Controller

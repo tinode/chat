@@ -121,6 +121,8 @@ type Adapter interface {
 	TopicDelete(topic string, isChan, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
+	// TopicUpdateSubCnt refreshes denormalized topic subscriber count.
+	TopicUpdateSubCnt(topic string) error
 	// TopicUpdate updates topic record.
 	TopicUpdate(topic string, update map[string]any) error
 	// TopicOwnerChange updates topic's owner

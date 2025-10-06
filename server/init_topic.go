@@ -615,6 +615,8 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	}
 
 	t.xoriginal = t.name // keeping 'new' or 'nch' as original has no value to the client
+	t.subCnt = 1         // One subscription, the owner.
+
 	pktsub.Created = true
 	pktsub.Newsub = true
 
@@ -659,6 +661,7 @@ func initTopicGrp(t *Topic) error {
 	}
 	t.lastID = stopic.SeqId
 	t.delID = stopic.DelId
+	t.subCnt = stopic.SubCnt
 
 	// Initialize channel for receiving session online updates.
 	t.supd = make(chan *sessionUpdate, 32)

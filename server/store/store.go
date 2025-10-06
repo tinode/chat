@@ -511,6 +511,7 @@ type TopicsPersistenceInterface interface {
 	GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
 	Update(topic string, update map[string]any) error
+	UpdateSubCnt(topic string) error
 	OwnerChange(topic string, newOwner types.Uid) error
 	Delete(topic string, isChan, hard bool) error
 }
@@ -585,6 +586,11 @@ func (topicsMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subs
 	return adp.SubsForTopic(topic, true, opts)
 }
 
+// UpdateSubCnt refreshes subscriber count value denormalized in topic.
+func (topicsMapper) UpdateSubCnt(topic string) error {
+	return adp.TopicUpdateSubCnt(topic)
+}
+
 // Update is a generic topic update.
 func (topicsMapper) Update(topic string, update map[string]any) error {
 	if _, ok := update["UpdatedAt"]; !ok {
@@ -652,7 +658,8 @@ func (subsMapper) Update(topic string, user types.Uid, update map[string]any) er
 	return adp.SubsUpdate(topic, user, update)
 }
 
-// Delete deletes a subscription
+// Delete deletes a subscription.
+// To delete channel subscription the channel name must be explicitly specified.
 func (subsMapper) Delete(topic string, user types.Uid) error {
 	return adp.SubsDelete(topic, user)
 }

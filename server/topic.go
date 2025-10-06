@@ -47,6 +47,10 @@ type Topic struct {
 	// ID of the deletion operation. Not an ID of the message.
 	delID int
 
+	// Total count of subscribers (excluding deleted).
+	// This is different from subsCount() for channels.
+	subCnt int
+
 	// Last published userAgent ('me' topic only)
 	userAgent string
 
@@ -546,6 +550,13 @@ func (t *Topic) handleTopicTermination(sd *shutDown) {
 		s.detachSession(t.name)
 	}
 
+	if t.cat == types.TopicCatGrp {
+		// Update topic subscriber count.
+		if err := store.Topics.UpdateSubCnt(t.name); err != nil {
+			logs.Warn.Println("topic update sub cnt:", err)
+		}
+	}
+
 	usersRegisterTopic(t, false)
 
 	// Report completion back to sender, if 'done' is not nil.
@@ -807,7 +818,7 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 			if !meUid.IsZero() {
 				// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
 				if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
-					logs.Warn.Println(err)
+					logs.Warn.Println("user update last seen:", err)
 				}
 			}
 		case types.TopicCatFnd:
@@ -1377,8 +1388,8 @@ func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 
 	asUid := types.ParseUserId(msg.AsUser)
 
-	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
-		// Check if this is a new subscription.
+	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp) {
+		// Check if this is a new subscription (P2P & GRP only. SLF, SYS are excluded here).
 		pud, found := t.perUser[asUid]
 		msgsub.Newsub = !found || pud.deleted
 	}
@@ -1428,6 +1439,11 @@ func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 			userData := t.perUser[asUid]
 			userData.online++
 			t.perUser[asUid] = userData
+		}
+
+		if t.cat == types.TopicCatGrp && msgsub.Newsub {
+			// Increment subscriber count for new group subscriptions only.
+			t.subCnt++
 		}
 	}
 
@@ -2087,8 +2103,11 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, _ bool, opts *MsgGe
 	pud, full := t.perUser[asUid]
 
 	full = full || t.cat == types.TopicCatMe
+
 	if t.cat == types.TopicCatGrp {
 		desc.IsChan = t.isChan
+		desc.SubCnt = t.subCnt
+		logs.Info.Println("replyGetDesc: grp topic", t.name, "subs", t.subCnt)
 	}
 
 	if ifUpdated {
@@ -2601,6 +2620,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						UserAgent: sub.GetUserAgent(),
 					}
 				}
+
+				mts.SubCnt = sub.GetSubCnt()
 			}
 		} else {
 			// Mark subscriptions that the user does not care about.
@@ -2631,6 +2652,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			if !sub.UpdatedAt.IsZero() {
 				mts.UpdatedAt = &sub.UpdatedAt
 			}
+
 			if isReader && !banned {
 				mts.ReadSeqId = sub.ReadSeqId
 				mts.RecvSeqId = sub.RecvSeqId
@@ -2662,6 +2684,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						mts.Acs.Mode = defacs.Auth.String()
 					}
 				}
+				mts.SubCnt = sub.GetSubCnt()
 			}
 
 			// Returning public and private only if they have changed since ifModified
@@ -3393,7 +3416,7 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 	return nil
 }
 
-// replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
+// replyLeaveUnsub is a request to unsubscribe user and detach all user's sessions from topic.
 func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
@@ -3466,6 +3489,11 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 
 	// Notify plugins.
 	pluginSubscription(&types.Subscription{Topic: t.name, User: asUid.String()}, plgActDel)
+
+	if t.cat == types.TopicCatGrp {
+		// Decrement group's cached member count.
+		t.subCnt--
+	}
 
 	// If all P2P users were deleted, suspend the topic to let it shut down.
 	if t.cat == types.TopicCatP2P && t.subsCount() == 0 {
@@ -3824,7 +3852,9 @@ func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
 	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true, false))
 }
 
-// subsCount returns the number of topic subscribers
+// subsCount returns the number of topic subscribers. This method is different from subCnt with respect to channels:
+// * subsCount counts subscribers + attached channel users.
+// * subCnt counts all subscribers (including all channel users).
 func (t *Topic) subsCount() int {
 	if t.cat == types.TopicCatP2P {
 		count := 0

@@ -448,6 +448,7 @@ type MsgTopicDesc struct {
 	RecvSeqId int `json:"recv,omitempty"`
 	// Id of the last delete operation as seen by the requesting user
 	DelId   int `json:"clear,omitempty"`
+	SubCnt  int `json:"subcnt,omitempty"`
 	Public  any `json:"public,omitempty"`
 	Trusted any `json:"trusted,omitempty"`
 	// Per-subscription private data
@@ -474,6 +475,9 @@ func (src *MsgTopicDesc) describe() string {
 	}
 	if src.DelId != 0 {
 		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.SubCnt != 0 {
+		s += " subcnt=" + strconv.Itoa(src.SubCnt)
 	}
 	if src.Public != nil {
 		s += " pub='...'"
@@ -529,7 +533,8 @@ type MsgTopicSub struct {
 	SeqId int `json:"seq,omitempty"`
 	// Id of the latest Delete operation
 	DelId int `json:"clear,omitempty"`
-
+	// Number of subscribers, group topics only.
+	SubCnt  int `json:"subcnt,omitempty"`
 	// P2P topics in 'me' {get subs} response:
 
 	// Other user's last online timestamp & user agent
@@ -550,6 +555,9 @@ func (src *MsgTopicSub) describe() string {
 	}
 	if src.DelId != 0 {
 		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+		if src.SubCnt != 0 {
+		s += " subcnt=" + strconv.Itoa(src.SubCnt)
 	}
 	if src.Public != nil {
 		s += " pub='...'"

@@ -207,6 +207,8 @@ func ParseUserId(s string) Uid {
 }
 
 // GrpToChn converts group topic name to corresponding channel name.
+// If it's a non-group channel topic, the name is returned unchanged.
+// If it's neither, an empty string is returned.
 func GrpToChn(grp string) string {
 	if strings.HasPrefix(grp, "grp") {
 		return strings.Replace(grp, "grp", "chn", 1)
@@ -227,6 +229,7 @@ func IsChannel(name string) bool {
 
 // ChnToGrp gets group topic name from channel name.
 // If it's a non-channel group topic, the name is returned unchanged.
+// If it's neither, an empty string is returned.
 func ChnToGrp(chn string) string {
 	if strings.HasPrefix(chn, "chn") {
 		return strings.Replace(chn, "chn", "grp", 1)
@@ -925,7 +928,7 @@ type Subscription struct {
 	// Timestamp & user agent of when the user was last online.
 	lastSeenUA *LastSeenUA
 
-	// Group topics only: count of subscribers.
+	// Count of subscribers.
 	subCnt int
 
 	// P2P only. ID of the other user
@@ -1126,7 +1129,7 @@ type Topic struct {
 	DelId int
 
 	// Count of topic subscribers.
-	SubCnt int `json:"SubCnt,omitempty" bson:",omitempty"`
+	SubCnt int
 
 	Public  any
 	Trusted any
@@ -1388,7 +1391,7 @@ func GetTopicCat(name string) TopicCat {
 }
 
 // IsEphemeralTopic checks if the topic is ephemeral, i.e. it's a reference to the user,
-// it's not stored in the 'topics' table.
+// it's not stored in the 'topics' table like 'me' or 'fnd' topics.
 func IsEphemeralTopic(topic string) bool {
 	cat := GetTopicCat(topic)
 	return cat == TopicCatMe || cat == TopicCatFnd
