@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -128,9 +127,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		}
 
 		// Parse out the database name from the DSN.
-		// Add schema to create a valid URL.
-		if uri, err := url.Parse("mysql://" + a.dsn); err == nil {
-			a.dbName = strings.TrimPrefix(uri.Path, "/")
+		if cfg, err := ms.ParseDSN(a.dsn); err == nil {
+			a.dbName = cfg.DBName
 		} else {
 			return err
 		}
