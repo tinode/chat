@@ -341,6 +341,14 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` is rejected.
 
+Internally the `me` topics are not persisted separately from the users. The `me` topics don't exist in the `topics` table or collection, they are created in memory from the `users` database record.
+
+### `slf` Topic
+
+Topic `slf` (self) provides mechanism for storing information, like bookmarks or saved messages. Messages sent to `slf` are accessible only by the user who sent them.
+
+This topic is created automatically when the user subscribes to it for the first time.
+
 ### `fnd` and Tags: Finding Users and Topics
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. Users and group topics can be discovered by `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
@@ -360,6 +368,8 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 _CURRENTLY UNSUPPORTED_ When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](../pbx) support `Find` service which can be used to replace default search with a custom one.
+
+Internally the `fnd` topics are not persisted separately from the users. The `fnd` topics don't exist in the `topics` table or collection, they are created in memory from the `users` database record.
 
 #### Query Language
 
@@ -406,6 +416,8 @@ As described above, tags which look like phone numbers are converted to E.164 fo
 Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
 
 A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{pres}` message on `me` topic with updated access permissions.
+
+Internally, P2P topics are stored as `p2p` followed by base64 URL encoded concatenation of two 64-bit user IDs, with the lower numeric value ID first: `p2pm7PvMGmdcx_uVkDRaSTbwA`.
 
 The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 
