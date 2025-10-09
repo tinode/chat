@@ -2869,6 +2869,312 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 }
 
+func TestHandleBroadcastDataWithAttachments(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	from := helper.uids[0].UserId()
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: from,
+		Pub: &MsgClientPub{
+			Topic:   "p2p",
+			Content: "Check out this image!",
+			Head: map[string]any{
+				"attachments": []map[string]any{
+					{"mime": "image/jpeg", "name": "photo.jpg", "size": 1024000},
+				},
+			},
+			NoEcho: true,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Verify message with attachments was delivered
+	if len(helper.results[1].messages) != 1 {
+		t.Fatalf("Uid2: expected 1 message, got %d", len(helper.results[1].messages))
+	}
+	r := helper.results[1].messages[0].(*ServerComMessage)
+	if r.Data == nil {
+		t.Fatal("Response must have a data message")
+	}
+	if r.Data.Head == nil {
+		t.Fatal("Response must have attachments in head")
+	}
+	attachments := r.Data.Head["attachments"]
+	if attachments == nil {
+		t.Fatal("Expected attachments in message head")
+	}
+}
+
+func TestHandleBroadcastInfoChannelWithMultipleReaders(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 5
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	helper.topic.isChan = true
+	defer helper.tearDown()
+	helper.topic.lastID = 15
+
+	readId := 12
+	from := helper.uids[0]
+
+	// Set up multiple channel readers
+	for i := 1; i < numUsers; i++ {
+		uid := helper.uids[i]
+		pud := helper.topic.perUser[uid]
+		pud.modeGiven = types.ModeCChnReader
+		pud.isChan = true
+		helper.topic.perUser[uid] = pud
+	}
+
+	helper.ss.EXPECT().Update(chanName, from, map[string]any{"ReadSeqId": readId}).Return(nil)
+
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: chanName,
+		Note: &MsgClientNote{
+			Topic: chanName,
+			What:  "read",
+			SeqId: readId,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Channel topics don't forward note messages to other users
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received", i, numMessages)
+		}
+	}
+
+	// Only sender gets presence notification
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hub expected exactly 1 recipient, got %d", len(helper.hubMessages))
+	}
+	if _, ok := helper.hubMessages[from.UserId()]; !ok {
+		t.Fatal("Expected presence notification for sender")
+	}
+}
+
+func TestRegisterSessionWithComplexModeString(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+
+	uid := helper.uids[1]
+	s := helper.sessions[1]
+	r := helper.results[1]
+
+	// User with existing subscription wants to change mode
+	pud := helper.topic.perUser[uid]
+	pud.modeWant = types.ModeCPublic
+	pud.modeGiven = types.ModeCPublic
+	helper.topic.perUser[uid] = pud
+
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					Mode: "JRWPAS", // Complex mode string with multiple permissions
+				},
+			},
+		},
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
+	}
+
+	helper.ss.EXPECT().Update(topicName, uid, gomock.Any()).Return(nil)
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	if len(helper.topic.sessions) != 1 {
+		t.Fatalf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 1 {
+		t.Fatalf("Session subscriptions: expected 1, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 1 {
+		t.Fatalf("Number of online sessions: expected 1, found %d", online)
+	}
+	registerSessionVerifyOutputs(t, r, []int{http.StatusOK})
+}
+
+func TestHandleBroadcastDataGroupWithMutedUser(t *testing.T) {
+	topicName := "grp-test"
+	numUsers := 4
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	defer helper.tearDown()
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	// User 2 has muted the topic (no Pres permission)
+	pu2 := helper.topic.perUser[helper.uids[2]]
+	pu2.modeWant = types.ModeJoin | types.ModeRead | types.ModeWrite
+	pu2.modeGiven = pu2.modeWant
+	helper.topic.perUser[helper.uids[2]] = pu2
+
+	from := helper.uids[0].UserId()
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: topicName,
+		Pub: &MsgClientPub{
+			Topic:   topicName,
+			Content: "test message",
+			NoEcho:  true,
+		},
+		sess: helper.sessions[0],
+	}
+
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// User 2 should still receive the message (has Read permission)
+	if len(helper.results[2].messages) != 1 {
+		t.Fatalf("Uid2: expected 1 message, got %d", len(helper.results[2].messages))
+	}
+
+	// Check presence notifications - muted user should not receive presence
+	if len(helper.hubMessages) != 3 { // Users 0, 1, 3 but not 2
+		t.Fatalf("Hub expected 3 recipients, got %d", len(helper.hubMessages))
+	}
+
+	// Verify user 2 is not in presence notifications
+	if _, ok := helper.hubMessages[helper.uids[2].UserId()]; ok {
+		t.Fatal("Muted user should not receive presence notifications")
+	}
+}
+
+func TestUnregisterSessionWithPendingCall(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	uid := helper.uids[0]
+	s := helper.sessions[0]
+	r := helper.results[0]
+
+	// Set up a pending call matching the actual videoCall structure
+	helper.topic.currentCall = &videoCall{
+		seq:     123,
+		parties: make(map[string]callPartyData),
+	}
+	helper.topic.currentCall.parties[s.sid] = callPartyData{
+		uid:          uid,
+		isOriginator: true,
+		sess:         s,
+	}
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: "p2p-test",
+		},
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
+	}
+
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Verify session was unregistered
+	if len(helper.topic.sessions) != 1 {
+		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+
+	// Verify call party was removed (if the implementation handles this)
+	if helper.topic.currentCall != nil && helper.topic.currentCall.parties != nil {
+		if _, exists := helper.topic.currentCall.parties[s.sid]; exists {
+			t.Error("Call party should have been removed when session unregistered")
+		}
+	}
+
+	if len(r.messages) != 3 {
+		t.Fatalf("`responses` expected to contain 3 elements, found %d", len(r.messages))
+	}
+
+	// Expected one of each: {data}, {info}, {ctrl}.
+	var found = 0
+	for _, msg := range r.messages {
+		m := msg.(*ServerComMessage)
+		if m.Data != nil {
+			found++
+			if m.Data.Head == nil || m.Data.Head["webrtc"] != "disconnected" || m.Data.Head["replace"] != ":123" {
+				t.Fatalf("Unexpected Data.Head: %+v", m.Data.Head)
+			}
+		} else if m.Info != nil {
+			found++
+			if m.Info.SeqId != 123 {
+				t.Fatalf("Unexpected Info.SeqId: %d", m.Info.SeqId)
+			}
+			if m.Info.What != "call" {
+				t.Fatalf("Unexpected Info.What: %s", m.Info.What)
+			}
+			if m.Info.Event != "hang-up" {
+				t.Fatalf("Unexpected Info.Event: %s", m.Info.Event)
+			}
+		} else if m.Ctrl != nil {
+			found++
+			if m.Ctrl.Code != http.StatusOK {
+				t.Fatalf("Unexpected Ctrl.Code: %d", m.Ctrl.Code)
+			}
+		} else {
+			t.Error("Expected only {data}, {info}, {ctrl} messages.")
+		}
+	}
+
+	if found != 3 {
+		t.Fatal("Expected only {data}, {info}, {ctrl} messages, but some are missing")
+	}
+}
+
 func TestMain(m *testing.M) {
 	logs.Init(os.Stderr, "stdFlags")
 	// Set max subscriber count to effective infinity.
