@@ -178,7 +178,15 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 	t.Helper()
 	for msg := range h.routeSrv {
 		if msg.RcptTo == "" {
-			t.Fatal("Hub.route received a message without addressee.")
+			// Don't call t.Fatal from goroutine - instead send error info back
+			results["__ERROR__"] = []*ServerComMessage{{
+				Ctrl: &MsgServerCtrl{
+					Code: 500,
+					Text: "Hub.route received a message without addressee.",
+				},
+			}}
+			done <- true
+			return
 		}
 		results[msg.RcptTo] = append(results[msg.RcptTo], msg)
 	}
@@ -205,6 +213,11 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Message uid1 -> uid2.
 	for i, m := range helper.results {
@@ -286,6 +299,12 @@ func TestHandleBroadcastCall(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	globals.iceServers = nil
 
 	// Message uid1 -> uid2.
@@ -402,6 +421,11 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if helper.topic.lastID != 1 {
 		t.Errorf("Topic.lastID: expected 1, found %d", helper.topic.lastID)
 	}
@@ -498,6 +522,11 @@ func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Message uid1 -> uid2.
 	if len(helper.results[0].messages) == 1 {
 		em := helper.results[0].messages[0].(*ServerComMessage)
@@ -544,6 +573,11 @@ func TestHandleBroadcastDataDbError(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if helper.topic.lastID != 0 {
 		t.Errorf("Topic.lastID: expected to remain 0, found %d", helper.topic.lastID)
@@ -592,6 +626,11 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Message uid1 -> uid2.
 	if len(helper.results[0].messages) == 1 {
 		em := helper.results[0].messages[0].(*ServerComMessage)
@@ -639,6 +678,11 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != readId {
@@ -744,6 +788,11 @@ func TestHandleBroadcastInfoBogusNotification(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -791,6 +840,11 @@ func TestHandleBroadcastInfoFilterOutRecvWithoutRPermission(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
@@ -840,6 +894,11 @@ func TestHandleBroadcastInfoFilterOutKpWithoutWPermission(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -888,6 +947,11 @@ func TestHandleBroadcastInfoDuplicatedRead(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 8 {
 		t.Errorf("perUser[%s].readID: expected 8, found %d.", from.UserId(), actualReadId)
@@ -932,6 +996,11 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
@@ -985,6 +1054,11 @@ func TestHandleBroadcastInfoInvalidChannelAccess(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -1036,6 +1110,11 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	// We do not update read ids for channel topics.
@@ -1101,6 +1180,11 @@ func TestHandleBroadcastPresMe(t *testing.T) {
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; !online {
 		t.Errorf("User %s is expected to be online.", srcUid.UserId())
@@ -1160,6 +1244,11 @@ func TestHandleBroadcastPresInactiveTopic(t *testing.T) {
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; online {
 		t.Errorf("User %s is expected to be offline.", srcUid.UserId())
@@ -1212,6 +1301,11 @@ func NoChangeInStatusTest(t *testing.T, subscriptionStatus int, what string) *To
 
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; online {
@@ -1268,6 +1362,11 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 		t.Errorf("Unexpected error: expected 'invalid GetDesc query', got '%s'", err.Error())
 	}
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.results[0].messages) != 1 {
 		t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
@@ -1341,6 +1440,11 @@ func TestRegisterSessionMe(t *testing.T) {
 	}
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
 	}
@@ -1392,6 +1496,11 @@ func TestRegisterSessionInactiveTopic(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1440,6 +1549,11 @@ func TestRegisterSessionUserSpecifiedInSetMessage(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1487,6 +1601,11 @@ func TestRegisterSessionInvalidWantStrInSetMessage(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1539,6 +1658,11 @@ func TestRegisterSessionMaxSubscriberCountExceeded(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1585,6 +1709,11 @@ func TestRegisterSessionLowAuthLevelWithSysTopic(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1637,6 +1766,11 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1686,6 +1820,11 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1733,6 +1872,11 @@ func TestRegisterSessionAsChanUserNotChanSubcriber(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1790,6 +1934,11 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1845,6 +1994,11 @@ func TestRegisterSessionInvalidOwnershipTransfer(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1905,6 +2059,11 @@ func TestRegisterSessionMetadataUpdateFails(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1964,6 +2123,11 @@ func TestRegisterSessionOwnerChangeDbCallFails(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -2022,6 +2186,10 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 
 	helper.finish()
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 2 {
 		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
@@ -2075,6 +2243,11 @@ func TestUnregisterSessionInactiveTopic(t *testing.T) {
 
 	helper.topic.unregisterSession(leave)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 1 {
 		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
@@ -2135,6 +2308,11 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	}
 	helper.topic.unregisterSession(leave)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 2 {
 		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
@@ -2226,6 +2404,11 @@ func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
 	}
@@ -2271,6 +2454,11 @@ func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
 	}
@@ -2308,6 +2496,11 @@ func TestHandleMetaChanErr(t *testing.T) {
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Session output.
 	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
@@ -2347,6 +2540,11 @@ func TestHandleMetaGet(t *testing.T) {
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	r := helper.results[0]
 	if len(r.messages) != 4 {
@@ -2428,6 +2626,11 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 	helper.topic.handleMeta(meta)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	r := helper.results[0]
 	if len(r.messages) != 1 {
 		t.Fatalf("responses received: expected 1, received %d", len(r.messages))
@@ -2481,6 +2684,11 @@ func TestHandleSessionUpdateSessToForeground(t *testing.T) {
 	helper.topic.handleSessionUpdate(supd, &uaAgent, nil)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Expect online count bumped up to 2.
 	if online := helper.topic.perUser[uid].online; online != 2 {
 		t.Errorf("online count for %s: expected 2, found %d", uid.UserId(), online)
@@ -2502,6 +2710,11 @@ func TestHandleSessionUpdateUserAgent(t *testing.T) {
 	timer := time.NewTimer(time.Hour)
 	helper.topic.handleSessionUpdate(supd, &uaAgent, timer)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// online count stays 1.
 	if online := helper.topic.perUser[uid].online; online != 1 {
@@ -2525,6 +2738,11 @@ func TestHandleUATimerEvent(t *testing.T) {
 	helper.topic.perSubs[uid.UserId()] = perSubsData{online: true}
 	helper.topic.handleUATimerEvent("newUA")
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if helper.topic.userAgent != "newUA" {
 		t.Errorf("Topic's user agent: expected 'newUA', found '%s'", helper.topic.userAgent)
@@ -2571,6 +2789,11 @@ func TestHandleTopicTimeout(t *testing.T) {
 	notifTimer := time.NewTimer(time.Hour)
 	helper.topic.handleTopicTimeout(helper.hub, "newUA", uaTimer, notifTimer)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.hub.unreg) != 1 {
 		t.Fatalf("Hub.unreg chan must contain exactly 1 message. Found %d.", len(helper.hub.unreg))
@@ -2621,6 +2844,11 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 	helper.topic.handleTopicTermination(exit)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(done) != 1 {
 		t.Fatal("done callback isn't invoked.")
