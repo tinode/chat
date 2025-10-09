@@ -139,11 +139,12 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret, s.remoteAddr)
 	if err != nil {
 		logs.Warn.Println("create user: add auth record failed", err, "sid=", s.sid)
+		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
+
 		// Attempt to delete incomplete user record
 		if err = store.Users.Delete(user.Uid(), true); err != nil {
 			logs.Warn.Println("create user: failed to delete incomplete user record", err, "sid=", s.sid)
 		}
-		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		return
 	}
 
@@ -152,13 +153,14 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
 		logs.Warn.Println("create user: missing credentials; have:", creds, "want:",
 			globals.authValidators[rec.AuthLevel], s.sid)
+		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
+		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, msg.Timestamp,
+			map[string]any{"creds": missing}))
+
 		// Attempt to delete incomplete user record
 		if err = store.Users.Delete(user.Uid(), true); err != nil {
 			logs.Warn.Println("create user: failed to delete incomplete user record", err, "sid=", s.sid)
 		}
-		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
-		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, msg.Timestamp,
-			map[string]any{"creds": missing}))
 		return
 	}
 
