@@ -329,6 +329,7 @@ func initFileDefs() {
 		Location: "uploads/asdf.txt",
 	})
 }
+
 func initData() {
 	// Use fixed timestamp to make tests more predictable
 	now = time.Date(2021, time.June, 12, 11, 39, 24, 15, time.Local).UTC().Round(time.Millisecond)
