@@ -3049,8 +3049,8 @@ func (a *adapter) isDbInitialized() bool {
 	return true
 }
 
-// GetTestingAdapter returns an adapter object. Useful for running tests.
-func GetTestingAdapter() *adapter {
+// GetTestAdapter returns an adapter object. Useful for running tests.
+func GetTestAdapter() *adapter {
 	return &adapter{}
 }
 

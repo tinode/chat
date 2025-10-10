@@ -3620,12 +3620,11 @@ func flatMap(slice []any) []any {
 	return result
 }
 
+// GetTestAdapter returns an adapter object. Useful for running tests.
+func GetTestAdapter() *adapter {
+	return &adapter{}
+}
+
 func init() {
 	store.RegisterAdapter(&adapter{})
 }
-
-/*
-func (a *adapter) GetTopicsLastMsgWriter(subs []t.Subscription) []t.Subscription {
-	return subs
-}
-*/

@@ -3658,6 +3658,11 @@ func isMissingDb(err error) bool {
 	return ok && myerr.Number == 1049
 }
 
+// GetTestAdapter returns an adapter object. Useful for running tests.
+func GetTestAdapter() *adapter {
+	return &adapter{}
+}
+
 func init() {
 	store.RegisterAdapter(&adapter{})
 }

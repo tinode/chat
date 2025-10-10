@@ -3036,6 +3036,11 @@ func isMissingDb(err error) bool {
 	return strings.Contains(msg, "Database `") && strings.Contains(msg, "` does not exist")
 }
 
+// GetTestAdapter returns an adapter object. Useful for running tests.
+func GetTestAdapter() *adapter {
+	return &adapter{}
+}
+
 func init() {
 	store.RegisterAdapter(&adapter{})
 }
