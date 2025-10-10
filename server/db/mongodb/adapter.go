@@ -762,17 +762,19 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			now := t.TimeNow()
 			disable := b.M{"$set": b.M{"updatedat": now, "state": t.StateDeleted, "stateat": now}}
 
-			// Disable subscriptions for topics where the user is the owner.
-			if _, err = a.db.Collection("subscriptions").UpdateMany(sc, ownTopicsFilter, disable); err != nil {
-				return err
-			}
+			if len(ownTopics) > 0 {
+				// Disable subscriptions for topics where the user is the owner.
+				if _, err = a.db.Collection("subscriptions").UpdateMany(sc, ownTopicsFilter, disable); err != nil {
+					return err
+				}
 
-			// Disable group topics where the user is the owner.
-			if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": ownTopics}},
-				b.M{"$set": b.M{
-					"updatedat": now, "touchedat": now, "state": t.StateDeleted, "stateat": now,
-				}}); err != nil {
-				return err
+				// Disable group topics where the user is the owner.
+				if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": ownTopics}},
+					b.M{"$set": b.M{
+						"updatedat": now, "touchedat": now, "state": t.StateDeleted, "stateat": now,
+					}}); err != nil {
+					return err
+				}
 			}
 
 			// Disable p2p topics with the user.
@@ -883,7 +885,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 		}
 
 		// Mutate the tag list.
-		newTags := user.Tags
+		newTags = user.Tags
 		if len(add) > 0 {
 			newTags = union(newTags, add)
 		}
@@ -915,6 +917,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // UserUnreadCount returns the total number of unread messages in all topics with
 // the R permission. If read fails, the counts are still returned with the original
 // user IDs but with the unread count undefined and non-nil error.
+// Does not count unread messages in channels although it probably should.
 func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	uids := make([]string, len(ids))
 	counts := make(map[t.Uid]int, len(ids))
@@ -928,10 +931,11 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 			db.subscriptions.aggregate([
 				{ $match: { user: { $in: ["KnElfSSA21U", "0ZcCQmwI2RI"] } } },
 				{ $lookup: { from: "topics", localField: "topic", foreignField: "_id", as: "fromTopics"} },
+				{ $match: { fromTopics: { $not: {$size: 0}  }}},
 				{ $replaceRoot: { newRoot: { $mergeObjects: [ {$arrayElemAt: [ "$fromTopics", 0 ]} , "$$ROOT" ] } } },
 				{ $match: {
 						deletedat: { $exists: false },
-						state:     { $ne": t.StateDeleted },
+						state:     { $ne: t.StateDeleted },
 						modewant:  { $bitsAllSet: [ t.ModeRead ] },
 						modegiven: { $bitsAllSet: [ t.ModeRead ] }
 					}
@@ -955,6 +959,8 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 			"foreignField": "_id",
 			"as":           "fromTopics"},
 		},
+		// Remove users with no subscriptions.
+		b.M{"$match": b.M{"fromTopics": b.M{"$not": b.M{"$size": 0}}}},
 		// Merge two documents into one
 		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fromTopics", 0}}, "$$ROOT"}}}},
 
@@ -2269,6 +2275,7 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 					}
 				} }
 			} } },
+			{ $match: { _id: { $ne: { $regex: "^p2p" } } } },
 			{ $match: { $expr: { $ne: [
 				{ $size: { $setIntersection: [ "$tags", [ "alias:alice", "basic:alice", "travel" ] ] } },
 				0
@@ -2343,6 +2350,10 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 		}}}},
 	}
 
+	// Keep group topics and users only.
+	pipeline = append(pipeline, b.M{"$match": b.M{"_id": b.M{"$not": b.M{"$regex": "^p2p"}}}})
+
+	// Ensure required tags are present.
 	for _, reqDisjunction := range req {
 		if len(reqDisjunction) == 0 {
 			continue

@@ -283,37 +283,6 @@ func TestCredGetAll(t *testing.T) {
 	}
 }
 
-func TestUserUnreadCount(t *testing.T) {
-	uids := []types.Uid{types.ParseUserId("usr" + users[1].Id), types.ParseUserId("usr" + users[2].Id)}
-	expected := map[types.Uid]int{uids[0]: 0, uids[1]: 166}
-	counts, err := adp.UserUnreadCount(uids...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(counts) != 2 {
-		t.Error(mismatchErrorString("UnreadCount length", len(counts), 2))
-	}
-
-	for uid, unread := range counts {
-		if expected[uid] != unread {
-			t.Error(mismatchErrorString("UnreadCount", unread, expected[uid]))
-		}
-	}
-
-	// Test not found (even if the account is not found, the call must return one record).
-	uid := types.ParseUserId("dummyuserid")
-	counts, err = adp.UserUnreadCount(uid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(counts) != 1 {
-		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 1))
-	}
-	if counts[uid] != 0 {
-		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[uid], 0))
-	}
-}
-
 func TestAuthGetUniqueRecord(t *testing.T) {
 	uid, authLvl, secret, expires, err := adp.AuthGetUniqueRecord("basic:alice")
 	if err != nil {
@@ -527,7 +496,7 @@ func TestFind(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(gotSubs) != 2 {
+	if len(gotSubs) != 3 {
 		t.Error(mismatchErrorString("result length", len(gotSubs), 3))
 	}
 }
@@ -1136,6 +1105,37 @@ func TestUserDelete(t *testing.T) {
 	}
 }
 
+func TestUserUnreadCount(t *testing.T) {
+	uids := []types.Uid{types.ParseUserId("usr" + users[1].Id), types.ParseUserId("usr" + users[2].Id)}
+	expected := map[types.Uid]int{uids[0]: 0, uids[1]: 166}
+	counts, err := adp.UserUnreadCount(uids...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counts) != 2 {
+		t.Error(mismatchErrorString("UnreadCount length", len(counts), 2))
+	}
+
+	for uid, unread := range counts {
+		if expected[uid] != unread {
+			t.Error(mismatchErrorString("UnreadCount", unread, expected[uid]))
+		}
+	}
+
+	// Test not found (even if the account is not found, the call must return one record).
+	uid := types.ParseUserId("dummyuserid")
+	counts, err = adp.UserUnreadCount(uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counts) != 1 {
+		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 1))
+	}
+	if counts[uid] != 0 {
+		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[uid], 0))
+	}
+}
+
 // ================== Other tests =================================
 func TestMessageGetDeleted(t *testing.T) {
 	qOpts := types.QueryOpt{
@@ -1154,7 +1154,7 @@ func TestMessageGetDeleted(t *testing.T) {
 
 // ================================================================
 func mismatchErrorString(key string, got, want any) string {
-	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)
+	return fmt.Sprintf("%s mismatch:\nGot  = %+v\nWant = %+v", key, got, want)
 }
 
 func initConnectionToDb() {

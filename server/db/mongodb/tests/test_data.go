@@ -128,6 +128,7 @@ func initTopics() {
 		Owner:     users[0].Id,
 		SeqId:     111,
 		Tags:      []string{"travel", "zxcv"},
+		SubCnt:    2,
 	})
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
