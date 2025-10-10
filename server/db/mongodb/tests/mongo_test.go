@@ -555,7 +555,7 @@ func TestUserUpdate(t *testing.T) {
 	if got.UserAgent != "Test Agent v0.11" {
 		t.Error(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -613,7 +613,7 @@ func TestCredFail(t *testing.T) {
 	if got.Retries != 1 {
 		t.Error(mismatchErrorString("Retries count", got.Retries, 1))
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -633,7 +633,7 @@ func TestCredConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("Credential not updated correctly")
 	}
 	// and uncomfirmed credential deleted
