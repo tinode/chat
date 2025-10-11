@@ -8,9 +8,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
+
+type AuthRecord struct {
+	Unique  string     `json:"unique" bson:"_id"`
+	UserId  string     `json:"userid"`
+	Scheme  string     `json:"scheme"`
+	AuthLvl auth.Level `json:"authLvl"`
+	Secret  []byte     `json:"secret"`
+	Expires time.Time  `json:"expires"`
+}
 
 // SelectEarliestUpdatedSubs selects no more than the given number of subscriptions from the
 // given slice satisfying the query. When the number of subscriptions is greater than the limit,

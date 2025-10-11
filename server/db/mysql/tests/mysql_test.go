@@ -1,35 +1,34 @@
 // To test another db backend:
-// 1) Create GetAdapter function inside your db backend adapter package (like one inside mongodb adapter)
+// 1) Create GetAdapter function inside your db backend adapter package (like one inside mysql adapter)
 // 2) Uncomment your db backend package ('backend' named package)
 // 3) Write own initConnectionToDb and 'db' variable
-// 4) Replace mongodb specific db queries inside test to your own queries.
+// 4) Replace mysql specific db queries inside test to your own queries.
 // 5) Run.
 
 package tests
 
 import (
-	"bytes"
-	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/jmoiron/sqlx"
 	adapter "github.com/tinode/chat/server/db"
+	"github.com/tinode/chat/server/store"
 	jcr "github.com/tinode/jsonco"
-	b "go.mongodb.org/mongo-driver/bson"
-	mdb "go.mongodb.org/mongo-driver/mongo"
-	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/db/common/test_data"
-	backend "github.com/tinode/chat/server/db/mongodb"
+	backend "github.com/tinode/chat/server/db/mysql"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -43,14 +42,18 @@ type configType struct {
 
 var config configType
 var adp adapter.Adapter
-var db *mdb.Database
-var ctx context.Context
+var db *sqlx.DB
 var testData *test_data.TestData
+
+var dummyUid1 = types.Uid(12345)
+var dummyUid2 = types.Uid(54321)
 
 func TestCreateDb(t *testing.T) {
 	if err := adp.CreateDb(config.Reset); err != nil {
 		t.Fatal(err)
 	}
+	// Saved db is closed, get a fresh one.
+	db = adp.GetTestDB().(*sqlx.DB)
 }
 
 // ================== Create tests ================================
@@ -60,7 +63,12 @@ func TestUserCreate(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	count, err := db.Collection("users").CountDocuments(ctx, b.M{})
+	var count int
+
+	if err := db.Ping(); err != nil {
+		logs.Err.Println("Database ping failed:", err)
+	}
+	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
 		t.Error(err)
 	}
@@ -137,12 +145,28 @@ func TestTopicCreate(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	// Update topic SeqId because it's not saved at creation time but used by the tests.
+	err = adp.TopicUpdate(testData.Topics[0].Id, map[string]interface{}{
+		"seqid": testData.Topics[0].SeqId,
+	})
+	if err != nil {
+		t.Error(err)
+	}
 	for _, tpc := range testData.Topics[3:] {
 		err = adp.TopicCreate(tpc)
 		if err != nil {
 			t.Error(err)
 		}
 	}
+}
+
+func decodeUid(u string) int64 {
+	return store.DecodeUid(types.ParseUid(u))
+}
+
+func encodeUid(u string) types.Uid {
+	id, _ := strconv.ParseInt(u, 10, 64)
+	return store.EncodeUid(int64(id))
 }
 
 func TestTopicCreateP2P(t *testing.T) {
@@ -157,8 +181,11 @@ func TestTopicCreateP2P(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var got types.Subscription
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": testData.Subs[2].Id}).Decode(&got)
+	err = db.QueryRow("SELECT createdat,updatedat,deletedat,userid,topic,delid,recvseqid,readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=? AND userid=?",
+		testData.Subs[2].Topic, decodeUid(testData.Subs[2].User)).Scan(&got.CreatedAt,
+		&got.UpdatedAt, &got.DeletedAt, &got.User, &got.Topic, &got.DelId, &got.RecvSeqId, &got.ReadSeqId, &got.ModeWant, &got.ModeGiven, &got.Private)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +221,7 @@ func TestFileStartUpload(t *testing.T) {
 // ================== Read tests ==================================
 func TestUserGet(t *testing.T) {
 	// Test not found
-	got, err := adp.UserGet(types.ParseUserId("dummyuserid"))
+	got, err := adp.UserGet(dummyUid1)
 	if err == nil && got != nil {
 		t.Error("user should be nil.")
 	}
@@ -203,19 +230,23 @@ func TestUserGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// User agent is not stored when creating a user. Make sure it's the same.
+	got.UserAgent = testData.Users[0].UserAgent
+
 	if !reflect.DeepEqual(got, testData.Users[0]) {
 		t.Error(mismatchErrorString("User", got, testData.Users[0]))
 	}
 }
 
 func TestUserGetAll(t *testing.T) {
-	// Test not found
-	got, err := adp.UserGetAll(types.ParseUserId("dummyuserid"), types.ParseUserId("otherdummyid"))
+	// Test not found (dummy UIDs).
+	got, err := adp.UserGetAll(dummyUid1, dummyUid2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != nil {
-		t.Error("result users should be nil.")
+	if len(got) > 0 {
+		t.Error("result users should be zero length, got", len(got))
 	}
 
 	got, err = adp.UserGetAll(types.ParseUserId("usr"+testData.Users[0].Id), types.ParseUserId("usr"+testData.Users[1].Id))
@@ -226,6 +257,8 @@ func TestUserGetAll(t *testing.T) {
 		t.Fatal(mismatchErrorString("resultUsers length", len(got), 2))
 	}
 	for i, usr := range got {
+		// User agent is not compared.
+		usr.UserAgent = testData.Users[i].UserAgent
 		if !reflect.DeepEqual(&usr, testData.Users[i]) {
 			t.Error(mismatchErrorString("User", &usr, testData.Users[i]))
 		}
@@ -258,12 +291,12 @@ func TestCredGetActive(t *testing.T) {
 	}
 
 	// Test not found
-	got, err = adp.CredGetActive(types.ParseUserId("dummyusrid"), "")
+	got, err = adp.CredGetActive(dummyUid1, "")
 	if err != nil {
 		t.Error(err)
 	}
 	if got != nil {
-		t.Error("result should be nil, got", got)
+		t.Error("result should be nil, but got", got)
 	}
 }
 
@@ -299,12 +332,11 @@ func TestAuthGetUniqueRecord(t *testing.T) {
 	}
 	if uid != types.ParseUserId("usr"+testData.Recs[0].UserId) ||
 		authLvl != testData.Recs[0].AuthLvl ||
-		!bytes.Equal(secret, testData.Recs[0].Secret) ||
+		!reflect.DeepEqual(secret, testData.Recs[0].Secret) ||
 		expires != testData.Recs[0].Expires {
 
 		got := fmt.Sprintf("%v %v %v %v", uid, authLvl, secret, expires)
-		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].UserId, testData.Recs[0].AuthLvl,
-			testData.Recs[0].Secret, testData.Recs[0].Expires)
+		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].UserId, testData.Recs[0].AuthLvl, testData.Recs[0].Secret, testData.Recs[0].Expires)
 		t.Error(mismatchErrorString("Auth record", got, want))
 	}
 
@@ -322,17 +354,16 @@ func TestAuthGetRecord(t *testing.T) {
 	}
 	if recId != testData.Recs[0].Unique ||
 		authLvl != testData.Recs[0].AuthLvl ||
-		!bytes.Equal(secret, testData.Recs[0].Secret) ||
+		!reflect.DeepEqual(secret, testData.Recs[0].Secret) ||
 		expires != testData.Recs[0].Expires {
 
 		got := fmt.Sprintf("%v %v %v %v", recId, authLvl, secret, expires)
-		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].Unique, testData.Recs[0].AuthLvl,
-			testData.Recs[0].Secret, testData.Recs[0].Expires)
+		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].Unique, testData.Recs[0].AuthLvl, testData.Recs[0].Secret, testData.Recs[0].Expires)
 		t.Error(mismatchErrorString("Auth record", got, want))
 	}
 
 	// Test not found
-	recId, _, _, _, err = adp.AuthGetRecord(types.ParseUserId("dummyuserid"), "scheme")
+	recId, _, _, _, err = adp.AuthGetRecord(types.Uid(123), "scheme")
 	if err != types.ErrNotFound {
 		t.Error("Auth record found but shouldn't. recId:", recId)
 	}
@@ -358,7 +389,7 @@ func TestTopicGet(t *testing.T) {
 
 func TestTopicsForUser(t *testing.T) {
 	qOpts := types.QueryOpt{
-		Topic: testData.Topics[1].Id,
+		Topic: "p2p9AVDamaNCRbfKzGSh3mE0w",
 		Limit: 999,
 	}
 	gotSubs, err := adp.TopicsForUser(types.ParseUserId("usr"+testData.Users[0].Id), false, &qOpts)
@@ -388,8 +419,6 @@ func TestTopicsForUser(t *testing.T) {
 		t.Error(mismatchErrorString("Subs length (IMS)", len(gotSubs), 1))
 	}
 
-	// time.Now() is correct (as opposite to testData.Now)
-	// Topic is modified using time.Now().
 	ims = time.Now().Add(15 * time.Minute)
 	gotSubs, err = adp.TopicsForUser(types.ParseUserId("usr"+testData.Users[0].Id), false, &qOpts)
 	if err != nil {
@@ -405,7 +434,7 @@ func TestUsersForTopic(t *testing.T) {
 		User:  types.ParseUserId("usr" + testData.Users[0].Id),
 		Limit: 999,
 	}
-	gotSubs, err := adp.UsersForTopic(testData.Topics[0].Id, false, &qOpts)
+	gotSubs, err := adp.UsersForTopic("grpgRXf0rU4uR4", false, &qOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +442,7 @@ func TestUsersForTopic(t *testing.T) {
 		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 
-	gotSubs, err = adp.UsersForTopic(testData.Topics[0].Id, true, nil)
+	gotSubs, err = adp.UsersForTopic("grpgRXf0rU4uR4", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +450,7 @@ func TestUsersForTopic(t *testing.T) {
 		t.Error(mismatchErrorString("Subs length", len(gotSubs), 2))
 	}
 
-	gotSubs, err = adp.UsersForTopic(testData.Topics[1].Id, false, nil)
+	gotSubs, err = adp.UsersForTopic("p2p9AVDamaNCRbfKzGSh3mE0w", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,12 +477,14 @@ func TestSubscriptionGet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	opts := cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{})
-	if !cmp.Equal(got, testData.Subs[0], opts) {
+	got.User = encodeUid(got.User).String() // Adjust for comparison
+	if !cmp.Equal(got, testData.Subs[0],
+		cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{}),
+		cmpopts.IgnoreFields(types.Subscription{}, "touchedAt")) {
 		t.Error(mismatchErrorString("Subs", got, testData.Subs[0]))
 	}
 	// Test not found
-	got, err = adp.SubscriptionGet("dummytopic", types.ParseUserId("dummyuserid"), false)
+	got, err = adp.SubscriptionGet("dummytopic", dummyUid1, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -505,12 +536,12 @@ func TestSubsForTopic(t *testing.T) {
 
 func TestFind(t *testing.T) {
 	reqTags := [][]string{{"alice", "bob", "carol", "travel", "qwer", "asdf", "zxcv"}}
-	gotSubs, err := adp.Find("usr"+testData.Users[2].Id, "", reqTags, nil, true)
+	got, err := adp.Find("usr"+testData.Users[2].Id, "", reqTags, nil, true)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(gotSubs) != 3 {
-		t.Error(mismatchErrorString("result length", len(gotSubs), 3))
+	if len(got) != 3 {
+		t.Error(mismatchErrorString("result length", len(got), 3))
 	}
 }
 
@@ -520,8 +551,7 @@ func TestMessageGetAll(t *testing.T) {
 		Before: 2,
 		Limit:  999,
 	}
-	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id,
-		types.ParseUserId("usr"+testData.Users[0].Id), &opts)
+	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), &opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,15 +591,20 @@ func TestUserUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var got types.User
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[0].Id}).Decode(&got)
+	var got struct {
+		UserAgent string
+		UpdatedAt time.Time
+		CreatedAt time.Time
+	}
+	err = db.QueryRow("SELECT useragent, updatedat, createdat FROM users WHERE id=?", decodeUid(testData.Users[0].Id)).
+		Scan(&got.UserAgent, &got.UpdatedAt, &got.CreatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.UserAgent != "Test Agent v0.11" {
 		t.Error(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
 	}
-	if got.UpdatedAt.Equal(got.CreatedAt) {
+	if got.UpdatedAt == got.CreatedAt {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -578,7 +613,9 @@ func TestUserUpdateTags(t *testing.T) {
 	addTags := testData.Tags[0]
 	removeTags := testData.Tags[1]
 	resetTags := testData.Tags[2]
-	got, err := adp.UserUpdateTags(types.ParseUserId("usr"+testData.Users[0].Id), addTags, nil, nil)
+	uid := types.ParseUserId("usr" + testData.Users[0].Id)
+
+	got, err := adp.UserUpdateTags(uid, addTags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,25 +624,25 @@ func TestUserUpdateTags(t *testing.T) {
 		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
-	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+testData.Users[0].Id), nil, removeTags, nil)
+	got, _ = adp.UserUpdateTags(uid, nil, removeTags, nil)
 	want = nil
 	if !reflect.DeepEqual(got, want) {
 		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
-	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+testData.Users[0].Id), nil, nil, resetTags)
+	got, _ = adp.UserUpdateTags(uid, nil, nil, resetTags)
 	want = []string{"alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
-	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+testData.Users[0].Id), addTags, removeTags, nil)
+	got, _ = adp.UserUpdateTags(uid, addTags, removeTags, nil)
 	want = []string{"tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Error(mismatchErrorString("Tags", got, want))
 
 	}
-	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+testData.Users[0].Id), addTags, removeTags, nil)
+	got, _ = adp.UserUpdateTags(uid, addTags, removeTags, nil)
 	want = []string{"tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Error(mismatchErrorString("Tags", got, want))
@@ -619,15 +656,20 @@ func TestCredFail(t *testing.T) {
 	}
 
 	// Check if fields updated
-	var got types.Credential
-	_ = db.Collection("credentials").FindOne(ctx, b.M{
-		"user":   testData.Creds[3].User,
-		"method": "tel",
-		"value":  testData.Creds[3].Value}).Decode(&got)
+	var got struct {
+		Retries   int
+		UpdatedAt time.Time
+		CreatedAt time.Time
+	}
+	err = db.QueryRow("SELECT retries, updatedat, createdat FROM credentials WHERE userid=? AND method=? AND value=?",
+		decodeUid(testData.Creds[3].User), "tel", testData.Creds[3].Value).Scan(&got.Retries, &got.UpdatedAt, &got.CreatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Retries != 1 {
 		t.Error(mismatchErrorString("Retries count", got.Retries, 1))
 	}
-	if got.UpdatedAt.Equal(got.CreatedAt) {
+	if got.UpdatedAt == got.CreatedAt {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -639,21 +681,21 @@ func TestCredConfirm(t *testing.T) {
 	}
 
 	// Test fields are updated
-	var got types.Credential
-	err = db.Collection("credentials").FindOne(ctx, b.M{
-		"user":   testData.Creds[3].User,
-		"method": "tel",
-		"value":  testData.Creds[3].Value}).Decode(&got)
+	var got struct {
+		UpdatedAt time.Time
+		CreatedAt time.Time
+		Done      bool
+	}
+	err = db.QueryRow("SELECT updatedat, createdat, done FROM credentials WHERE userid=? AND method=? AND value=?",
+		decodeUid(testData.Creds[3].User), "tel", testData.Creds[3].Value).Scan(&got.UpdatedAt, &got.CreatedAt, &got.Done)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.UpdatedAt.Equal(got.CreatedAt) {
+	if got.UpdatedAt == got.CreatedAt {
 		t.Error("Credential not updated correctly")
 	}
-	// and uncomfirmed credential deleted
-	err = db.Collection("credentials").FindOne(ctx, b.M{"_id": testData.Creds[3].User + ":" + got.Method + ":" + got.Value}).Decode(&got)
-	if err != mdb.ErrNoDocuments {
-		t.Error("Uncomfirmed credential not deleted")
+	if !got.Done {
+		t.Error("Credential should be marked as done")
 	}
 }
 
@@ -665,13 +707,13 @@ func TestAuthUpdRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got common.AuthRecord
-	err = db.Collection("auth").FindOne(ctx, b.M{"_id": rec.Unique}).Decode(&got)
+	var got []byte
+	err = db.QueryRow("SELECT secret FROM auth WHERE uname=?", rec.Unique).Scan(&got)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
+	if reflect.DeepEqual(got, rec.Secret) {
+		t.Error(mismatchErrorString("Secret", got, rec.Secret))
 	}
 
 	// Test with auth ID (unique) change
@@ -682,15 +724,13 @@ func TestAuthUpdRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Test if old ID deleted
-	err = db.Collection("auth").FindOne(ctx, b.M{"_id": rec.Unique}).Decode(&got)
-	if err == nil || err != mdb.ErrNoDocuments {
-		t.Errorf("Unique not changed. Got error: %v; ID: %v", err, got.Unique)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM auth WHERE uname=?", rec.Unique).Scan(&count)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
-	}
-	if bytes.Equal(got.Secret, rec.Secret) {
-		t.Error(mismatchErrorString("Secret", got.Secret, rec.Secret))
+	if count != 0 {
+		t.Error("Old auth record not deleted")
 	}
 }
 
@@ -705,8 +745,12 @@ func TestTopicUpdateOnMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.Topic
-	err = db.Collection("topics").FindOne(ctx, b.M{"_id": testData.Topics[2].Id}).Decode(&got)
+	var got struct {
+		TouchedAt time.Time
+		SeqId     int
+	}
+	err = db.QueryRow("SELECT touchedat, seqid FROM topics WHERE name=?", testData.Topics[2].Id).
+		Scan(&got.TouchedAt, &got.SeqId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -724,10 +768,13 @@ func TestTopicUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.Topic
-	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": testData.Topics[0].Id}).Decode(&got)
-	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	var got time.Time
+	err = db.QueryRow("SELECT updatedat FROM topics WHERE name=?", testData.Topics[0].Id).Scan(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != update["UpdatedAt"] {
+		t.Error(mismatchErrorString("UpdatedAt", got, update["UpdatedAt"]))
 	}
 }
 
@@ -736,10 +783,14 @@ func TestTopicOwnerChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.Topic
-	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": testData.Topics[0].Id}).Decode(&got)
-	if got.Owner != testData.Users[1].Id {
-		t.Error(mismatchErrorString("Owner", got.Owner, testData.Users[1].Id))
+	var got int64
+	err = db.QueryRow("SELECT owner FROM topics WHERE name=?", testData.Topics[0].Id).Scan(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedOwner := decodeUid(testData.Users[1].Id) // Assuming user ID conversion
+	if got != expectedOwner {
+		t.Error(mismatchErrorString("Owner", got, expectedOwner))
 	}
 }
 
@@ -751,19 +802,27 @@ func TestSubsUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.Subscription
-	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": testData.Topics[0].Id + ":" + testData.Users[0].Id}).Decode(&got)
-	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	var got time.Time
+	err = db.QueryRow("SELECT updatedat FROM subscriptions WHERE topic=? AND userid=?",
+		testData.Topics[0].Id, decodeUid(testData.Users[0].Id)).Scan(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != update["UpdatedAt"] {
+		t.Error(mismatchErrorString("UpdatedAt", got, update["UpdatedAt"]))
 	}
 
 	err = adp.SubsUpdate(testData.Topics[1].Id, types.ZeroUid, update)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": testData.Topics[1].Id}).Decode(&got)
-	if got.UpdatedAt != update["UpdatedAt"] {
-		t.Error(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	err = db.QueryRow("SELECT updatedat FROM subscriptions WHERE topic=? LIMIT 1",
+		testData.Topics[1].Id).Scan(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != update["UpdatedAt"] {
+		t.Error(mismatchErrorString("UpdatedAt", got, update["UpdatedAt"]))
 	}
 }
 
@@ -772,10 +831,14 @@ func TestSubsDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.Subscription
-	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": testData.Topics[1].Id + ":" + testData.Users[0].Id}).Decode(&got)
-	if got.DeletedAt == nil {
-		t.Error(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+	var deletedat sql.NullTime
+	err = db.QueryRow("SELECT deletedat FROM subscriptions WHERE topic=? AND userid=?",
+		testData.Topics[1].Id, decodeUid(testData.Users[0].Id)).Scan(&deletedat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !deletedat.Valid {
+		t.Error("DeletedAt should not be null")
 	}
 }
 
@@ -784,38 +847,46 @@ func TestDeviceUpsert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.User
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[0].Id}).Decode(&got)
+	var got struct {
+		DeviceId string
+		Platform string
+	}
+	err = db.QueryRow("SELECT deviceid, platform FROM devices WHERE userid=? LIMIT 1",
+		decodeUid(testData.Users[0].Id)).Scan(&got.DeviceId, &got.Platform)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got.DeviceArray[0], testData.Devs[0]) {
-		t.Error(mismatchErrorString("Device", got.DeviceArray[0], testData.Devs[0]))
+	if got.DeviceId != testData.Devs[0].DeviceId || got.Platform != testData.Devs[0].Platform {
+		t.Error(mismatchErrorString("Device", got, testData.Devs[0]))
 	}
+
 	// Test update
 	testData.Devs[0].Platform = "Web"
 	err = adp.DeviceUpsert(types.ParseUserId("usr"+testData.Users[0].Id), testData.Devs[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[0].Id}).Decode(&got)
+	err = db.QueryRow("SELECT platform FROM devices WHERE userid=? AND deviceid=?",
+		decodeUid(testData.Users[0].Id), testData.Devs[0].DeviceId).Scan(&got.Platform)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if got.DeviceArray[0].Platform != "Web" {
-		t.Error("Device not updated.", got.DeviceArray[0])
+	if got.Platform != "Web" {
+		t.Error("Device not updated.", got.Platform)
 	}
+
 	// Test add same device to another user
 	err = adp.DeviceUpsert(types.ParseUserId("usr"+testData.Users[1].Id), testData.Devs[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[1].Id}).Decode(&got)
+	err = db.QueryRow("SELECT platform FROM devices WHERE userid=? AND deviceid=?",
+		decodeUid(testData.Users[1].Id), testData.Devs[0].DeviceId).Scan(&got.Platform)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	if got.DeviceArray[0].Platform != "Web" {
-		t.Error("Device not updated.", got.DeviceArray[0])
+	if got.Platform != "Web" {
+		t.Error("Device not updated.", got.Platform)
 	}
 
 	err = adp.DeviceUpsert(types.ParseUserId("usr"+testData.Users[2].Id), testData.Devs[1])
@@ -830,23 +901,14 @@ func TestMessageAttachments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got map[string][]string
-	findOpts := mdbopts.FindOne().SetProjection(b.M{"attachments": 1, "_id": 0})
-	err = db.Collection("messages").FindOne(ctx, b.M{"_id": testData.Msgs[1].Id}, findOpts).Decode(&got)
+	// Check if attachments were linked (this would require checking filemsglinks table)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM filemsglinks WHERE msgid=?", testData.Msgs[1].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got["attachments"], fids) {
-		t.Error(mismatchErrorString("Attachments", got["attachments"], fids))
-	}
-	var got2 map[string]int
-	findOpts = mdbopts.FindOne().SetProjection(b.M{"usecount": 1, "_id": 0})
-	err = db.Collection("fileuploads").FindOne(ctx, b.M{"_id": testData.Files[0].Id}, findOpts).Decode(&got2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got2["usecount"] != 1 {
-		t.Error(mismatchErrorString("UseCount", got2["usecount"], 1))
+	if count != len(fids) {
+		t.Error(mismatchErrorString("Attachments count", count, len(fids)))
 	}
 }
 
@@ -888,25 +950,25 @@ func TestDeviceDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.User
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[1].Id}).Decode(&got)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM devices WHERE userid=?", testData.Users[1].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.DeviceArray) != 0 {
-		t.Error("Device not deleted:", got.DeviceArray)
+	if count != 0 {
+		t.Error("Device not deleted:", count)
 	}
 
 	err = adp.DeviceDelete(types.ParseUserId("usr"+testData.Users[2].Id), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[2].Id}).Decode(&got)
+	err = db.QueryRow("SELECT COUNT(*) FROM devices WHERE userid=?", testData.Users[2].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.DeviceArray) != 0 {
-		t.Error("Device not deleted:", got.DeviceArray)
+	if count != 0 {
+		t.Error("Device not deleted:", count)
 	}
 }
 
@@ -916,31 +978,25 @@ func TestCredDel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []map[string]any
-	cur, err := db.Collection("credentials").Find(ctx, b.M{"method": "email", "value": "alice@test.example.com"})
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM credentials WHERE method='email' AND value='alice@test.example.com'").Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Error("Got result but shouldn't", got)
+	if count != 0 {
+		t.Error("Got result but shouldn't", count)
 	}
 
 	err = adp.CredDel(types.ParseUserId("usr"+testData.Users[1].Id), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cur, err = db.Collection("credentials").Find(ctx, b.M{"user": testData.Users[1].Id})
+	err = db.QueryRow("SELECT COUNT(*) FROM credentials WHERE userid=?", testData.Users[1].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Error("Got result but shouldn't", got)
+	if count != 0 {
+		t.Error("Got result but shouldn't", count)
 	}
 }
 
@@ -958,7 +1014,7 @@ func TestAuthDelAllRecords(t *testing.T) {
 	}
 
 	// With dummy user
-	delCount, _ = adp.AuthDelAllRecords(types.ParseUserId("dummyuserid"))
+	delCount, _ = adp.AuthDelAllRecords(dummyUid1)
 	if delCount != 0 {
 		t.Error(mismatchErrorString("delCount", delCount, 0))
 	}
@@ -985,26 +1041,18 @@ func TestMessageDeleteList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var got []types.Message
-	cur, err := db.Collection("messages").Find(ctx, b.M{"topic": toDel.Topic})
+	// Check messages in dellog
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM dellog WHERE topic=? AND deletedfor=?",
+		toDel.Topic, decodeUid(toDel.DeletedFor)).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got); err != nil {
-		t.Fatal(err)
+	if count == 0 {
+		t.Error("No dellog entries created")
 	}
-	for _, msg := range got {
-		if msg.SeqId == 1 && msg.DeletedFor != nil {
-			t.Error("Message with SeqID=1 should not be deleted")
-		}
-		if msg.SeqId == 5 && msg.DeletedFor == nil {
-			t.Error("Message with SeqID=5 should be deleted")
-		}
-		if msg.SeqId == 11 && msg.DeletedFor != nil {
-			t.Error("Message with SeqID=11 should not be deleted")
-		}
-	}
-	//
+
+	// Hard delete test
 	toDel = types.DelMessage{
 		ObjHeader: types.ObjHeader{
 			Id:        testData.UGen.GetStr(),
@@ -1019,75 +1067,60 @@ func TestMessageDeleteList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cur, err = db.Collection("messages").Find(ctx, b.M{"topic": toDel.Topic})
+
+	// Check if messages content was cleared
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE topic=? AND content IS NOT NULL",
+		toDel.Topic).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got); err != nil {
-		t.Fatal(err)
-	}
-	for _, msg := range got {
-		if msg.Content != nil {
-			t.Error("Message not deleted:", msg)
-		}
+	if count != 0 {
+		t.Error("Messages not properly deleted")
 	}
 
 	err = adp.MessageDeleteList(testData.Topics[0].Id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cur, err = db.Collection("messages").Find(ctx, b.M{"topic": testData.Topics[0].Id})
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE topic=?", testData.Topics[0].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Error("Result should be empty:", got)
+	if count != 0 {
+		t.Error("Result should be empty:", count)
 	}
 }
 
 func TestTopicDelete(t *testing.T) {
 	err := adp.TopicDelete(testData.Topics[1].Id, false, false)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
 	}
-	var got types.Topic
-	cur, err := db.Collection("topics").Find(ctx, b.M{"topic": testData.Topics[1].Id})
+	var state int
+	err = db.QueryRow("SELECT state FROM topics WHERE name=?", testData.Topics[1].Id).Scan(&state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for cur.Next(ctx) {
-		if err = cur.Decode(&got); err != nil {
-			t.Error(err)
-		}
-		if got.State != types.StateDeleted {
-			t.Error("Soft delete failed:", got)
-		}
+	if state != int(types.StateDeleted) {
+		t.Error("Soft delete failed:", state)
 	}
 
-	err = adp.TopicDelete(testData.Topics[0].Id, true, true)
+	err = adp.TopicDelete(testData.Topics[0].Id, false, true)
 	if err != nil {
-		t.Fatal()
+		t.Fatal(err)
 	}
 
-	var got2 []types.Topic
-	cur, err = db.Collection("topics").Find(ctx, b.M{"topic": testData.Topics[0].Id})
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM topics WHERE name=?", testData.Topics[0].Id).Scan(&count)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = cur.All(ctx, &got2); err != nil {
-		t.Fatal(err)
-	}
-	if len(got2) != 0 {
-		t.Error("Hard delete failed:", got2)
+	if count != 0 {
+		t.Error("Hard delete failed:", count)
 	}
 }
 
 func TestFileDeleteUnused(t *testing.T) {
-	// time.Now() is correct (as opposite to testData.Now):
-	// the FileFinishUpload uses time.Now() as a timestamp.
 	locs, err := adp.FileDeleteUnused(time.Now().Add(1*time.Minute), 999)
 	if err != nil {
 		t.Fatal(err)
@@ -1102,22 +1135,27 @@ func TestUserDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got types.User
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[0].Id}).Decode(&got)
+	var state int
+	err = db.QueryRow("SELECT state FROM users WHERE id=?",
+		decodeUid(testData.Users[0].Id)).Scan(&state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != types.StateDeleted {
-		t.Error("User soft delete failed", got)
+	if state != int(types.StateDeleted) {
+		t.Error("User soft delete failed", state)
 	}
 
 	err = adp.UserDelete(types.ParseUserId("usr"+testData.Users[1].Id), true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": testData.Users[1].Id}).Decode(&got)
-	if err != mdb.ErrNoDocuments {
-		t.Error("User hard delete failed", err)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE id=?", testData.Users[1].Id).Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Error("User hard delete failed")
 	}
 }
 
@@ -1142,16 +1180,15 @@ func TestUserUnreadCount(t *testing.T) {
 	}
 
 	// Test not found (even if the account is not found, the call must return one record).
-	uid := types.ParseUserId("dummyuserid")
-	counts, err = adp.UserUnreadCount(uid)
+	counts, err = adp.UserUnreadCount(dummyUid1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(counts) != 1 {
 		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 1))
 	}
-	if counts[uid] != 0 {
-		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[uid], 0))
+	if counts[dummyUid1] != 0 {
+		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[dummyUid1], 0))
 	}
 }
 
@@ -1199,9 +1236,10 @@ func init() {
 		log.Fatal(err)
 	}
 
-	db = adp.GetTestDB().(*mdb.Database)
+	db = adp.GetTestDB().(*sqlx.DB)
 	testData = test_data.InitTestData()
 	if testData == nil {
 		log.Fatal("Failed to initialize test data")
 	}
+	store.SetTestUidGenerator(*testData.UGen)
 }

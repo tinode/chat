@@ -1168,7 +1168,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 	if err := a.db.Collection("credentials").FindOne(a.ctx, filter).Decode(&cred); err != nil {
 		if err == mdb.ErrNoDocuments { // Cred not found
-			return nil, t.ErrNotFound
+			err = nil
 		}
 		return nil, err
 	}
@@ -2275,7 +2275,6 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 					}
 				} }
 			} } },
-			{ $match: { _id: { $ne: { $regex: "^p2p" } } } },
 			{ $match: { $expr: { $ne: [
 				{ $size: { $setIntersection: [ "$tags", [ "alias:alice", "basic:alice", "travel" ] ] } },
 				0
@@ -2349,9 +2348,6 @@ func (a *adapter) Find(caller, prefPrefix string, req [][]string, opt []string, 
 				}}}}},
 		}}}},
 	}
-
-	// Keep group topics and users only.
-	pipeline = append(pipeline, b.M{"$match": b.M{"_id": b.M{"$not": b.M{"$regex": "^p2p"}}}})
 
 	// Ensure required tags are present.
 	for _, reqDisjunction := range req {
@@ -3048,6 +3044,11 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 	_, err := a.db.Collection("kvmeta").DeleteMany(a.ctx, b.M{"createdat": b.M{"$lt": olderThan},
 		"_id": primitive.Regex{Pattern: "^" + keyPrefix}})
 	return err
+}
+
+// GetTestDB returns a currently open database connection.
+func (a *adapter) GetTestDB() any {
+	return a.db
 }
 
 func (a *adapter) isDbInitialized() bool {

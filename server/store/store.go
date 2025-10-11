@@ -1114,6 +1114,10 @@ func (pcacheMapper) Expire(keyPrefix string, olderThan time.Time) error {
 	return adp.PCacheExpire(keyPrefix, olderThan)
 }
 
+func SetTestUidGenerator(g types.UidGenerator) {
+	uGen = g
+}
+
 func init() {
 	Store = storeObj{}
 	Users = usersMapper{}

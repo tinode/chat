@@ -62,15 +62,6 @@ type configType struct {
 	HostDecayDuration int    `json:"host_decay_duration,omitempty"`
 }
 
-type authRecord struct {
-	Unique  string     `json:"unique"`
-	UserId  string     `json:"userid"`
-	Scheme  string     `json:"scheme"`
-	AuthLvl auth.Level `json:"authLvl"`
-	Secret  []byte     `json:"secret"`
-	Expires time.Time  `json:"expires"`
-}
-
 // Open initializes rethinkdb session
 func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	if a.conn != nil {
@@ -601,7 +592,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	secret []byte, expires time.Time) error {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
-		&authRecord{
+		&common.AuthRecord{
 			Unique:  unique,
 			UserId:  uid.String(),
 			Scheme:  scheme,
@@ -655,7 +646,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		return t.ErrNotFound
 	}
 
-	var record authRecord
+	var record common.AuthRecord
 	if err = cursor.One(&record); err != nil {
 		return err
 	}
@@ -3023,6 +3014,11 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 		RunWrite(a.conn)
 
 	return err
+}
+
+// GetTestDB returns a currently open database connection.
+func (a *adapter) GetTestDB() any {
+	return a.conn
 }
 
 // Checks if the given error is 'Database not found'.

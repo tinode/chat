@@ -201,4 +201,9 @@ type Adapter interface {
 	PCacheDelete(key string) error
 	// PCacheExpire expires older entries with the specified key prefix.
 	PCacheExpire(keyPrefix string, olderThan time.Time) error
+
+	// Testing
+
+	// GetTestDB returns a currently open database connection.
+	GetTestDB() any
 }

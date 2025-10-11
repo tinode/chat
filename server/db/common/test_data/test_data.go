@@ -1,33 +1,30 @@
-package tests
+package test_data
 
 import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/store/types"
 )
 
-type authRecord struct {
-	Id      string `bson:"_id"`
-	UserId  string
-	Scheme  string
-	AuthLvl auth.Level
-	Secret  []byte
-	Expires time.Time
+type TestData struct {
+	UGen   *types.UidGenerator
+	Users  []*types.User
+	Creds  []*types.Credential
+	Recs   []common.AuthRecord
+	Topics []*types.Topic
+	Subs   []*types.Subscription
+	Msgs   []*types.Message
+	Devs   []*types.DeviceDef
+	Files  []*types.FileDef
+	// Tags: add, remove, reset
+	Tags [][]string
+	Now  time.Time
 }
 
-var uGen types.UidGenerator
-var users []*types.User
-var creds []*types.Credential
-var recs []authRecord
-var topics []*types.Topic
-var subs []*types.Subscription
-var msgs []*types.Message
-var devs []*types.DeviceDef
-var files []*types.FileDef
-var now time.Time
-
-func initUsers() {
+func initUsers(now time.Time) []*types.User {
+	users := make([]*types.User, 0, 3)
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
 			Id: "3ysxkod5hNM",
@@ -44,7 +41,7 @@ func initUsers() {
 	})
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id: "xQLrX3WPS2o",
+			Id: "0QLrX3WPS2o",
 		},
 		UserAgent: "Tindroid v1.2.3",
 		Tags:      []string{"carol"},
@@ -55,9 +52,11 @@ func initUsers() {
 	deletedAt := now.Add(10 * time.Minute)
 	users[2].State = types.StateDeleted
 	users[2].StateAt = &deletedAt
+	return users
 }
 
-func initCreds() {
+func initCreds(now time.Time, users []*types.User) []*types.Credential {
+	creds := make([]*types.Credential, 0, 6)
 	creds = append(creds, &types.Credential{ // 0
 		User:   users[0].Id,
 		Method: "email",
@@ -96,28 +95,32 @@ func initCreds() {
 	}
 	creds[3].CreatedAt = now.Add(-10 * time.Minute)
 	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
+	return creds
 }
 
-func initAuthRecords() {
-	recs = append(recs, authRecord{
-		Id:      "basic:alice",
+func initAuthRecords(now time.Time, users []*types.User) []common.AuthRecord {
+	recs := make([]common.AuthRecord, 0, 2)
+	recs = append(recs, common.AuthRecord{
+		Unique:  "basic:alice",
 		UserId:  users[0].Id,
 		Scheme:  "basic",
 		AuthLvl: auth.LevelAuth,
 		Secret:  []byte{'a', 'l', 'i', 'c', 'e'},
 		Expires: now.Add(24 * time.Hour),
 	})
-	recs = append(recs, authRecord{
-		Id:      "basic:bob",
+	recs = append(recs, common.AuthRecord{
+		Unique:  "basic:bob",
 		UserId:  users[1].Id,
 		Scheme:  "basic",
 		AuthLvl: auth.LevelAuth,
 		Secret:  []byte{'b', 'o', 'b'},
 		Expires: now.Add(24 * time.Hour),
 	})
+	return recs
 }
 
-func initTopics() {
+func initTopics(now time.Time, users []*types.User) []*types.Topic {
+	topics := make([]*types.Topic, 0, 5)
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
 			Id:        "grpgRXf0rU4uR4",
@@ -156,7 +159,6 @@ func initTopics() {
 		},
 		TouchedAt: now,
 		SeqId:     555,
-		Tags:      []string{"qwer"},
 	})
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
@@ -166,10 +168,12 @@ func initTopics() {
 		},
 		TouchedAt: now,
 		SeqId:     333,
-		Tags:      []string{"asdf"},
 	})
+	return topics
 }
-func initSubs() {
+
+func initSubs(now time.Time, users []*types.User, topics []*types.Topic) []*types.Subscription {
+	subs := make([]*types.Subscription, 0, 6)
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
@@ -245,8 +249,11 @@ func initSubs() {
 	for _, sub := range subs {
 		sub.SetTouchedAt(now)
 	}
+	return subs
 }
-func initMessages() {
+
+func initMessages(now time.Time, users []*types.User, topics []*types.Topic, uGen *types.UidGenerator) []*types.Message {
+	msgs := make([]*types.Message, 0, 6)
 	msgs = append(msgs, &types.Message{
 		SeqId:   1,
 		Topic:   topics[0].Id,
@@ -291,8 +298,11 @@ func initMessages() {
 		msg.InitTimes()
 		msg.SetUid(uGen.Get())
 	}
+	return msgs
 }
-func initDevices() {
+
+func initDevices(now time.Time) []*types.DeviceDef {
+	devs := make([]*types.DeviceDef, 0, 2)
 	devs = append(devs, &types.DeviceDef{
 		DeviceId: "2934ujfoviwj09ntf094",
 		Platform: "Android",
@@ -305,8 +315,11 @@ func initDevices() {
 		LastSeen: now,
 		Lang:     "en_EN",
 	})
+	return devs
 }
-func initFileDefs() {
+
+func initFileDefs(now time.Time, users []*types.User, uGen *types.UidGenerator) []*types.FileDef {
+	files := make([]*types.FileDef, 0, 2)
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
 			Id:        uGen.GetStr(),
@@ -321,24 +334,44 @@ func initFileDefs() {
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
 			Id:        uGen.GetStr(),
-			CreatedAt: now.Add(2 * time.Minute),
-			UpdatedAt: now.Add(2 * time.Minute),
+			CreatedAt: now.Add(60 * time.Minute),
+			UpdatedAt: now.Add(60 * time.Minute),
 		},
 		Status:   types.UploadStarted,
 		User:     users[0].Id,
 		Location: "uploads/asdf.txt",
 	})
+	return files
 }
 
-func initData() {
+func initTags() [][]string {
+	// Tags must be lowercase and non-repeating.
+	addTags := []string{"tag1", "alice"}
+	removeTags := []string{"alice", "tag1", "tag2"}
+	resetTags := []string{"alice", "tag111", "tag333"}
+	return [][]string{addTags, removeTags, resetTags}
+}
+
+func InitTestData() *TestData {
 	// Use fixed timestamp to make tests more predictable
-	now = time.Date(2021, time.June, 12, 11, 39, 24, 15, time.Local).UTC().Round(time.Millisecond)
-	initUsers()
-	initCreds()
-	initAuthRecords()
-	initTopics()
-	initSubs()
-	initMessages()
-	initDevices()
-	initFileDefs()
+	var now = time.Date(2021, time.June, 12, 11, 39, 24, 15, time.Local).UTC().Round(time.Millisecond)
+	var uGen = &types.UidGenerator{}
+	if err := uGen.Init(11, []byte("testtesttesttest")); err != nil {
+		return nil
+	}
+	var users = initUsers(now)
+	var topics = initTopics(now, users)
+	return &TestData{
+		UGen:   uGen,
+		Users:  users,
+		Creds:  initCreds(now, users),
+		Recs:   initAuthRecords(now, users),
+		Topics: topics,
+		Subs:   initSubs(now, users, topics),
+		Msgs:   initMessages(now, users, topics, uGen),
+		Devs:   initDevices(now),
+		Files:  initFileDefs(now, users, uGen),
+		Tags:   initTags(),
+		Now:    now,
+	}
 }

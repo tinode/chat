@@ -3537,6 +3537,11 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 	return err
 }
 
+// GetTestDB returns a currently open database connection.
+func (a *adapter) GetTestDB() any {
+	return a.db
+}
+
 // Helper functions
 
 // Check if MySQL error is a Error Code: 1062. Duplicate entry ... for key ...

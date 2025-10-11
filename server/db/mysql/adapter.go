@@ -58,7 +58,7 @@ const (
 
 type configType struct {
 	// DB connection settings.
-	// Please, see https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
+	// See https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
 	// for the full list of fields.
 	ms.Config
 	// Deprecated.
@@ -1099,6 +1099,9 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	uids := make([]any, len(ids))
 	for i, id := range ids {
+		if id.IsZero() {
+			continue
+		}
 		uids[i] = store.DecodeUid(id)
 	}
 
@@ -1236,10 +1239,12 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// Disable all subscriptions to topics where the user is the owner.
-		sql, args, _ := sqlx.In("UPDATE subscriptions SET s.updatedat=?,s.deletedat=? WHERE topic IN (?)", now, now, ownTopics)
-		if _, err = tx.Exec(tx.Rebind(sql), args); err != nil {
-			return err
+		if len(ownTopics) > 0 {
+			// Disable all subscriptions to topics where the user is the owner.
+			sql, args, _ := sqlx.In("UPDATE subscriptions SET s.updatedat=?,s.deletedat=? WHERE topic IN (?)", now, now, ownTopics)
+			if _, err = tx.Exec(tx.Rebind(sql), args...); err != nil {
+				return err
+			}
 		}
 
 		// Disable group topics where the user is the owner.
@@ -2691,7 +2696,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 			} else {
 				args = append(args, 0)
 			}
-			if opts.Before > 0 {
+			if opts.Before > 1 {
 				// MySQL BETWEEN is inclusive-inclusive, Tinode API requires inclusive-exclusive, thus -1
 				args = append(args, opts.Before-1)
 			} else {
@@ -3626,6 +3631,11 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 
 	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key` LIKE ? AND createdat<?", keyPrefix+"%", olderThan)
 	return err
+}
+
+// GetTestDB returns a currently open database connection.
+func (a *adapter) GetTestDB() any {
+	return a.db
 }
 
 // Helper functions
