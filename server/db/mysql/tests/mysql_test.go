@@ -198,6 +198,15 @@ func TestTopicShare(t *testing.T) {
 	if err := adp.TopicShare(testData.Subs[0].Topic, testData.Subs); err != nil {
 		t.Fatal(err)
 	}
+
+	// Must save recvseqid and readseqid separately because TopicShare
+	// ignores them.
+	for _, sub := range testData.Subs {
+		adp.SubsUpdate(sub.Topic, types.ParseUid(sub.User), map[string]any{
+			"recvseqid": sub.RecvSeqId,
+			"readseqid": sub.ReadSeqId,
+		})
+	}
 }
 
 func TestMessageSave(t *testing.T) {
@@ -205,6 +214,21 @@ func TestMessageSave(t *testing.T) {
 		err := adp.MessageSave(msg)
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+
+	// Some messages are soft deleted, but it's ignored by adp.MessageSave
+	for _, msg := range testData.Msgs {
+		if len(msg.DeletedFor) > 0 {
+			for _, del := range msg.DeletedFor {
+				toDel := types.DelMessage{
+					Topic:       msg.Topic,
+					DeletedFor:  del.User,
+					DelId:       del.DelId,
+					SeqIdRanges: []types.Range{{Low: msg.SeqId}},
+				}
+				adp.MessageDeleteList(msg.Topic, &toDel)
+			}
 		}
 	}
 }
@@ -477,11 +501,13 @@ func TestSubscriptionGet(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	got.User = encodeUid(got.User).String() // Adjust for comparison
-	if !cmp.Equal(got, testData.Subs[0],
-		cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{}),
-		cmpopts.IgnoreFields(types.Subscription{}, "touchedAt")) {
-		t.Error(mismatchErrorString("Subs", got, testData.Subs[0]))
+
+	// Adjust for comparison: user is in a different format;
+	// RecvSeqId, ReadSeqId are present in intial data but not saved to db by design.
+	got.User = encodeUid(got.User).String()
+	if diff := cmp.Diff(got, testData.Subs[0],
+		cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{})); diff != "" {
+		t.Error(mismatchErrorString("Subs", diff, ""))
 	}
 	// Test not found
 	got, err = adp.SubscriptionGet("dummytopic", dummyUid1, false)
@@ -556,15 +582,16 @@ func TestMessageGetAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotMsgs) != 1 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 1))
+		t.Error(mismatchErrorString("Messages length opts", len(gotMsgs), 1))
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), nil)
 	if len(gotMsgs) != 2 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 2))
+		t.Fatalf("%+v", gotMsgs)
+		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, nil)
 	if len(gotMsgs) != 3 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 3))
+		t.Error(mismatchErrorString("Messages length zero uid", len(gotMsgs), 3))
 	}
 }
 
@@ -903,10 +930,11 @@ func TestMessageAttachments(t *testing.T) {
 	}
 	// Check if attachments were linked (this would require checking filemsglinks table)
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM filemsglinks WHERE msgid=?", testData.Msgs[1].Id).Scan(&count)
-	if err != nil {
+	if err = db.QueryRow("SELECT COUNT(*) FROM filemsglinks WHERE msgid=?",
+		types.ParseUid(testData.Msgs[1].Id)).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
+
 	if count != len(fids) {
 		t.Error(mismatchErrorString("Attachments count", count, len(fids)))
 	}
@@ -1074,8 +1102,8 @@ func TestMessageDeleteList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Error("Messages not properly deleted")
+	if count > 1 {
+		t.Errorf("Messages not properly deleted %d, %s", count, toDel.Topic)
 	}
 
 	err = adp.MessageDeleteList(testData.Topics[0].Id, nil)

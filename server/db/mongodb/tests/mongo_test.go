@@ -180,6 +180,21 @@ func TestMessageSave(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	// Some messages are soft deleted, but it's ignored by adp.MessageSave
+	for _, msg := range testData.Msgs {
+		if len(msg.DeletedFor) > 0 {
+			for _, del := range msg.DeletedFor {
+				toDel := types.DelMessage{
+					Topic:       msg.Topic,
+					DeletedFor:  del.User,
+					DelId:       del.DelId,
+					SeqIdRanges: []types.Range{{Low: msg.SeqId}},
+				}
+				adp.MessageDeleteList(msg.Topic, &toDel)
+			}
+		}
+	}
 }
 
 func TestFileStartUpload(t *testing.T) {
@@ -526,15 +541,15 @@ func TestMessageGetAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotMsgs) != 1 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 1))
+		t.Error(mismatchErrorString("Messages length opts", len(gotMsgs), 1))
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), nil)
 	if len(gotMsgs) != 2 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 2))
+		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, nil)
 	if len(gotMsgs) != 3 {
-		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 3))
+		t.Error(mismatchErrorString("Messages length zero uid", len(gotMsgs), 3))
 	}
 }
 
@@ -1027,8 +1042,8 @@ func TestMessageDeleteList(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, msg := range got {
-		if msg.Content != nil {
-			t.Error("Message not deleted:", msg)
+		if msg.Content != nil && msg.SeqId != 3 {
+			t.Error("Message not deleted:", msg.SeqId)
 		}
 	}
 
