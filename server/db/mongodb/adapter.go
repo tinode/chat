@@ -2531,18 +2531,18 @@ func (a *adapter) messagesHardDelete(topic string) error {
 
 // rangeToFilter is Mongo's equivalent of common.RangeToSql.
 func rangeToFilter(delRanges []t.Range, filter b.M) b.M {
-	if len(delRanges) > 1 || delRanges[0].Hi <= delRanges[0].Low {
+	if len(delRanges) > 1 || delRanges[0].Hi == 0 {
 		rangeFilter := b.A{}
 		for _, rng := range delRanges {
 			if rng.Hi == 0 {
 				rangeFilter = append(rangeFilter, b.M{"seqid": rng.Low})
 			} else {
-				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lt": rng.Hi}})
 			}
 		}
 		filter["$or"] = rangeFilter
 	} else {
-		filter["seqid"] = b.M{"$gte": delRanges[0].Low, "$lte": delRanges[0].Hi}
+		filter["seqid"] = b.M{"$gte": delRanges[0].Low, "$lt": delRanges[0].Hi}
 	}
 	return filter
 }
