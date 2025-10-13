@@ -2448,7 +2448,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 		return nil, err
 	}
 	if activeOnly {
-		args = append(args, int(t.StateOK))
+		args = append(args, t.StateOK)
 		constraint += "AND state=? "
 	}
 	constraint = sqlx.Rebind(sqlx.DOLLAR, constraint)

@@ -205,9 +205,21 @@ func TestTopicShare(t *testing.T) {
 	// ignores them.
 	for _, sub := range testData.Subs {
 		adp.SubsUpdate(sub.Topic, types.ParseUid(sub.User), map[string]any{
+			"delid":     sub.DelId,
 			"recvseqid": sub.RecvSeqId,
 			"readseqid": sub.ReadSeqId,
 		})
+	}
+
+	// Update topic SeqId because it's not saved at creation time but used by the tests.
+	for _, tpc := range testData.Topics {
+		err := adp.TopicUpdate(tpc.Id, map[string]any{
+			"seqid": tpc.SeqId,
+			"delid": tpc.DelId,
+		})
+		if err != nil {
+			t.Error(err)
+		}
 	}
 }
 

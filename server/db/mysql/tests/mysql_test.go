@@ -15,7 +15,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"strconv"
 	"testing"
 	"time"
 
@@ -145,13 +144,6 @@ func TestTopicCreate(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// Update topic SeqId because it's not saved at creation time but used by the tests.
-	err = adp.TopicUpdate(testData.Topics[0].Id, map[string]interface{}{
-		"seqid": testData.Topics[0].SeqId,
-	})
-	if err != nil {
-		t.Error(err)
-	}
 	for _, tpc := range testData.Topics[3:] {
 		err = adp.TopicCreate(tpc)
 		if err != nil {
@@ -162,11 +154,6 @@ func TestTopicCreate(t *testing.T) {
 
 func decodeUid(u string) int64 {
 	return store.DecodeUid(types.ParseUid(u))
-}
-
-func encodeUid(u string) types.Uid {
-	id, _ := strconv.ParseInt(u, 10, 64)
-	return store.EncodeUid(int64(id))
 }
 
 func TestTopicCreateP2P(t *testing.T) {
@@ -203,9 +190,21 @@ func TestTopicShare(t *testing.T) {
 	// ignores them.
 	for _, sub := range testData.Subs {
 		adp.SubsUpdate(sub.Topic, types.ParseUid(sub.User), map[string]any{
+			"delid":     sub.DelId,
 			"recvseqid": sub.RecvSeqId,
 			"readseqid": sub.ReadSeqId,
 		})
+	}
+
+	// Update topic SeqId because it's not saved at creation time but used by the tests.
+	for _, tpc := range testData.Topics {
+		err := adp.TopicUpdate(tpc.Id, map[string]any{
+			"seqid": tpc.SeqId,
+			"delid": tpc.DelId,
+		})
+		if err != nil {
+			t.Error(err)
+		}
 	}
 }
 
