@@ -646,10 +646,16 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 // UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
+	ownFilter := b.M{"owner": uid.String()}
+	// In case of hard delete, delete all topics, even those which were
+	// soft-deleted previsously.
+	if !hard {
+		ownFilter["state"] = b.M{"$ne": t.StateDeleted}
+	}
+
 	forUser := uid.String()
 	// Select topics where the user is the owner.
-	ownTopics, err := a.topicNamesForUser("topics",
-		b.M{"owner": forUser, "state": b.M{"$ne": t.StateDeleted}}, "_id", true)
+	ownTopics, err := a.topicNamesForUser("topics", ownFilter, "_id", true)
 	if err != nil {
 		return err
 	}
@@ -2197,16 +2203,13 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 		return err
 	}
 
-	if len(topics) == 0 {
-		// Nothing to update.
-		return nil
+	if len(topics) > 0 {
+		// Decrement subscription count in affected topics.
+		a.db.Collection("topics").UpdateMany(ctx,
+			b.M{"_id": b.M{"$in": topics}},
+			b.M{"$inc": b.M{"subcnt": -1}})
 	}
-
-	// Decrement subscription count in affected topics.
-	a.db.Collection("topics").UpdateMany(ctx,
-		b.M{"_id": b.M{"$in": topics}},
-		b.M{"$inc": b.M{"subcnt": -1}})
-
+	
 	// Now delete or mark deleted the subscriptions.
 	if hard {
 		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)

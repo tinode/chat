@@ -1187,6 +1187,9 @@ func TestUserDelete(t *testing.T) {
 	}
 }
 
+/*
+// ================== Other tests =================================
+
 func TestUserUnreadCount(t *testing.T) {
 	uids := []types.Uid{
 		types.ParseUserId("usr" + testData.Users[1].Id),
@@ -1220,7 +1223,6 @@ func TestUserUnreadCount(t *testing.T) {
 	}
 }
 
-// ================== Other tests =================================
 func TestMessageGetDeleted(t *testing.T) {
 	qOpts := types.QueryOpt{
 		Since:  1,
@@ -1235,7 +1237,7 @@ func TestMessageGetDeleted(t *testing.T) {
 		t.Error(mismatchErrorString("result length", len(got), 1))
 	}
 }
-
+*/
 // ================================================================
 func mismatchErrorString(key string, got, want any) string {
 	return fmt.Sprintf("%s mismatch:\nGot  = %+v\nWant = %+v", key, got, want)

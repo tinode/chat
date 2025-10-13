@@ -252,7 +252,7 @@ func initSubs(now time.Time, users []*types.User, topics []*types.Topic) []*type
 	return subs
 }
 
-func initMessages(now time.Time, users []*types.User, topics []*types.Topic, uGen *types.UidGenerator) []*types.Message {
+func initMessages(users []*types.User, topics []*types.Topic, uGen *types.UidGenerator) []*types.Message {
 	msgs := make([]*types.Message, 0, 6)
 	msgs = append(msgs, &types.Message{
 		SeqId:   1,
@@ -368,7 +368,7 @@ func InitTestData() *TestData {
 		Recs:   initAuthRecords(now, users),
 		Topics: topics,
 		Subs:   initSubs(now, users, topics),
-		Msgs:   initMessages(now, users, topics, uGen),
+		Msgs:   initMessages(users, topics, uGen),
 		Devs:   initDevices(now),
 		Files:  initFileDefs(now, users, uGen),
 		Tags:   initTags(),

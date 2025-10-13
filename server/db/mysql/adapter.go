@@ -1139,9 +1139,16 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 // UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
 // TODO: report when the user is not found.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
+	query := "SELECT name FROM topics WHERE owner=?"
+	args := []any{store.DecodeUid(uid)}
+	// In case of hard delete, delete all topics, even those which were
+	// soft-deleted previsously.
+	if !hard {
+		query += " AND state!=?"
+		args = append(args, t.StateDeleted)
+	}
 	// Get a list of topic names owned by the user (as 'grp' and 'chn').
-	ownTopics, err := a.topicNamesForUser("SELECT name FROM topics WHERE owner=? AND state!=?",
-		true, store.DecodeUid(uid), t.StateDeleted)
+	ownTopics, err := a.topicNamesForUser(query, true, args...)
 	if err != nil {
 		return err
 	}
@@ -1172,7 +1179,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete user's subscriptions in all topics.
-		if err = subsDelForUser(tx, uid, true); err != nil {
+		if err = subsDelForUser(tx, decoded_uid, true); err != nil {
 			return err
 		}
 
@@ -1235,7 +1242,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	} else {
 		// Disable all user's subscriptions. That includes p2p subscriptions. No need to delete them.
-		if err = subsDelForUser(tx, uid, false); err != nil {
+		if err = subsDelForUser(tx, decoded_uid, false); err != nil {
 			return err
 		}
 
@@ -2425,9 +2432,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 }
 
 // subsDelForUser marks user's subscriptions as deleted.
-func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
-	decoded_uid := store.DecodeUid(user)
-
+func subsDelForUser(tx *sqlx.Tx, decoded_uid int64, hard bool) error {
 	// Decrement subscription count for all topics the user is subscribed to.
 	rows, err := tx.Query("SELECT topic FROM subscriptions WHERE userid=? AND deletedat IS NULL", decoded_uid)
 	if err != nil {
@@ -2449,14 +2454,15 @@ func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
 		err = rows.Err()
 	}
 	rows.Close()
-	if err != nil || len(topics) == 0 {
-		return err
-	}
-
-	sql, args, err := sqlx.In("UPDATE topics SET subcnt=subcnt-1 WHERE name IN (?)", topics)
-	_, err = tx.Exec(tx.Rebind(sql), args...)
 	if err != nil {
 		return err
+	}
+	if len(topics) > 0 {
+		sql, args, err := sqlx.In("UPDATE topics SET subcnt=subcnt-1 WHERE name IN (?)", topics)
+		_, err = tx.Exec(tx.Rebind(sql), args...)
+		if err != nil {
+			return err
+		}
 	}
 
 	if hard {
@@ -2487,7 +2493,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		}
 	}()
 
-	if err = subsDelForUser(tx, user, hard); err != nil {
+	if err = subsDelForUser(tx, store.DecodeUid(user), hard); err != nil {
 		return err
 	}
 
