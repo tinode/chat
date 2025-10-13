@@ -709,14 +709,14 @@ func addTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal any, 
 		return nil
 	}
 
-	sql := fmt.Sprintf("INSERT INTO %s (%s, tag) VALUES($1,$2)", table, keyName)
-
+	//addTags(ctx, tx, "usertags", "userid", decoded_uid, add, reset == nil)
+	sql := "INSERT INTO " + table + " (" + keyName + ",tag) VALUES($1,$2)"
+	if ignoreDups {
+		sql += " ON CONFLICT DO NOTHING"
+	}
 	for _, tag := range tags {
 		if _, err := tx.Exec(ctx, sql, keyVal, tag); err != nil {
 			if isDupe(err) {
-				if ignoreDups {
-					continue
-				}
 				return t.ErrDuplicate
 			}
 			return err
@@ -731,8 +731,8 @@ func removeTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal an
 		return nil
 	}
 
-	sql, args := expandQuery(fmt.Sprintf("DELETE FROM %s WHERE %s=? AND tag = ANY (?)", table, keyName), keyVal, tags)
-	_, err := tx.Exec(ctx, sql, args)
+	sql, args := expandQuery("DELETE FROM "+table+" WHERE "+keyName+"=? AND tag IN (?)", keyVal, tags)
+	_, err := tx.Exec(ctx, sql, args...)
 
 	return err
 }
@@ -994,9 +994,16 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 // UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
 // TODO: report when the user is not found.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
+	query := "SELECT name FROM topics WHERE owner=$1"
+	args := []any{store.DecodeUid(uid)}
+	// In case of hard delete, delete all topics, even those which were
+	// soft-deleted previsously.
+	if !hard {
+		query += " AND state!=$2"
+		args = append(args, t.StateDeleted)
+	}
 	// Get a list of topic names owned by the user (as 'grp' and 'chn').
-	ownTopics, err := a.topicNamesForUser("SELECT name FROM topics WHERE owner=$1 AND state!=$2",
-		true, store.DecodeUid(uid), t.StateDeleted)
+	ownTopics, err := a.topicNamesForUser(query, false, args...)
 	if err != nil {
 		return err
 	}
@@ -1027,7 +1034,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete user's subscriptions in all topics.
-		if err = subsDelForUser(ctx, tx, uid, true); err != nil {
+		if err = subsDelForUser(ctx, tx, decoded_uid, true); err != nil {
 			return err
 		}
 
@@ -1041,33 +1048,34 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		// Delete topics where the user is the owner.
 
-		// First delete all messages in those topics.
-		if _, err = tx.Exec(ctx, "DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
+		if len(ownTopics) > 0 {
+			// First delete all messages in those topics.
+			if _, err = tx.Exec(ctx, "DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
 
-		// Deletion of messages will cascade to filemsglinks and so to fileuploads.
-		if _, err = tx.Exec(ctx, "DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
+			// Deletion of messages will cascade to filemsglinks and so to fileuploads.
+			if _, err = tx.Exec(ctx, "DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
+			// Delete subscriptions for all users where the user is the owner of the topic.
+			sql, args, _ := sqlx.In("DELETE FROM subscriptions AS s WHERE topic IN (?)", ownTopics)
+			if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
+				return err
+			}
 
-		// Delete subscriptions for all users where the user is the owner of the topic.
-		sql, args, _ := sqlx.In("DELETE FROM subscriptions AS s WHERE topic IN (?)", ownTopics)
-		if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
-			return err
-		}
+			// Delete topic tags.
+			if _, err = tx.Exec(ctx, "DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
 
-		// Delete topic tags.
-		if _, err = tx.Exec(ctx, "DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
-
-		// And finally delete the topics.
-		if _, err = tx.Exec(ctx, "DELETE FROM topics WHERE owner=$1", decoded_uid); err != nil {
-			return err
+			// And finally delete the topics.
+			if _, err = tx.Exec(ctx, "DELETE FROM topics WHERE owner=$1", decoded_uid); err != nil {
+				return err
+			}
 		}
 
 		// Delete user's authentication records.
@@ -1089,39 +1097,43 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	} else {
 		// Disable all user's subscriptions. That includes p2p subscriptions. No need to delete them.
-		if err = subsDelForUser(ctx, tx, uid, false); err != nil {
+		if err = subsDelForUser(ctx, tx, decoded_uid, false); err != nil {
 			return err
 		}
 
-		// Disable all subscriptions to topics where the user is the owner.
-		sql, args, _ := sqlx.In("UPDATE subscriptions SET s.updatedat=?,s.deletedat=? WHERE topic IN (?)", now, now, ownTopics)
-		if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
-			return err
+		if len(ownTopics) > 0 {
+			// Disable all subscriptions to topics where the user is the owner.
+			sql, args, _ := sqlx.In("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, ownTopics)
+			if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
+				return err
+			}
+
+			// Disable group topics where the user is the owner.
+			if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 WHERE owner=$3",
+				now, t.StateDeleted, decoded_uid); err != nil {
+				return err
+			}
 		}
-		// Disable group topics where the user is the owner.
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1, touchedat=$2,state=$3,stateat=$4 WHERE owner=$5",
-			now, now, t.StateDeleted, now, decoded_uid); err != nil {
-			return err
-		}
+
 		// Disable p2p topics with the user (p2p topic's owner is 0).
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$2,state=$3,stateat=$4 "+
+		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 "+
 			"FROM subscriptions WHERE topics.name=subscriptions.topic "+
-			"AND topics.owner=0 AND subscriptions.userid=$5",
-			now, now, t.StateDeleted, now, decoded_uid); err != nil {
+			"AND topics.owner=0 AND subscriptions.userid=$3",
+			now, t.StateDeleted, decoded_uid); err != nil {
 			return err
 		}
 
 		// Disable the other user's subscription to a disabled p2p topic.
-		if _, err = tx.Exec(ctx, "UPDATE subscriptions AS s_one SET updatedat=$1,deletedat=$2 "+
+		if _, err = tx.Exec(ctx, "UPDATE subscriptions AS s_one SET updatedat=$1,deletedat=$1 "+
 			"FROM subscriptions AS s_two WHERE s_one.topic=s_two.topic "+
-			"AND s_two.userid=$3 AND s_two.topic LIKE 'p2p%'",
-			now, now, decoded_uid); err != nil {
+			"AND s_two.userid=$2 AND s_two.topic LIKE 'p2p%'",
+			now, decoded_uid); err != nil {
 			return err
 		}
 
 		// Disable user.
-		if _, err = tx.Exec(ctx, "UPDATE users SET updatedat=$1,state=$2,stateat=$3 WHERE id=$4",
-			now, t.StateDeleted, now, decoded_uid); err != nil {
+		if _, err = tx.Exec(ctx, "UPDATE users SET updatedat=$1,state=$2,stateat=$1 WHERE id=$3",
+			now, t.StateDeleted, decoded_uid); err != nil {
 			return err
 		}
 	}
@@ -1212,6 +1224,22 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	}
 
 	return tx.Commit(ctx)
+}
+
+func tempFetchTags(ctx context.Context, tx pgx.Tx, decoded_uid int64) ([]string, error) {
+	var allTags []string
+	rows, err := tx.Query(ctx, "SELECT tag FROM usertags WHERE userid=$1", decoded_uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tag string
+		rows.Scan(&tag)
+		allTags = append(allTags, tag)
+	}
+	return allTags, nil
 }
 
 // UserUpdateTags adds or resets user's tags
@@ -2022,12 +2050,12 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 		now := t.TimeNow()
 
 		q, args := expandQuery("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, args)
-		if _, err = tx.Exec(ctx, q, args); err != nil {
+		if _, err = tx.Exec(ctx, q, args...); err != nil {
 			return err
 		}
 
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$2,state=$3,stateat=$4 WHERE name=$5",
-			now, now, t.StateDeleted, now, topic); err != nil {
+		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 WHERE name=$3",
+			now, t.StateDeleted, topic); err != nil {
 			return err
 		}
 	}
@@ -2330,23 +2358,46 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 }
 
 // subsDelForUser marks user's subscriptions as deleted.
-func subsDelForUser(ctx context.Context, tx pgx.Tx, user t.Uid, hard bool) error {
-	decoded_uid := store.DecodeUid(user)
-
+func subsDelForUser(ctx context.Context, tx pgx.Tx, decoded_uid int64, hard bool) error {
 	// Decrement subscription count for all topics the user is subscribed to.
-	_, err := tx.Exec(ctx, "UPDATE topics AS t LEFT JOIN subscriptions AS s ON t.name=s.topic "+
-		"SET t.subcnt=t.subcnt-1 WHERE s.userid=$1 AND s.deletedat IS NULL", decoded_uid)
+	rows, err := tx.Query(ctx, "SELECT topic FROM subscriptions WHERE userid=$1 AND deletedat IS NULL", decoded_uid)
 	if err != nil {
 		return err
+	}
+	var topics []any
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			break
+		}
+		if t.IsChannel(name) {
+			// Convert channel name to group name.
+			name = t.ChnToGrp(name)
+		}
+		topics = append(topics, name)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(topics) > 0 {
+		sql, args, _ := sqlx.In("UPDATE topics SET subcnt=subcnt-1 WHERE name IN (?)", topics)
+		_, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...)
+		if err != nil {
+			return err
+		}
 	}
 
 	if hard {
 		// Hard delete: remove all subscriptions for the user.
-		_, err = tx.Exec(ctx, "DELETE FROM subscriptions WHERE userid=$1;", store.DecodeUid(user))
+		_, err = tx.Exec(ctx, "DELETE FROM subscriptions WHERE userid=$1", decoded_uid)
 	} else {
 		now := t.TimeNow()
 		_, err = tx.Exec(ctx, "UPDATE subscriptions SET updatedat=$1,deletedat=$2 WHERE userid=$3 AND deletedat IS NULL;",
-			now, now, store.DecodeUid(user))
+			now, now, decoded_uid)
 	}
 	return err
 }
@@ -2369,7 +2420,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		}
 	}()
 
-	if err = subsDelForUser(ctx, tx, user, hard); err != nil {
+	if err = subsDelForUser(ctx, tx, store.DecodeUid(user), hard); err != nil {
 		return err
 	}
 
@@ -2381,16 +2432,26 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
-	stateConstraint := ""
-	if activeOnly {
-		args = append(args, t.StateOK)
-		stateConstraint = "u.state=? AND "
-	}
+	constraint := ""
 	allReq := t.FlattenDoubleSlice(req)
 	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
+	if len(args) == 0 {
+		// Nothing to search for.
+		return nil, nil
+	}
+	constraint += "tg.tag IN (?) "
+	constraint, args, err := sqlx.In(constraint, args)
+	if err != nil {
+		return nil, err
+	}
+	if activeOnly {
+		args = append(args, int(t.StateOK))
+		constraint += "AND state=? "
+	}
+	constraint = sqlx.Rebind(sqlx.DOLLAR, constraint)
 
 	var matcher string
 	if promoPrefix != "" {
@@ -2402,38 +2463,31 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 
 	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,FALSE,u.access::jsonb,0 AS subcnt,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb," +
 		matcher + " AS matches " +
-		"FROM users AS u LEFT JOIN usertags AS tg ON tg.userid=u.id " +
-		"WHERE " + stateConstraint + "tg.tag IN (?) " +
+		"FROM users AS u JOIN usertags AS tg ON tg.userid=u.id " +
+		"WHERE " + constraint +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.access::jsonb,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb "
+
+	having := ""
 	if len(allReq) > 0 {
-		q, a := common.DisjunctionSql(req, "tg.tag")
-		query += q
+		var a []any
+		having, a = common.DisjunctionSql(req, "tg.tag")
+		having = rebindWithStart(having, len(args)+1)
+		query += having
 		args = append(args, a...)
 	}
 
 	query += "UNION ALL "
 
-	if activeOnly {
-		args = append(args, t.StateOK)
-		stateConstraint = "t.state=? AND "
-	} else {
-		stateConstraint = ""
-	}
-	for _, tag := range append(allReq, opt...) {
-		args = append(args, tag)
-	}
-
 	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.subcnt,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb," +
 		matcher + " AS matches " +
-		"FROM topics AS t LEFT JOIN topictags AS tg ON t.name=tg.topic " +
-		"WHERE " + stateConstraint + "tg.tag IN (?) " +
-		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb "
-	if len(allReq) > 0 {
-		q, a := common.DisjunctionSql(req, "tg.tag")
-		query += q
-		args = append(args, a...)
+		"FROM topics AS t JOIN topictags AS tg ON t.name=tg.topic " +
+		"WHERE " + constraint +
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.subcnt,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb "
+	if having != "" {
+		query += having
 	}
-	query, args = expandQuery(query+"ORDER BY matches DESC, subcnt DESC LIMIT ?", args, a.maxResults)
+	args = append(args, a.maxResults)
+	query += "ORDER BY matches DESC, subcnt DESC LIMIT $" + strconv.Itoa(len(args))
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -3498,13 +3552,12 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	}
 
 	var action string
-	if failOnDuplicate {
-		action = "INSERT"
-	} else {
-		action = "REPLACE"
+	if !failOnDuplicate {
+		action = ` ON CONFLICT ("key") DO UPDATE SET createdat=$2,"value"=$3`
 	}
 
-	_, err := a.db.Exec(ctx, action+` INTO kvmeta("key",createdat,"value") VALUES($1,$2,$3)`, key, t.TimeNow(), value)
+	_, err := a.db.Exec(ctx, `INSERT INTO kvmeta("key",createdat,"value") VALUES($1,$2,$3)`+action,
+		key, t.TimeNow(), value)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -3602,14 +3655,14 @@ func expandQuery(query string, args ...any) (string, []any) {
 	var expandedQuery string
 
 	if len(args) != strings.Count(query, "?") {
-		args = flatMap(args)
+		args = flattenSlice(args)
 	}
 	expandedQuery, expandedArgs, _ = sqlx.In(query, args...)
 	return sqlx.Rebind(sqlx.DOLLAR, expandedQuery), expandedArgs
 }
 
-// Convert a slice of slices into a flat slice.
-func flatMap(slice []any) []any {
+// flatMap converts a slice of mixed values/slices into a flat slice.
+func flattenSlice(slice []any) []any {
 	var result []any
 	for _, v := range slice {
 		switch reflect.TypeOf(v).Kind() {
@@ -3623,6 +3676,26 @@ func flatMap(slice []any) []any {
 		}
 	}
 	return result
+}
+
+// Rebind a query from ? to the target $ with custom initial value.
+func rebindWithStart(query string, startAt int) string {
+	// Add space enough for 10 params before we have to allocate
+	rqb := make([]byte, 0, len(query)+10)
+
+	var i, j = 0, startAt
+
+	for i = strings.Index(query, "?"); i != -1; i = strings.Index(query, "?") {
+		rqb = append(rqb, query[:i]...)
+		rqb = append(rqb, '$')
+
+		rqb = strconv.AppendInt(rqb, int64(j), 10)
+		j++
+
+		query = query[i+1:]
+	}
+
+	return string(append(rqb, query...))
 }
 
 // GetTestAdapter returns an adapter object. Useful for running tests.

@@ -842,24 +842,20 @@ func createSystemTopic(tx *sql.Tx) error {
 }
 
 func addTags(tx *sqlx.Tx, table, keyName string, keyVal any, tags []string, ignoreDups bool) error {
-
 	if len(tags) == 0 {
 		return nil
 	}
 
-	var insert *sql.Stmt
-	var err error
-	insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
+	insert, err := tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
 	if err != nil {
 		return err
 	}
 
 	for _, tag := range tags {
-		_, err = insert.Exec(keyVal, tag)
-
-		if err != nil {
+		if _, err = insert.Exec(keyVal, tag); err != nil {
 			if isDupe(err) {
 				if ignoreDups {
+					err = nil
 					continue
 				}
 				return t.ErrDuplicate
@@ -867,7 +863,6 @@ func addTags(tx *sqlx.Tx, table, keyName string, keyVal any, tags []string, igno
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -1194,13 +1189,13 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Delete topics where the user is the owner.
 		if len(ownTopics) > 0 {
 			// First delete all messages in those topics.
-			if _, err = tx.Exec("DELETE dellog FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topics.owner=?",
+			if _, err = tx.Exec("DELETE dellog FROM dellog JOIN topics ON topics.name=dellog.topic WHERE topics.owner=?",
 				decoded_uid); err != nil {
 				return err
 			}
 
 			// Deletion of messages will cascade to filemsglinks and so to fileuploads.
-			if _, err = tx.Exec("DELETE messages FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topics.owner=?",
+			if _, err = tx.Exec("DELETE messages FROM messages JOIN topics ON topics.name=messages.topic WHERE topics.owner=?",
 				decoded_uid); err != nil {
 				return err
 			}
@@ -1212,7 +1207,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			}
 
 			// Delete topic tags.
-			if _, err = tx.Exec("DELETE tt FROM topictags AS tt LEFT JOIN topics AS t ON t.name=tt.topic WHERE t.owner=?",
+			if _, err = tx.Exec("DELETE tt FROM topictags AS tt JOIN topics AS t ON t.name=tt.topic WHERE t.owner=?",
 				decoded_uid); err != nil {
 				return err
 			}
@@ -1248,7 +1243,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		if len(ownTopics) > 0 {
 			// Disable all subscriptions to topics where the user is the owner.
-			sql, args, _ := sqlx.In("UPDATE subscriptions SET s.updatedat=?,s.deletedat=? WHERE topic IN (?)", now, now, ownTopics)
+			sql, args, _ := sqlx.In("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, ownTopics)
 			if _, err = tx.Exec(tx.Rebind(sql), args...); err != nil {
 				return err
 			}
@@ -1261,7 +1256,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Disable p2p topics with the user (p2p topic's owner is 0).
-		if _, err = tx.Exec("UPDATE topics AS t LEFT JOIN subscriptions AS s ON t.name=s.topic "+
+		if _, err = tx.Exec("UPDATE topics AS t JOIN subscriptions AS s ON t.name=s.topic "+
 			"SET t.updatedat=?,t.touchedat=?,t.state=?,t.stateat=? "+
 			"WHERE t.owner=0 AND s.userid=? AND t.name LIKE 'p2p%'",
 			now, now, t.StateDeleted, now, decoded_uid); err != nil {
@@ -1269,7 +1264,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Disable the other user's subscription to a disabled p2p topic.
-		if _, err = tx.Exec("UPDATE subscriptions AS s_one LEFT JOIN subscriptions AS s_two "+
+		if _, err = tx.Exec("UPDATE subscriptions AS s_one JOIN subscriptions AS s_two "+
 			"ON s_one.topic=s_two.topic "+
 			"SET s_two.updatedat=?, s_two.deletedat=? WHERE s_one.userid=? AND s_one.topic LIKE 'p2p%'",
 			now, now, decoded_uid); err != nil {
@@ -1307,7 +1302,7 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 	}
 
 	// Change state of p2p topics with the user (p2p topic's owner is 0)
-	if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
+	if _, err = tx.Exec("UPDATE topics JOINsubscriptions ON topics.name=subscriptions.topic "+
 		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=? AND topics.state!=?",
 		state, now, decoded_uid, t.StateDeleted); err != nil {
 		return err
@@ -2247,6 +2242,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 		return nil, err
 	}
 
+	sub.User = user.String()
 	sub.Private = common.FromJSON(sub.Private)
 
 	return &sub, nil
@@ -2524,7 +2520,7 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	}
 
 	query := "SELECT u.id,u.createdat,u.updatedat,0,u.access,0 AS subcnt,u.public,u.trusted,u.tags," + matcher + " AS matches " +
-		"FROM users AS u LEFT JOIN usertags AS tg ON tg.userid=u.id " +
+		"FROM users AS u JOIN usertags AS tg ON tg.userid=u.id " +
 		"WHERE " + stateConstraint + "tg.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
 	if len(allReq) > 0 {
@@ -2538,15 +2534,13 @@ func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string,
 	if activeOnly {
 		args = append(args, t.StateOK)
 		stateConstraint = "t.state=? AND "
-	} else {
-		stateConstraint = ""
 	}
 	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
 	}
 
 	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags," + matcher + " AS matches " +
-		"FROM topics AS t LEFT JOIN topictags AS tg ON t.name=tg.topic " +
+		"FROM topics AS t JOIN topictags AS tg ON t.name=tg.topic " +
 		"WHERE " + stateConstraint + "tg.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.subcnt,t.public,t.trusted,t.tags "
 	if len(allReq) > 0 {
