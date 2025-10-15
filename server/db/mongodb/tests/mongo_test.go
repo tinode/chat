@@ -925,6 +925,66 @@ func TestDeviceDelete(t *testing.T) {
 	}
 }
 
+// ================== Persistent Cache tests ======================
+func TestPCacheUpsert(t *testing.T) {
+	err := adp.PCacheUpsert("test_key", "test_value", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test duplicate with failOnDuplicate = true
+	err = adp.PCacheUpsert("test_key2", "test_value2", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = adp.PCacheUpsert("test_key2", "new_value", true)
+	if err != types.ErrDuplicate {
+		t.Error("Expected duplicate error")
+	}
+}
+
+func TestPCacheGet(t *testing.T) {
+	value, err := adp.PCacheGet("test_key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "test_value" {
+		t.Error(mismatchErrorString("Cache value", value, "test_value"))
+	}
+
+	// Test not found
+	_, err = adp.PCacheGet("nonexistent")
+	if err != types.ErrNotFound {
+		t.Error("Expected not found error")
+	}
+}
+
+func TestPCacheDelete(t *testing.T) {
+	err := adp.PCacheDelete("test_key")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify deleted
+	_, err = adp.PCacheGet("test_key")
+	if err != types.ErrNotFound {
+		t.Error("Key should be deleted")
+	}
+}
+
+func TestPCacheExpire(t *testing.T) {
+	// Insert some test keys with prefix
+	adp.PCacheUpsert("prefix_key1", "value1", false)
+	adp.PCacheUpsert("prefix_key2", "value2", false)
+
+	// Expire keys older than now (should delete all test keys)
+	err := adp.PCacheExpire("prefix_", time.Now().Add(1*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // ================== Delete tests ================================
 func TestCredDel(t *testing.T) {
 	err := adp.CredDel(types.ParseUserId("usr"+testData.Users[0].Id), "email", "alice@test.example.com")

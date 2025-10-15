@@ -15,6 +15,7 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db/common"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	rdb "gopkg.in/rethinkdb/rethinkdb-go.v6"
@@ -637,6 +638,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		Filter(map[string]any{"scheme": scheme}).
 		Pluck("unique").Default(nil).Run(a.conn)
 	if err != nil {
+		if isNoResults(err) {
+			return t.ErrNotFound
+		}
 		return err
 	}
 	defer cursor.Close()
@@ -664,6 +668,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		_, err = rdb.DB(a.dbName).Table("auth").Get(unique).Update(upd).RunWrite(a.conn)
 	} else {
 		// Unique has changed. Insert-Delete.
+		//  No support for transactions :(
 		if len(secret) == 0 {
 			secret = record.Secret
 		}
@@ -672,8 +677,8 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		}
 		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
-			// We can't do much with the error here. No support for transactions :(
-			a.AuthDelScheme(uid, unique)
+			// We can't do much with the error here.
+			rdb.DB(a.dbName).Table("auth").Get(record.Unique).Delete().RunWrite(a.conn)
 		}
 	}
 	return err
@@ -704,7 +709,8 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	if err = cursor.One(&record); err != nil {
 		return "", 0, nil, time.Time{}, err
 	}
-
+	// Convert to UTC (bug? in gorethink).
+	record.Expires = record.Expires.UTC()
 	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
 }
 
@@ -733,7 +739,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
-	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
+	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires.UTC(), nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
@@ -773,6 +779,13 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 	var user t.User
 	for cursor.Next(&user) {
+		// Convert timestamps to UTC (gorethink returns them as +0000)
+		user.CreatedAt = user.CreatedAt.UTC()
+		user.UpdatedAt = user.UpdatedAt.UTC()
+		if user.StateAt != nil {
+			stateAt := user.StateAt.UTC()
+			user.StateAt = &stateAt
+		}
 		users = append(users, user)
 	}
 
@@ -786,6 +799,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		GetAllByIndex("Owner", uid.String()).Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).
 		Field("Id"), true)
 	if err != nil {
+		logs.Err.Println("UserDelete: cannot get user's own topics:", err)
 		return err
 	}
 
@@ -886,6 +900,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	} else {
 		// Disable user's subscriptions.
 		if err = a.subsDelForUser(uid, false); err != nil {
+			logs.Err.Println("UserDelete: subsDelForUser:", err)
 			return err
 		}
 
@@ -920,6 +935,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Disable p2p topics with the user.
 		p2pTopics, err := a.p2pTopicsForUser(uid)
 		if err != nil {
+			logs.Err.Println("UserDelete: p2pTopics:", err)
 			return err
 		}
 		if len(p2pTopics) > 0 {
@@ -974,10 +990,11 @@ func (a *adapter) clearUserDellog(uid t.Uid, topics []any) error {
 				rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
 				Update(map[string]any{
 					// Take the DeletedFor array, subtract all values which contain current user ID in 'User' field.
-					"DeletedFor": rdb.Row.Field("DeletedFor").
-						SetDifference(
-							rdb.Row.Field("DeletedFor").
-								Filter(map[string]any{"User": forUser}))})
+					"DeletedFor": func(msg rdb.Term) rdb.Term {
+						return msg.Field("DeletedFor").
+							SetDifference(msg.Field("DeletedFor").Filter(map[string]any{"User": forUser}))
+					},
+				})
 		}).RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -993,8 +1010,8 @@ func (a *adapter) clearUserDellog(uid t.Uid, topics []any) error {
 					[]any{topic.Field("Id"), rdb.MinVal},
 					[]any{topic.Field("Id"), rdb.MaxVal},
 					rdb.BetweenOpts{Index: "Topic_DelId"}).
-				// Keep entries soft-deleted for the current user only.
-				Filter(rdb.Row.Field("DeletedFor").Eq(forUser)).
+				// Keep for deletion entries soft-deleted for the current user only.
+				Filter(func(dle rdb.Term) rdb.Term { return dle.Field("DeletedFor").Eq(forUser) }).
 				// Delete them.
 				Delete()
 		}).RunWrite(a.conn)
@@ -1006,6 +1023,9 @@ func (a *adapter) clearUserDellog(uid t.Uid, topics []any) error {
 func (a *adapter) topicNamesForUser(query rdb.Term, includeChan bool) ([]any, error) {
 	cursor, err := query.Run(a.conn)
 	if err != nil {
+		if isNoResults(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer cursor.Close()
@@ -1134,6 +1154,9 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	err = cursor.One(&tagsField)
 	if err != nil {
 		return nil, err
+	}
+	if len(tagsField.Tags) == 0 {
+		tagsField.Tags = nil
 	}
 	return tagsField.Tags, nil
 }
@@ -1357,6 +1380,14 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 				return nil, err
 			}
 		}
+	}
+	// RethinkDB go driver incorrectly converts UTC timezone to +0000
+	tt.CreatedAt = tt.CreatedAt.UTC()
+	tt.UpdatedAt = tt.UpdatedAt.UTC()
+	tt.TouchedAt = tt.TouchedAt.UTC()
+	if tt.StateAt != nil {
+		stateAt := tt.StateAt.UTC()
+		tt.StateAt = &stateAt
 	}
 
 	return tt, nil
@@ -1765,13 +1796,25 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 // TopicUpdateSubCnt updates subscriber count denormalized in topic.
 func (a *adapter) TopicUpdateSubCnt(topic string) error {
-	_, err := rdb.DB(a.dbName).Table("topics").
+	cursor, err := rdb.DB(a.dbName).Table("subscriptions").
+		GetAllByIndex("Topic", topic, t.GrpToChn(topic)).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Count().Run(a.conn)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close()
+
+	subCnt := 0
+	if !cursor.IsNil() {
+		if err = cursor.One(&subCnt); err != nil {
+			return err
+		}
+	}
+	_, err = rdb.DB(a.dbName).Table("topics").
 		Get(topic).
 		Update(map[string]any{
-			"SubCnt": rdb.Table("subscriptions").
-				GetAllByIndex("Topic", topic, t.GrpToChn(topic)).
-				Filter(rdb.Row.HasFields("DeletedAt").Not()).
-				Count(),
+			"SubCnt": subCnt,
 		}).RunWrite(a.conn)
 	return err
 }
@@ -1788,7 +1831,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]any) error {
 // TopicOwnerChange changes topic's owner.
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
-		Update(map[string]any{"Owner": newOwner}).RunWrite(a.conn)
+		Update(map[string]any{"Owner": newOwner.String()}).RunWrite(a.conn)
 	return err
 }
 
@@ -1996,8 +2039,9 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 
 	// Get all topics the user is subscribed to. Channels are left as channels.
 	topics, err := a.topicNamesForUser(rdb.DB(a.dbName).Table("subscriptions").
-		GetAllByIndex("User", forUser), false)
+		GetAllByIndex("User", forUser).Field("Topic"), false)
 	if err != nil {
+		logs.Err.Println("subsDelForUser: topicNamesForUser:", err)
 		return err
 	}
 
@@ -2011,6 +2055,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 
 	err = a.clearUserDellog(user, topics)
 	if err != nil {
+		logs.Err.Println("subsDelForUser: clearUserDellog:", err)
 		return err
 	}
 
@@ -2234,6 +2279,19 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // MessageGetDeleted returns ranges of deleted messages.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
+	/*
+		r.db('tinode_test')
+			.table('dellog')
+			.between(
+				['p2p9AVDamaNCRbfKzGSh3mE0w', 1],
+				['p2p9AVDamaNCRbfKzGSh3mE0w', 10],
+				{index: 'Topic_DelId'}
+			)
+			.orderBy('Topic_DelId')
+			.filter(
+				row => row.getField('DeletedFor').eq('0QLrX3WPS2o').or(row.getField('DeletedFor').eq(''))
+			)
+	*/
 	var limit = a.maxResults
 	var lower, upper any
 
@@ -2255,7 +2313,8 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 
 	// Fetch log of deletions
 	cursor, err := rdb.DB(a.dbName).Table("dellog").
-		// Select log entries for the given table and DelId values between two limits
+		// Select log entries for the given table and DelId values between two limits.
+		// By default, leftBound is closed and rightBound is open.
 		Between([]any{topic, lower}, []any{topic, upper},
 			rdb.BetweenOpts{Index: "Topic_DelId"}).
 		// Sort from low DelIds to high
@@ -2657,7 +2716,7 @@ func (a *adapter) credGetActive(uid t.Uid, method string) (*t.Credential, error)
 	defer cursor.Close()
 
 	if cursor.IsNil() {
-		return nil, t.ErrNotFound
+		return nil, nil
 	}
 
 	var cred t.Credential
@@ -2950,7 +3009,7 @@ func (a *adapter) decFileUseCounter(query rdb.Term) error {
 
 // PCacheGet reads a persistet cache entry.
 func (a *adapter) PCacheGet(key string) (string, error) {
-	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get(key).Field("value").Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get(key).Run(a.conn)
 	if err != nil {
 		return "", err
 	}
@@ -2960,12 +3019,12 @@ func (a *adapter) PCacheGet(key string) (string, error) {
 		return "", t.ErrNotFound
 	}
 
-	var value string
-	if err = cursor.One(&value); err != nil {
+	var result map[string]string
+	if err = cursor.One(&result); err != nil {
 		return "", err
 	}
 
-	return value, nil
+	return result["value"], nil
 }
 
 // PCacheUpsert creates or updates a persistent cache entry.
@@ -3019,6 +3078,15 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 // GetTestDB returns a currently open database connection.
 func (a *adapter) GetTestDB() any {
 	return a.conn
+}
+
+// Check if error is due to no results.
+// The case covered is calling Field('name') on a non-object value.
+func isNoResults(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "perform get_field on a non-object non-sequence")
 }
 
 // Checks if the given error is 'Database not found'.

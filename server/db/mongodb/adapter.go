@@ -1384,9 +1384,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	// 3. If yes, first insert the new record (it may fail due to dublicate '_id') then delete the old one.
 
 	var err error
-	var record struct {
-		Unique string `bson:"_id"`
-	}
+	var record common.AuthRecord
 	findOpts := mdbopts.FindOne().SetProjection(b.M{"_id": 1})
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
 	if err = a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
@@ -1410,9 +1408,18 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 			b.M{"_id": unique},
 			b.M{"$set": upd})
 	} else {
+		// Unique has changed. Insert-Delete.
+		// FIXME: use transaction.
+		if len(secret) == 0 {
+			secret = record.Secret
+		}
+		if expires.IsZero() {
+			expires = record.Expires
+		}
 		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
-			a.AuthDelScheme(uid, scheme)
+			// Delete the old record. Not much can be done with the error.
+			a.db.Collection("auth").DeleteOne(a.ctx, b.M{"_id": record.Unique})
 		}
 	}
 
@@ -2209,7 +2216,7 @@ func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 			b.M{"_id": b.M{"$in": topics}},
 			b.M{"$inc": b.M{"subcnt": -1}})
 	}
-	
+
 	// Now delete or mark deleted the subscriptions.
 	if hard {
 		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
@@ -3028,7 +3035,7 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	}
 
 	res := collection.FindOneAndUpdate(a.ctx, b.M{"_id": key}, b.M{"$set": doc},
-		mdbopts.FindOneAndUpdate().SetUpsert(true))
+		mdbopts.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(mdbopts.After))
 	return res.Err()
 }
 
