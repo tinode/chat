@@ -97,7 +97,7 @@ When you register a new account you are asked for an email address to send valid
   * Server-generated presence notifications for people, group chats.
   * Forwarding and replying to messages.
   * Editing sent messages.
-  * Pinned messages.
+  * Pinned chats and messages.
 * Administration:
   * Granular access control with permissions for various actions.
   * Support for custom authentication backends.

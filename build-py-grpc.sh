@@ -13,7 +13,7 @@ pushd ../py_grpc > /dev/null
 python3 version.py
 
 # Generate tinode-grpc package
-python3 setup.py -q sdist bdist_wheel
+python3 -m build > /dev/null
 
 popd > /dev/null
 popd > /dev/null

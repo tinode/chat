@@ -33,10 +33,10 @@ See [instructions](./docker/README.md)
 2. OPTIONAL only if you intend to modify the code: Install [protobuf](https://developers.google.com/protocol-buffers/) and [gRPC](https://grpc.io/docs/languages/go/quickstart/) including [code generator](https://developers.google.com/protocol-buffers/docs/reference/go-generated) for Go.
 
 3. Make sure one of the following databases is installed and running:
- * MySQL 5.7 or above configured with `InnoDB` engine. MySQL 5.6 or below **will not work**.
+ * MySQL 5.7 or above configured with `InnoDB` engine (8.x preferred). MySQL 5.6 or below **will not work**.
  * PostgreSQL 13 or above. PostgreSQL 12 or below **will not work**.
- * MongoDB 4.4 or above. MongoDB 4.2 and below **will not work**.
- * RethinkDB (deprecated, support will be dropped in 2027).
+ * MongoDB 4.4 or above (8.x preferred). MongoDB 4.2 and below **will not work**.
+ * RethinkDB (deprecated, support will be dropped in 2027 unless RethinkDB team resumes development).
 
 4. Fetch, build Tinode server and tinode-db database initializer:
   - **MySQL**:

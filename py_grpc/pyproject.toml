@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinode_grpc"
+description = "Tinode gRPC bindings."
+authors = [
+    {name = "Tinode Authors", email = "info@tinode.co"},
+]
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["chat", "messaging", "messenger", "im", "tinode"]
+classifiers = [
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 2.7",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.5",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: Chat",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "protobuf>=3.6.1",
+    "grpcio>=1.19.0",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/tinode/chat"
+Repository = "https://github.com/tinode/chat"
+Issues = "https://github.com/tinode/chat/issues"
+
+[tool.setuptools]
+packages = ["tinode_grpc"]
+
+[tool.setuptools.package-data]
+"*" = ["GIT_VERSION", "*.pyi"]
+
+# Alternative version handling if you want to keep reading from GIT_VERSION file
+[tool.setuptools.dynamic]
+version = {file = "tinode_grpc/GIT_VERSION"}
