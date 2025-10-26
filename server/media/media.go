@@ -59,13 +59,13 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 
 // matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
 func matchCORSOrigin(allowed []string, origin string) string {
-	if origin == "" && allowed[0] != "*" {
-		// Request has no Origin header.
+	if len(allowed) == 0 {
+		// Not configured
 		return ""
 	}
 
-	if len(allowed) == 0 {
-		// Not configured
+	if origin == "" && allowed[0] != "*" {
+		// Request has no Origin header and "*" (any origin) not allowed.
 		return ""
 	}
 
@@ -93,7 +93,7 @@ func matchCORSOrigin(allowed []string, origin string) string {
 			domainParts := strings.Split(domain, ".")
 			for i, part := range domainParts {
 				if part == "*" {
-					domainParts[i] = "[a-zA-Z0-9][a-zA-Z0-9-]*"
+					domainParts[i] = "[a-z0-9][a-z0-9-]*"
 				} else {
 					domainParts[i] = part
 				}
