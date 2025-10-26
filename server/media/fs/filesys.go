@@ -29,7 +29,8 @@ const (
 	handlerName = "fs"
 )
 
-type configType struct {
+type fileConfig struct {
+	// FileUploadDirectory: In case of a cluster fileUploadLocation must be accessible to all cluster members.
 	FileUploadDirectory string   `json:"upload_dir"`
 	ServeURL            string   `json:"serve_url"`
 	CorsOrigins         []string `json:"cors_origins"`
@@ -37,38 +38,30 @@ type configType struct {
 }
 
 type fshandler struct {
-	// In case of a cluster fileUploadLocation must be accessible to all cluster members.
-	fileUploadLocation string
-	serveURL           string
-	corsOrigins        []string
-	cacheControl       string
+	fileConfig
 }
 
 func (fh *fshandler) Init(jsconf string) error {
 	var err error
-	var config configType
 
-	if err = json.Unmarshal([]byte(jsconf), &config); err != nil {
+	if err = json.Unmarshal([]byte(jsconf), &fh.fileConfig); err != nil {
 		return errors.New("failed to parse config: " + err.Error())
 	}
 
-	fh.fileUploadLocation = config.FileUploadDirectory
-	if fh.fileUploadLocation == "" {
+	if fh.FileUploadDirectory == "" {
 		return errors.New("missing upload location")
 	}
 
-	fh.serveURL = config.ServeURL
-	if fh.serveURL == "" {
-		fh.serveURL = defaultServeURL
+	if fh.ServeURL == "" {
+		fh.ServeURL = defaultServeURL
 	}
 
-	fh.cacheControl = config.CacheControl
-	if fh.cacheControl == "" {
-		fh.serveURL = defaultCacheControl
+	if fh.CacheControl == "" {
+		fh.CacheControl = defaultCacheControl
 	}
 
 	// Make sure the upload directory exists.
-	return os.MkdirAll(fh.fileUploadLocation, 0777)
+	return os.MkdirAll(fh.FileUploadDirectory, 0777)
 }
 
 // Headers is used for cache management and serving CORS headers.
@@ -89,14 +82,14 @@ func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, s
 			return http.Header{
 					"Last-Modified": {fdef.UpdatedAt.Format(http.TimeFormat)},
 					"ETag":          {`"` + fdef.ETag + `"`},
-					"Cache-Control": {fh.cacheControl},
+					"Cache-Control": {fh.CacheControl},
 				},
 				http.StatusNotModified, nil
 		}
 
 		return http.Header{
 			"Content-Type":  {fdef.MimeType},
-			"Cache-Control": {fh.cacheControl},
+			"Cache-Control": {fh.CacheControl},
 			"ETag":          {`"` + fdef.ETag + `"`},
 		}, 0, nil
 	}
@@ -105,7 +98,7 @@ func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, s
 		// Not an OPTIONS request. No special handling for all other requests.
 		return nil, 0, nil
 	}
-	header, status := media.CORSHandler(method, headers, fh.corsOrigins, serve)
+	header, status := media.CORSHandler(method, headers, fh.CorsOrigins, serve)
 	return header, status, nil
 }
 
@@ -116,7 +109,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64,
 
 	// Generate a unique file name and attach it to path. Using base32 instead of base64 to avoid possible
 	// file name collisions on Windows due to case-insensitive file names there.
-	location := filepath.Join(fh.fileUploadLocation, fdef.Uid().String32())
+	location := filepath.Join(fh.FileUploadDirectory, fdef.Uid().String32())
 
 	outfile, err := os.Create(location)
 	if err != nil {
@@ -148,7 +141,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64,
 	// Use file path to create ETag. File paths are unique so will be the ETag.
 	fdef.ETag = etagFromPath(fdef.Location)
 
-	return fh.serveURL + fname, size, nil
+	return fh.ServeURL + fname, size, nil
 }
 
 // Download processes request for file download.
@@ -191,7 +184,7 @@ func (fh *fshandler) Delete(locations []string) error {
 
 // GetIdFromUrl converts an attahment URL to a file UID.
 func (fh *fshandler) GetIdFromUrl(url string) types.Uid {
-	return media.GetIdFromUrl(url, fh.serveURL)
+	return media.GetIdFromUrl(url, fh.ServeURL)
 }
 
 // getFileRecord given file ID reads file record from the database.
