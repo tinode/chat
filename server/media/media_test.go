@@ -51,12 +51,12 @@ func TestMatchCORSOrigin(t *testing.T) {
 			expected: "",
 		},
 		{
-			allowed:  []string{"https://*.*.example.com"},
+			allowed:  []string{"https://*.example.com", "https://*.sub.example.com"},
 			origin:   "https://pre.sub.example.com",
 			expected: "https://pre.sub.example.com",
 		},
 		{
-			allowed:  []string{"https://*.sub.example.com"},
+			allowed:  []string{"https://*.*.example.com"},
 			origin:   "https://pre.sub.example.com",
 			expected: "https://pre.sub.example.com",
 		},
