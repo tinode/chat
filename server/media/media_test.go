@@ -46,19 +46,34 @@ func TestMatchCORSOrigin(t *testing.T) {
 			expected: "https://sub.example.com",
 		},
 		{
+			allowed:  []string{"https://*.example.com"},
+			origin:   "https://pre.sub.example.com",
+			expected: "",
+		},
+		{
 			allowed:  []string{"https://*.*.example.com"},
 			origin:   "https://pre.sub.example.com",
 			expected: "https://pre.sub.example.com",
 		},
 		{
-			allowed:  []string{"https://pre.*.example.com"},
+			allowed:  []string{"https://*.sub.example.com"},
 			origin:   "https://pre.sub.example.com",
 			expected: "https://pre.sub.example.com",
 		},
 		{
-			allowed:  []string{"https://t.*.example.com"},
+			allowed:  []string{"https://*.sub.example.com"},
+			origin:   "https://pre.asd.example.com",
+			expected: "",
+		},
+		{
+			allowed:  []string{"https://pre.*.example.com"},
 			origin:   "https://pre.sub.example.com",
 			expected: "",
+		},
+		{
+			allowed:  []string{"https://*.*.*.example.com"},
+			origin:   "https://www.pre.sub.example.com",
+			expected: "https://www.pre.sub.example.com",
 		},
 	}
 

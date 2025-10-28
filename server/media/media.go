@@ -76,32 +76,44 @@ func matchCORSOrigin(allowed []string, origin string) string {
 		return origin
 	}
 
-	origin = strings.TrimSpace(strings.ToLower(origin))
-	for _, pattern := range allowed {
-		pattern = strings.TrimSpace(strings.ToLower(pattern))
-		if pattern == origin {
+	originUrl, err := url.ParseRequestURI(origin)
+	if err != nil {
+		return ""
+	}
+
+	for _, val := range allowed {
+		if val == origin {
 			return origin
 		}
 
-		if strings.Contains(pattern, "*") {
-			parts := strings.SplitN(pattern, "://", 2)
-			if len(parts) != 2 {
+		if strings.Contains(val, "*") {
+			allowedUrl, err := url.ParseRequestURI(val)
+			if err != nil {
 				continue
 			}
-			protocol, domain := parts[0], parts[1]
 
-			domainParts := strings.Split(domain, ".")
-			for i, part := range domainParts {
-				if part == "*" {
-					domainParts[i] = "[a-z0-9][a-z0-9-]*"
-				} else {
-					domainParts[i] = part
-				}
+			if originUrl.Scheme != allowedUrl.Scheme {
+				continue
 			}
 
-			regexPattern := "^" + protocol + "://" + strings.Join(domainParts, "\\.") + "$"
+			originParts := strings.Split(originUrl.Hostname(), ".")
+			allowedParts := strings.Split(allowedUrl.Hostname(), ".")
 
-			if matched, err := regexp.MatchString(regexPattern, origin); err == nil && matched {
+			if len(originParts) != len(allowedParts) {
+				continue
+			}
+
+			matched := true
+			for i, part := range allowedParts {
+				if part == "*" && (i == 0 || part == allowedParts[i-1]) {
+					continue
+				}
+				if part != originParts[i] {
+					matched = false
+					break
+				}
+			}
+			if matched {
 				return origin
 			}
 		}
