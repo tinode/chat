@@ -80,42 +80,44 @@ func matchCORSOrigin(allowed []string, origin string) string {
 	if err != nil {
 		return ""
 	}
+	originParts := strings.Split(originUrl.Hostname(), ".")
 
 	for _, val := range allowed {
 		if val == origin {
 			return origin
 		}
 
-		if strings.Contains(val, "*") {
-			allowedUrl, err := url.ParseRequestURI(val)
-			if err != nil {
+		if !strings.Contains(val, "*") {
+			continue
+		}
+
+		allowedUrl, err := url.ParseRequestURI(val)
+		if err != nil {
+			continue
+		}
+
+		if originUrl.Scheme != allowedUrl.Scheme {
+			continue
+		}
+
+		allowedParts := strings.Split(allowedUrl.Hostname(), ".")
+
+		if len(originParts) != len(allowedParts) {
+			continue
+		}
+
+		matched := true
+		for i, part := range allowedParts {
+			if part == "*" && (i == 0 || part == allowedParts[i-1]) {
 				continue
 			}
-
-			if originUrl.Scheme != allowedUrl.Scheme {
-				continue
+			if part != originParts[i] {
+				matched = false
+				break
 			}
-
-			originParts := strings.Split(originUrl.Hostname(), ".")
-			allowedParts := strings.Split(allowedUrl.Hostname(), ".")
-
-			if len(originParts) != len(allowedParts) {
-				continue
-			}
-
-			matched := true
-			for i, part := range allowedParts {
-				if part == "*" && (i == 0 || part == allowedParts[i-1]) {
-					continue
-				}
-				if part != originParts[i] {
-					matched = false
-					break
-				}
-			}
-			if matched {
-				return origin
-			}
+		}
+		if matched {
+			return origin
 		}
 	}
 
