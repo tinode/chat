@@ -127,7 +127,7 @@ class Resolve(Macro):
                 '.must set fnd --public=basic:%s' % cmd.login,
                 '.must %s get fnd --sub' % varname,
                 '.must leave fnd',
-                '.log %s.sub[0].user_id' % varname]
+                '.log %s.sub[0].topic' % varname]
 
 
 class Passwd(Macro):
