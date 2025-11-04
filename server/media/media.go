@@ -59,23 +59,68 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 
 // matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
 func matchCORSOrigin(allowed []string, origin string) string {
-	if origin == "" {
-		// Request has no Origin header.
-		return ""
-	}
-
 	if len(allowed) == 0 {
 		// Not configured
 		return ""
 	}
 
-	if allowed[0] == "*" {
-		return "*"
+	if origin == "" && allowed[0] != "*" {
+		// Request has no Origin header and "*" (any origin) not allowed.
+		return ""
 	}
 
-	origin = strings.ToLower(origin)
+	if allowed[0] == "*" {
+		if origin == "" {
+			return "*"
+		}
+		return origin
+	}
+
+	originUrl, err := url.ParseRequestURI(origin)
+	if err != nil {
+		return ""
+	}
+	originParts := strings.Split(originUrl.Hostname(), ".")
+
 	for _, val := range allowed {
-		if strings.ToLower(val) == origin {
+		if val == origin {
+			return origin
+		}
+
+		if !strings.Contains(val, "*") {
+			continue
+		}
+
+		allowedUrl, err := url.ParseRequestURI(val)
+		if err != nil {
+			continue
+		}
+
+		if originUrl.Scheme != allowedUrl.Scheme {
+			continue
+		}
+
+		if originUrl.Port() != allowedUrl.Port() {
+			continue
+		}
+
+		allowedParts := strings.Split(allowedUrl.Hostname(), ".")
+
+		if len(originParts) != len(allowedParts) {
+			continue
+		}
+
+		matched := true
+		for i, part := range allowedParts {
+			if part == "*" {
+				continue
+			}
+			if part != originParts[i] {
+				matched = false
+				break
+			}
+		}
+		if matched {
 			return origin
 		}
 	}
