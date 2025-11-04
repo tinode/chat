@@ -4,3 +4,4 @@ Pillow>=5.4.1
 requests>=2.21.0
 tinode-grpc>=0.22.0
 prompt_toolkit>=2.0.10
+importlib-metadata>=1.0; python_version<'3.8'

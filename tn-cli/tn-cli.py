@@ -17,7 +17,11 @@ except ImportError:
     from cStringIO import StringIO as memory_io
 import mimetypes
 import os
-import pkg_resources
+try:
+    from importlib.metadata import version
+except ImportError:
+    # Fallback for Python < 3.8
+    from importlib_metadata import version
 import platform
 from prompt_toolkit import PromptSession
 import random
@@ -39,10 +43,11 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "3.0.0b1" # format: 1.9.0b1
+APP_VERSION = "3.0.1" # format: 1.9.0b1
 PROTOCOL_VERSION = "0"
-LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
-GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
+LIB_VERSION = version("tinode_grpc")
+GRPC_VERSION = version("grpcio")
+
 
 # Maximum in-band (included directly into the message) attachment size which fits into
 # a message of 256K in size, assuming base64 encoding and 1024 bytes of overhead.
