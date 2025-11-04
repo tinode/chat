@@ -100,6 +100,10 @@ func matchCORSOrigin(allowed []string, origin string) string {
 			continue
 		}
 
+		if originUrl.Port() != allowedUrl.Port() {
+			continue
+		}
+
 		allowedParts := strings.Split(allowedUrl.Hostname(), ".")
 
 		if len(originParts) != len(allowedParts) {
@@ -108,7 +112,7 @@ func matchCORSOrigin(allowed []string, origin string) string {
 
 		matched := true
 		for i, part := range allowedParts {
-			if part == "*" && (i == 0 || part == allowedParts[i-1]) {
+			if part == "*" {
 				continue
 			}
 			if part != originParts[i] {
