@@ -2,6 +2,7 @@
 package media
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -44,6 +45,13 @@ type Handler interface {
 	GetIdFromUrl(url string) types.Uid
 }
 
+type AllowedOrigin struct {
+	Origin      string
+	URL         url.URL
+	HostParts   []string
+	HasWildcard bool
+}
+
 var fileNamePattern = regexp.MustCompile(`^[-_A-Za-z0-9]+`)
 
 // GetIdFromUrl is a helper method for extracting file ID from a URL.
@@ -57,23 +65,63 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 	return types.ParseUid(fileNamePattern.FindString(fname))
 }
 
+// ParseCORSAllow pre-parses allowed origins from the configuration.
+func ParseCORSAllow(allowed []string) ([]AllowedOrigin, error) {
+	if len(allowed) == 0 {
+		return nil, nil
+	}
+
+	result := make([]AllowedOrigin, 0, len(allowed))
+	for _, val := range allowed {
+		parsed := AllowedOrigin{Origin: val}
+		switch val {
+		case "*":
+			if len(allowed) > 1 {
+				return nil, errors.New("wildcard origin '*' must be the only entry")
+			}
+			parsed.HasWildcard = true
+		case "":
+			if len(allowed) > 1 {
+				return nil, errors.New("empty allowed origin '' must be the only entry")
+			}
+			// Empty string means no origin allowed - no URL parsing needed
+			parsed.HasWildcard = false
+		default:
+			u, err := url.ParseRequestURI(val)
+			if err != nil {
+				return nil, err
+			}
+			parsed.HostParts = strings.Split(u.Hostname(), ".")
+			parsed.URL = *u
+			parsed.HasWildcard = strings.Contains(u.Hostname(), "*")
+		}
+		result = append(result, parsed)
+	}
+	return result, nil
+}
+
 // matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
-func matchCORSOrigin(allowed []string, origin string) string {
+func matchCORSOrigin(allowed []AllowedOrigin, origin string) string {
 	if len(allowed) == 0 {
 		// Not configured
 		return ""
 	}
 
-	if origin == "" && allowed[0] != "*" {
+	if origin == "" && allowed[0].Origin != "*" {
 		// Request has no Origin header and "*" (any origin) not allowed.
 		return ""
 	}
 
-	if allowed[0] == "*" {
+	if allowed[0].Origin == "*" {
 		if origin == "" {
 			return "*"
 		}
 		return origin
+	}
+
+	// Check for empty string in allowed origins - this means no origin is allowed.
+	if allowed[0].Origin == "" {
+		return ""
 	}
 
 	originUrl, err := url.ParseRequestURI(origin)
@@ -83,35 +131,19 @@ func matchCORSOrigin(allowed []string, origin string) string {
 	originParts := strings.Split(originUrl.Hostname(), ".")
 
 	for _, val := range allowed {
-		if val == origin {
+		if val.Origin == origin {
 			return origin
 		}
 
-		if !strings.Contains(val, "*") {
-			continue
-		}
-
-		allowedUrl, err := url.ParseRequestURI(val)
-		if err != nil {
-			continue
-		}
-
-		if originUrl.Scheme != allowedUrl.Scheme {
-			continue
-		}
-
-		if originUrl.Port() != allowedUrl.Port() {
-			continue
-		}
-
-		allowedParts := strings.Split(allowedUrl.Hostname(), ".")
-
-		if len(originParts) != len(allowedParts) {
+		if !val.HasWildcard ||
+			originUrl.Scheme != val.URL.Scheme ||
+			originUrl.Port() != val.URL.Port() ||
+			len(originParts) != len(val.HostParts) {
 			continue
 		}
 
 		matched := true
-		for i, part := range allowedParts {
+		for i, part := range val.HostParts {
 			if part == "*" {
 				continue
 			}
@@ -140,7 +172,7 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 
 // CORSHandler is the default CORS processor for use by media handlers. It adds CORS headers to
 // preflight OPTIONS requests, Vary & Access-Control-Allow-Origin headers to all responses.
-func CORSHandler(method string, reqHeader http.Header, allowedOrigins []string, serve bool) (http.Header, int) {
+func CORSHandler(method string, reqHeader http.Header, allowedOrigins []AllowedOrigin, serve bool) (http.Header, int) {
 	respHeader := map[string][]string{
 		// Always add Vary because of possible intermediate caches.
 		"Vary": {"Origin", "Access-Control-Request-Method, Access-Control-Request-Headers"},

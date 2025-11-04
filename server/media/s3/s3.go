@@ -51,8 +51,9 @@ type awsconfig struct {
 }
 
 type awshandler struct {
-	svc  *s3.S3
-	conf awsconfig
+	svc         *s3.S3
+	conf        awsconfig
+	corsOrigins []media.AllowedOrigin
 }
 
 // readerCounter is a byte counter for bytes read through the io.Reader
@@ -96,6 +97,10 @@ func (ah *awshandler) Init(jsconf string) error {
 	}
 	if ah.conf.ServeURL == "" {
 		ah.conf.ServeURL = defaultServeURL
+	}
+	ah.corsOrigins, err = media.ParseCORSAllow(ah.conf.CorsOrigins)
+	if err != nil {
+		return errors.New("failed to parse CORS allowed origins: " + err.Error())
 	}
 
 	var sess *session.Session
@@ -165,7 +170,7 @@ func (ah *awshandler) Init(jsconf string) error {
 // Headers adds CORS headers and redirects GET and HEAD requests to the AWS server.
 func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
 	// Add CORS headers, if necessary.
-	headers, status := media.CORSHandler(method, headers, ah.conf.CorsOrigins, serve)
+	headers, status := media.CORSHandler(method, headers, ah.corsOrigins, serve)
 	if status != 0 || method == http.MethodPost || method == http.MethodPut {
 		return headers, status, nil
 	}
