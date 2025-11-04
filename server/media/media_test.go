@@ -32,7 +32,42 @@ func TestMatchCORSOrigin(t *testing.T) {
 		},
 		{
 			allowed:  []string{},
+			origin:   "",
+			expected: "",
+		},
+		{
+			allowed:  []string{"https://example.com"},
+			origin:   "",
+			expected: "",
+		},
+		{
+			allowed:  []string{},
 			origin:   "https://example.com",
+			expected: "",
+		},
+		{
+			allowed:  []string{"http://example.com"},
+			origin:   "https://example.com",
+			expected: "",
+		},
+		{
+			allowed:  []string{"https://example.com"},
+			origin:   "http://example.com",
+			expected: "",
+		},
+		{
+			allowed:  []string{"http://example.com:8000"},
+			origin:   "http://example.com:8000",
+			expected: "http://example.com:8000",
+		},
+		{
+			allowed:  []string{"http://localhost:8090"},
+			origin:   "http://localhost:8090",
+			expected: "http://localhost:8090",
+		},
+		{
+			allowed:  []string{"http://localhost:8090"},
+			origin:   "http://localhost:8080",
 			expected: "",
 		},
 		{
@@ -68,7 +103,7 @@ func TestMatchCORSOrigin(t *testing.T) {
 		{
 			allowed:  []string{"https://pre.*.example.com"},
 			origin:   "https://pre.sub.example.com",
-			expected: "",
+			expected: "https://pre.sub.example.com",
 		},
 		{
 			allowed:  []string{"https://*.*.*.example.com"},
