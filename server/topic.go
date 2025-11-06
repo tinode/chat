@@ -3239,6 +3239,19 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 			pud.delID = t.delID
 			t.perUser[uid] = pud
 		}
+		
+		// Update unread counters for all users who may have had these messages as unread
+		for uid, otherPud := range t.perUser {
+			if (otherPud.modeGiven & otherPud.modeWant).IsReader() {
+				// Calculate how many unread messages were deleted for this user
+				unreadDeleted := calculateUnreadInRanges(otherPud.readID, t.lastID, ranges)
+				if unreadDeleted > 0 {
+					// Decrease unread count (negative value)
+					usersUpdateUnread(uid, -unreadDeleted, true)
+				}
+			}
+		}
+		
 		// Broadcast the change to all, online and offline, exclude the session making the change.
 		params := &presParams{delID: t.delID, delSeq: dr, actor: asUid.UserId()}
 		filters := &presFilters{filterIn: types.ModeRead}
@@ -3248,19 +3261,6 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 		pud := t.perUser[asUid]
 		pud.delID = t.delID
 		t.perUser[asUid] = pud
-
-		// Update unread counters for other users who may have had these messages as unread
-		// Only for soft deletes (when forUser != types.ZeroUid)
-		for uid, otherPud := range t.perUser {
-			if uid != asUid && (otherPud.modeGiven&otherPud.modeWant).IsReader() {
-				// Calculate how many unread messages were deleted for this user
-				unreadDeleted := calculateUnreadInRanges(otherPud.readID, t.lastID, ranges)
-				if unreadDeleted > 0 {
-					// Decrease unread count (negative value)
-					usersUpdateUnread(uid, -unreadDeleted, true)
-				}
-			}
-		}
 
 		// Notify user's other sessions
 		t.presPubMessageDelete(asUid, pud.modeGiven&pud.modeWant, t.delID, dr, sess.sid)
@@ -3988,25 +3988,22 @@ func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
 	unreadStart := readID + 1
 	unreadEnd := lastID
 	
-	// Binary search to find the first range where rangeEnd > readID
-	// This optimizes by skipping ranges that end before unread messages start
-	left, right := 0, len(ranges)
-	for left < right {
-		mid := (left + right) / 2
-		rangeEnd := ranges[mid].Hi
+	// Find the first range where rangeEnd > readID
+	startIdx := 0
+	for startIdx < len(ranges) {
+		rangeEnd := ranges[startIdx].Hi
 		if rangeEnd == 0 {
-			rangeEnd = ranges[mid].Low + 1
+			rangeEnd = ranges[startIdx].Low + 1
 		}
-		if rangeEnd <= readID {
-			left = mid + 1
-		} else {
-			right = mid
+		if rangeEnd > readID {
+			break
 		}
+		startIdx++
 	}
 	
+	// Sum up unread messages in remaining ranges
 	count := 0
-	// Only iterate through ranges that could contain unread messages
-	for i := left; i < len(ranges); i++ {
+	for i := startIdx; i < len(ranges); i++ {
 		rangeStart := ranges[i].Low
 		rangeEnd := ranges[i].Hi
 		if rangeEnd == 0 {
