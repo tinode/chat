@@ -477,19 +477,19 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Extra == nil || msg.Extra.AsUser == "" {
+	if msg.Extra == nil || (msg.Extra.AsUser == "" && msg.Extra.AuthLevel == "") {
 		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
 		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set alternative user ID and auth level values.
 		s.queueOut(ErrPermissionDenied("", "", now))
-		logs.Warn.Println("s.dispatch: non-root asigned msg.from", s.sid)
+		logs.Warn.Println("s.dispatch: non-root assigned asUser", s.sid)
 		return
 	} else if fromUid := types.ParseUserId(msg.Extra.AsUser); fromUid.IsZero() {
 		// Invalid msg.Extra.AsUser.
 		s.queueOut(ErrMalformed("", "", now))
-		logs.Warn.Println("s.dispatch: malformed msg.from: ", msg.Extra.AsUser, s.sid)
+		logs.Warn.Println("s.dispatch: malformed asUser: ", msg.Extra.AsUser, s.sid)
 		return
 	} else {
 		// Use provided msg.Extra.AsUser
