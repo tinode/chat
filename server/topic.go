@@ -3978,6 +3978,7 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 
 // calculateUnreadInRanges calculates how many unread messages are within the given ranges.
 // unreadStart is the first unread message SeqId (readID + 1), unreadEnd is the last possible message SeqId.
+// Assumes ranges are sorted by Low ascending.
 func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
 	if readID >= lastID {
 		// No unread messages
@@ -3987,13 +3988,35 @@ func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
 	unreadStart := readID + 1
 	unreadEnd := lastID
 	
+	// Binary search to find the first range where rangeEnd > readID
+	// This optimizes by skipping ranges that end before unread messages start
+	left, right := 0, len(ranges)
+	for left < right {
+		mid := (left + right) / 2
+		rangeEnd := ranges[mid].Hi
+		if rangeEnd == 0 {
+			rangeEnd = ranges[mid].Low + 1
+		}
+		if rangeEnd <= readID {
+			left = mid + 1
+		} else {
+			right = mid
+		}
+	}
+	
 	count := 0
-	for _, r := range ranges {
-		rangeStart := r.Low
-		rangeEnd := r.Hi
+	// Only iterate through ranges that could contain unread messages
+	for i := left; i < len(ranges); i++ {
+		rangeStart := ranges[i].Low
+		rangeEnd := ranges[i].Hi
 		if rangeEnd == 0 {
 			// Single message range
 			rangeEnd = rangeStart + 1
+		}
+		
+		// If range starts after unread messages end, we can stop
+		if rangeStart > unreadEnd {
+			break
 		}
 		
 		// Find intersection of [unreadStart, unreadEnd] and [rangeStart, rangeEnd)

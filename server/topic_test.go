@@ -2641,6 +2641,72 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 }
 
+func TestReplyDelMsgHardDelete(t *testing.T) {
+	// Test hard delete scenario - hard deletes affect all users equally
+	// and don't update individual unread counters the same way as soft deletes
+	
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // User with delete permission
+	user2 := helper.uids[1] // Other user
+	
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	helper.topic.lastID = 10
+	
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10
+	pud1.modeGiven = types.ModeCFull  // Full permissions including delete
+	pud1.modeWant = types.ModeCFull
+	helper.topic.perUser[user1] = pud1
+	
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5
+	pud2.modeGiven = types.ModeCFull
+	pud2.modeWant = types.ModeCFull
+	helper.topic.perUser[user2] = pud2
+	
+	// Simulate user1 doing a hard delete of messages 7 and 8
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id: "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: true, // Hard delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion for hard delete (forUser = types.ZeroUid)
+	helper.mm.EXPECT().DeleteList(topicName, 1, types.ZeroUid, gomock.Any(), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+	
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+	
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+	
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+	
+	// For hard deletes, all users' delID should be updated
+	if helper.topic.perUser[user1].delID != 1 {
+		t.Errorf("Expected user1.delID to be 1, got %d", helper.topic.perUser[user1].delID)
+	}
+	if helper.topic.perUser[user2].delID != 1 {
+		t.Errorf("Expected user2.delID to be 1, got %d", helper.topic.perUser[user2].delID)
+	}
+}
+
 func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
 	// This test simulates the scenario from issue #898:
 	// 1. User1 sends messages to User2
