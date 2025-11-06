@@ -3239,6 +3239,19 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 			pud.delID = t.delID
 			t.perUser[uid] = pud
 		}
+		
+		// Update unread counters for all users who may have had these messages as unread
+		for uid, otherPud := range t.perUser {
+			if (otherPud.modeGiven & otherPud.modeWant).IsReader() {
+				// Calculate how many unread messages were deleted for this user
+				unreadDeleted := calculateUnreadInRanges(otherPud.readID, t.lastID, ranges)
+				if unreadDeleted > 0 {
+					// Decrease unread count (negative value)
+					usersUpdateUnread(uid, -unreadDeleted, true)
+				}
+			}
+		}
+		
 		// Broadcast the change to all, online and offline, exclude the session making the change.
 		params := &presParams{delID: t.delID, delSeq: dr, actor: asUid.UserId()}
 		filters := &presFilters{filterIn: types.ModeRead}
@@ -3961,4 +3974,56 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 		}
 	}
 	return name
+}
+
+// calculateUnreadInRanges calculates how many unread messages are within the given ranges.
+// unreadStart is the first unread message SeqId (readID + 1), unreadEnd is the last possible message SeqId.
+// Assumes ranges are sorted by Low ascending.
+func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
+	if readID >= lastID {
+		// No unread messages
+		return 0
+	}
+	
+	unreadStart := readID + 1
+	unreadEnd := lastID
+	
+	// Find the first range where rangeEnd > readID
+	startIdx := 0
+	for startIdx < len(ranges) {
+		rangeEnd := ranges[startIdx].Hi
+		if rangeEnd == 0 {
+			rangeEnd = ranges[startIdx].Low + 1
+		}
+		if rangeEnd > readID {
+			break
+		}
+		startIdx++
+	}
+	
+	// Sum up unread messages in remaining ranges
+	count := 0
+	for i := startIdx; i < len(ranges); i++ {
+		rangeStart := ranges[i].Low
+		rangeEnd := ranges[i].Hi
+		if rangeEnd == 0 {
+			// Single message range
+			rangeEnd = rangeStart + 1
+		}
+		
+		// If range starts after unread messages end, we can stop
+		if rangeStart > unreadEnd {
+			break
+		}
+		
+		// Find intersection of [unreadStart, unreadEnd] and [rangeStart, rangeEnd)
+		intersectionStart := max(unreadStart, rangeStart)
+		intersectionEnd := min(unreadEnd+1, rangeEnd) // +1 because unreadEnd is inclusive
+		
+		if intersectionStart < intersectionEnd {
+			count += intersectionEnd - intersectionStart
+		}
+	}
+	
+	return count
 }
