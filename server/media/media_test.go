@@ -1,6 +1,7 @@
 package media
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -216,7 +217,5 @@ func TestMatchCORSOrigin(t *testing.T) {
 
 // Helper function to check if a string contains a substring (case-insensitive)
 func containsSubstring(str, substr string) bool {
-	return len(substr) == 0 || len(str) >= len(substr) &&
-		(str == substr || containsSubstring(str[1:], substr) ||
-			(len(str) > 0 && len(substr) > 0 && str[0] == substr[0] && containsSubstring(str[1:], substr[1:])))
+	return strings.Contains(strings.ToLower(str), strings.ToLower(substr))
 }
