@@ -3261,7 +3261,18 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *Cl
 		for uid, pud := range t.perUser {
 			pud.delID = t.delID
 			t.perUser[uid] = pud
+
+			// Update unread counters for all users who may have had these messages as unread
+			if (pud.modeGiven & pud.modeWant).IsReader() {
+				// Calculate how many unread messages were deleted for this user
+				unreadDeleted := calculateUnreadInRanges(pud.readID, t.lastID, ranges)
+				if unreadDeleted > 0 {
+					// Decrease unread count (negative value)
+					usersUpdateUnread(uid, -unreadDeleted, true)
+				}
+			}
 		}
+
 		// Broadcast the change to all, online and offline, exclude the session making the change.
 		params := &presParams{delID: t.delID, delSeq: dr, actor: asUid.UserId()}
 		filters := &presFilters{filterIn: types.ModeRead}
@@ -3991,4 +4002,42 @@ func topicNameForUser(name string, uid types.Uid, isChan bool) string {
 		}
 	}
 	return name
+}
+
+// calculateUnreadInRanges calculates how many unread messages are within the given ranges.
+// unreadStart is the first unread message SeqId (readID + 1), unreadEnd is the last possible message SeqId.
+// Assumes ranges are sorted by Low ascending.
+func calculateUnreadInRanges(readID, lastID int, ranges []types.Range) int {
+	if readID >= lastID {
+		// No unread messages
+		return 0
+	}
+
+	unreadStart := readID + 1
+	unreadEnd := lastID
+
+	// Sum up unread messages.
+	count := 0
+
+	for i := 0; i < len(ranges); i++ {
+		rangeStart := ranges[i].Low
+		rangeEnd := ranges[i].Hi
+		if rangeEnd == 0 {
+			rangeEnd = rangeStart + 1
+		}
+		// Find the first range where rangeEnd > readID
+		if rangeEnd <= readID {
+			continue
+		}
+
+		// Find intersection of [unreadStart, unreadEnd] and [rangeStart, rangeEnd)
+		intersectionStart := max(unreadStart, rangeStart)
+		intersectionEnd := min(unreadEnd+1, rangeEnd) // +1 because unreadEnd is inclusive
+
+		if intersectionStart < intersectionEnd {
+			count += intersectionEnd - intersectionStart
+		}
+	}
+
+	return count
 }

@@ -40,9 +40,9 @@ passwd $user.params[user] -P test456
 .must $alice resolve alice
 
 # Subscribe to Alice
-.must sub $alice.sub[0].user_id
+.must sub $alice.sub[0].topic
 
 # Send a plain text message to Alice (async)
-pub $alice.sub[0].user_id 'Hello, Alice'
+pub $alice.sub[0].topic 'Hello, Alice'
 
 .sleep 2000

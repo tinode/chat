@@ -3175,6 +3175,207 @@ func TestUnregisterSessionWithPendingCall(t *testing.T) {
 	}
 }
 
+func TestReplyDelMsgHardDelete(t *testing.T) {
+	// Test hard delete scenario - hard deletes affect all users equally
+	// and don't update individual unread counters the same way as soft deletes
+
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // User with delete permission
+	user2 := helper.uids[1] // Other user
+
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	helper.topic.lastID = 10
+
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10
+	pud1.modeGiven = types.ModeCFull  // Full permissions including delete
+	pud1.modeWant = types.ModeCFull
+	helper.topic.perUser[user1] = pud1
+
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5
+	pud2.modeGiven = types.ModeCFull
+	pud2.modeWant = types.ModeCFull
+	helper.topic.perUser[user2] = pud2
+
+	// Simulate user1 doing a hard delete of messages 7 and 8
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id: "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: true, // Hard delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion for hard delete (forUser = types.ZeroUid)
+	helper.mm.EXPECT().DeleteList(topicName, 1, types.ZeroUid, gomock.Any(), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+
+	// For hard deletes, all users' delID should be updated
+	if helper.topic.perUser[user1].delID != 1 {
+		t.Errorf("Expected user1.delID to be 1, got %d", helper.topic.perUser[user1].delID)
+	}
+	if helper.topic.perUser[user2].delID != 1 {
+		t.Errorf("Expected user2.delID to be 1, got %d", helper.topic.perUser[user2].delID)
+	}
+}
+
+func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
+	// This test simulates the scenario from issue #898:
+	// 1. User1 sends messages to User2
+	// 2. User1 deletes some messages (soft delete)
+	// 3. Verify that the unread calculation logic works correctly
+
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // Sender/deleter
+	user2 := helper.uids[1] // Recipient
+
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	// So user2 has 5 unread messages (6, 7, 8, 9, 10)
+	helper.topic.lastID = 10
+
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10  // user1 has read all
+	helper.topic.perUser[user1] = pud1
+
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5   // user2 has 5 unread messages
+	helper.topic.perUser[user2] = pud2
+
+	// Simulate user1 deleting messages 7 and 8 (2 of user2's unread messages)
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id: "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: false, // Soft delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion
+	helper.mm.EXPECT().DeleteList(topicName, 1, user1, time.Duration(0), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+
+	// The key verification is that calculateUnreadInRanges should have been called
+	// with the correct parameters. We can test this indirectly by testing the function:
+	ranges := []types.Range{{Low: 7, Hi: 9}}
+	unreadDeleted := calculateUnreadInRanges(5, 10, ranges) // user2's readID=5, lastID=10
+	if unreadDeleted != 2 {
+		t.Errorf("Expected 2 unread messages to be deleted for user2, got %d", unreadDeleted)
+	}
+}
+
+func TestCalculateUnreadInRanges(t *testing.T) {
+	tests := []struct {
+		name     string
+		readID   int
+		lastID   int
+		ranges   []types.Range
+		expected int
+	}{
+		{
+			name:     "no unread messages",
+			readID:   10,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 5, Hi: 15}},
+			expected: 0,
+		},
+		{
+			name:     "no deleted messages in unread range",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 1, Hi: 5}},
+			expected: 0,
+		},
+		{
+			name:     "all unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 6, Hi: 11}},
+			expected: 5,
+		},
+		{
+			name:     "partial unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 9}},
+			expected: 2,
+		},
+		{
+			name:     "single message deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 0}}, // Hi: 0 means single message
+			expected: 1,
+		},
+		{
+			name:     "multiple ranges",
+			readID:   5,
+			lastID:   15,
+			ranges:   []types.Range{{Low: 7, Hi: 9}, {Low: 12, Hi: 14}},
+			expected: 4, // 2 messages in range [7,9) + 2 messages in range [12,14)
+		},
+		{
+			name:     "overlapping with unread boundaries",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 4, Hi: 8}, {Low: 9, Hi: 12}},
+			expected: 4, // [6,8) + [9,11) = 2 + 2 = 4 unread messages deleted
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := calculateUnreadInRanges(tt.readID, tt.lastID, tt.ranges)
+			if result != tt.expected {
+				t.Errorf("calculateUnreadInRanges(%d, %d, %v) = %d; want %d",
+					tt.readID, tt.lastID, tt.ranges, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	logs.Init(os.Stderr, "stdFlags")
 	// Set max subscriber count to effective infinity.

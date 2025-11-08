@@ -39,6 +39,8 @@ type fileConfig struct {
 
 type fshandler struct {
 	fileConfig
+	// corsOrigins parsed allowed origins.
+	corsOrigins []media.AllowedOrigin
 }
 
 func (fh *fshandler) Init(jsconf string) error {
@@ -60,6 +62,10 @@ func (fh *fshandler) Init(jsconf string) error {
 		fh.CacheControl = defaultCacheControl
 	}
 
+	fh.corsOrigins, err = media.ParseCORSAllow(fh.CorsOrigins)
+	if err != nil {
+		return errors.New("failed to parse CORS allowed origins: " + err.Error())
+	}
 	// Make sure the upload directory exists.
 	return os.MkdirAll(fh.FileUploadDirectory, 0777)
 }
@@ -98,7 +104,7 @@ func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, s
 		// Not an OPTIONS request. No special handling for all other requests.
 		return nil, 0, nil
 	}
-	header, status := media.CORSHandler(method, headers, fh.CorsOrigins, serve)
+	header, status := media.CORSHandler(method, headers, fh.corsOrigins, serve)
 	return header, status, nil
 }
 
