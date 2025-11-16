@@ -766,7 +766,7 @@ func main() {
 	}
 
 	sspath := *serverStatusPath
-	if sspath == "" || sspath == "-" {
+	if sspath == "" {
 		sspath = config.ServerStatusPath
 	}
 	if sspath != "" && sspath != "-" {
