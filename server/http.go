@@ -200,7 +200,7 @@ func (w *errorResponseWriter) Write(p []byte) (n int, err error) {
 	return w.ResponseWriter.Write(p)
 }
 
-// Handler which deploys errorResponseWriter
+// httpErrorHandler to respond with JSON_formatted error message for static content.
 func httpErrorHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
