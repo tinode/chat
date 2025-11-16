@@ -98,6 +98,8 @@ When you register a new account you are asked for an email address to send valid
   * Forwarding and replying to messages.
   * Editing sent messages.
   * Pinned chats and messages.
+  * Customizable message backgrounds (wallpapers).
+  * Light/dark/system UI themes.
 * Administration:
   * Granular access control with permissions for various actions.
   * Support for custom authentication backends.
@@ -129,7 +131,6 @@ When you register a new account you are asked for an email address to send valid
 * Video/audio broadcasting.
 * Group video/audio calls.
 * Attaching music/audio other than voice messages.
-* Better emoji support.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
