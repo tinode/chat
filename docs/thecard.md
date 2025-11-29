@@ -1,8 +1,6 @@
 # theCard: Person/Topic Description Format
 
-Tinode uses `theCard` to store and transmit descriptions of people and topics.
-
-_The format used to be called `vCard`, the same as [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) while being incompatible. That caused some confusion and prompted renaming the format to `theCard`. There are references to `vcard` and `vCard` troughout the code and documentation. It should be assumed that in all those cases it's meant to be `theCard` unless explicitly stated otherwise._
+Tinode uses `theCard` to store and transmit descriptions of people and topics. The format is conceptually similar to [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) 3.0.
 
 When `JSON` is used to represent `theCard` data, it does it differently than [jCard](https://tools.ietf.org/html/rfc7095). `theCard` and `jCard` are incompatible. The main difference is that `theCard` uses objects to represent logically related data while `jCard` uses ordered arrays.
 
@@ -34,28 +32,25 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
     fn: "Most Evil Corp", // string, formatted name of the organisation.
     title: "CEO", // string, person's job title at the organisation.
   },
-  tel: [ // array of objects, list of phone numbers associated with the person or topic.
+  comm: [ // array of objects defining means of communication with the the person or topic.
     {
-      type: "HOME", // string, contact designation.
-      uri: "tel:+17025551234" // string, phone number as URI.
-    }, ...
-  ],
-  email: [ // array of objects, list of person's email addresses
-    {
-      type: "WORK", // string, optional designation
-      uri: "email:alice@example.com", // string, email address
-    }, ...
-  ],
-  comm: [ // array of objects, list of person's other contact/communication options.
-    {
-      type: "WORK",
-      name: "Tinode",
-      uri: "tn:usrRkDVe0PYDOo", // string, URI specific to the contact type.
+      des: "home", // contact designation, optional.
+      proto: "tel", // communication protocol, required
+      value: "+17025551234" // phone number.
     },
     {
-      type: "OTHER",
-      name: "Website",
-      uri: "https://tinode.co", // string, URI specific to the contact type.
+      des: "work",
+      proto: "email",
+      value: "alice@example.com", // email address
+    },
+    {
+      des: "other",
+      proto: "tinode",
+      value: "usrRkDVe0PYDOo", // tinode ID, may include server address.
+    },
+    {
+      proto: "http", // should be used for either http or https website addresses.
+      value: "https://tinode.co", // address of a website.
     }, ...
   ],
   bday: { // object, person's birthday.
@@ -66,5 +61,4 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
 }
 ```
 
-All fields are optional. Tinode clients currently use only `fn` and `photo` fields. If other fields are needed in the future,
-then they will be adopted from the correspondent [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) fields.
+All fields are optional. Tinode clients currently use only `fn`, `photo`, `note` fields. If other fields are needed in the future, then they will be adopted from the correspondent [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) fields.
