@@ -256,6 +256,8 @@ func TestUserGet(t *testing.T) {
 
 	// User agent is not stored when creating a user. Make sure it's the same.
 	got.UserAgent = testData.Users[0].UserAgent
+	got.CreatedAt = testData.Users[0].CreatedAt
+	got.UpdatedAt = testData.Users[0].UpdatedAt
 
 	if !reflect.DeepEqual(got, testData.Users[0]) {
 		t.Error(mismatchErrorString("User", got, testData.Users[0]))
@@ -282,6 +284,8 @@ func TestUserGetAll(t *testing.T) {
 	for i, usr := range got {
 		// User agent is not compared.
 		usr.UserAgent = testData.Users[i].UserAgent
+		usr.CreatedAt = testData.Users[i].CreatedAt
+		usr.UpdatedAt = testData.Users[i].UpdatedAt
 		if !reflect.DeepEqual(&usr, testData.Users[i]) {
 			t.Error(mismatchErrorString("User", &usr, testData.Users[i]))
 		}
@@ -627,7 +631,7 @@ func TestUserUpdate(t *testing.T) {
 	if got.UserAgent != "Test Agent v0.11" {
 		t.Error(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -704,7 +708,7 @@ func TestCredFail(t *testing.T) {
 	if got.Retries != 1 {
 		t.Error(mismatchErrorString("Retries count", got.Retries, 1))
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("UpdatedAt field not updated")
 	}
 }
@@ -726,7 +730,7 @@ func TestCredConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.UpdatedAt == got.CreatedAt {
+	if got.UpdatedAt.Equal(got.CreatedAt) {
 		t.Error("Credential not updated correctly")
 	}
 	if !got.Done {
@@ -930,6 +934,19 @@ func TestDeviceUpsert(t *testing.T) {
 	}
 }
 
+func TestFileFinishUpload(t *testing.T) {
+	got, err := adp.FileFinishUpload(testData.Files[0], true, 22222)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != types.UploadCompleted {
+		t.Error(mismatchErrorString("Status", got.Status, types.UploadCompleted))
+	}
+	if got.Size != 22222 {
+		t.Error(mismatchErrorString("Size", got.Size, 22222))
+	}
+}
+
 func TestMessageAttachments(t *testing.T) {
 	fids := []string{testData.Files[0].Id, testData.Files[1].Id}
 	err := adp.FileLinkAttachments("", types.ZeroUid, types.ParseUid(testData.Msgs[1].Id), fids)
@@ -945,19 +962,6 @@ func TestMessageAttachments(t *testing.T) {
 
 	if count != len(fids) {
 		t.Error(mismatchErrorString("Attachments count", count, len(fids)))
-	}
-}
-
-func TestFileFinishUpload(t *testing.T) {
-	got, err := adp.FileFinishUpload(testData.Files[0], true, 22222)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != types.UploadCompleted {
-		t.Error(mismatchErrorString("Status", got.Status, types.UploadCompleted))
-	}
-	if got.Size != 22222 {
-		t.Error(mismatchErrorString("Size", got.Size, 22222))
 	}
 }
 
