@@ -11,7 +11,7 @@
 
 FROM alpine:3.22
 
-ARG VERSION=0.24
+ARG VERSION=0.25
 ENV VERSION=$VERSION
 ARG BINVERS=$VERSION
 
@@ -168,8 +168,12 @@ RUN mkdir /botdata
 RUN chmod +x entrypoint.sh
 RUN chmod +x credentials.sh
 
+# Healthcheck: check if port 6060 is open
+HEALTHCHECK --interval=1m --timeout=3s --start-period=30s \
+  CMD nc -z localhost 6060 || exit 1
+
 # Generate config from template and run the server.
-ENTRYPOINT ./entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
 
 # HTTP, gRPC, cluster ports
 EXPOSE 6060 16060 12000-12003
