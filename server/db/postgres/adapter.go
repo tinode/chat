@@ -1,5 +1,4 @@
 //go:build postgres
-// +build postgres
 
 // Package postgres is a database adapter for PostgreSQL.
 package postgres
@@ -2767,9 +2766,9 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 func (a *adapter) ReactionSave(r *t.Reaction) error {
 	uid := store.DecodeUid(r.UserId)
 	_, err := a.db.Exec(context.Background(),
-		"INSERT INTO reactions (topic, userid, seqid, content) VALUES ($1, $2, $3, $4) "+
-			"ON CONFLICT (topic, userid, seqid) DO UPDATE SET content = $4",
-		r.Topic, uid, r.SeqId, r.Content)
+		"INSERT INTO reactions (createdat, topic, userid, seqid, content) VALUES ($1, $2, $3, $4, $5) "+
+			"ON CONFLICT (topic, userid, seqid) DO UPDATE SET content = $5, createdat = $1",
+		r.CreatedAt, r.Topic, uid, r.SeqId, r.Content)
 	if err != nil {
 		return err
 	}
@@ -2799,7 +2798,7 @@ func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
 // ReactionGetAll returns all reactions for a message.
 func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) {
 	rows, err := a.db.Query(context.Background(),
-		"SELECT userid, content FROM reactions WHERE topic=$1 AND seqid=$2",
+		"SELECT createdat, topic, seqid, userid, content FROM reactions WHERE topic=$1 AND seqid=$2",
 		topic, seqId)
 	if err != nil {
 		return nil, err
@@ -2808,15 +2807,13 @@ func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) 
 
 	var reactions []t.Reaction
 	for rows.Next() {
+		var r t.Reaction
 		var userId int64
-		var content string
-		if err = rows.Scan(&userId, &content); err != nil {
+		if err = rows.Scan(&r.CreatedAt, &r.Topic, &r.SeqId, &userId, &r.Content); err != nil {
 			return nil, err
 		}
-		reactions = append(reactions, t.Reaction{
-			UserId:  store.EncodeUid(userId).UserId(),
-			Content: content,
-		})
+		r.UserId = store.EncodeUid(userId)
+		reactions = append(reactions, r)
 	}
 	return reactions, rows.Err()
 }

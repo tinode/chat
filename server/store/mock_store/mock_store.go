@@ -1057,6 +1057,20 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) DeleteList(topic, delID,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteList", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).DeleteList), topic, delID, forUser, msgDelAge, ranges)
 }
 
+// DeleteReaction mocks base method.
+func (m *MockMessagesPersistenceInterface) DeleteReaction(topic string, seqId int, userId types.Uid) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteReaction", topic, seqId, userId)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteReaction indicates an expected call of DeleteReaction.
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) DeleteReaction(topic, seqId, userId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReaction", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).DeleteReaction), topic, seqId, userId)
+}
+
 // GetAll mocks base method.
 func (m *MockMessagesPersistenceInterface) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
 	m.ctrl.T.Helper()
@@ -1088,6 +1102,21 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetDeleted(topic, forUse
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDeleted", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetDeleted), topic, forUser, opt)
 }
 
+// GetReactions mocks base method.
+func (m *MockMessagesPersistenceInterface) GetReactions(topic string, seqId int) ([]types.Reaction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReactions", topic, seqId)
+	ret0, _ := ret[0].([]types.Reaction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReactions indicates an expected call of GetReactions.
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetReactions(topic, seqId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReactions", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetReactions), topic, seqId)
+}
+
 // Save mocks base method.
 func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	m.ctrl.T.Helper()
@@ -1101,6 +1130,20 @@ func (m *MockMessagesPersistenceInterface) Save(msg *types.Message, attachmentUR
 func (mr *MockMessagesPersistenceInterfaceMockRecorder) Save(msg, attachmentURLs, readBySender interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).Save), msg, attachmentURLs, readBySender)
+}
+
+// SaveReaction mocks base method.
+func (m *MockMessagesPersistenceInterface) SaveReaction(topic string, seqId int, userId types.Uid, content string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveReaction", topic, seqId, userId, content)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveReaction indicates an expected call of SaveReaction.
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) SaveReaction(topic, seqId, userId, content interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveReaction", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).SaveReaction), topic, seqId, userId, content)
 }
 
 // MockDevicePersistenceInterface is a mock of DevicePersistenceInterface interface.

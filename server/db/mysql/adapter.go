@@ -1,5 +1,4 @@
 //go:build mysql
-// +build mysql
 
 // Package mysql is a database adapter for MySQL.
 package mysql
@@ -1342,7 +1341,7 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 	}
 
 	// Change state of p2p topics with the user (p2p topic's owner is 0)
-	if _, err = tx.Exec("UPDATE topics JOINsubscriptions ON topics.name=subscriptions.topic "+
+	if _, err = tx.Exec("UPDATE topics JOIN subscriptions ON topics.name=subscriptions.topic "+
 		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=? AND topics.state!=?",
 		state, now, decoded_uid, t.StateDeleted); err != nil {
 		return err
