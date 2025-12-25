@@ -47,7 +47,10 @@ func initUsers(now time.Time) []*types.User {
 		Tags:      []string{"carol"},
 	})
 	for _, user := range users {
+		// Initialize timestamps.
 		user.InitTimes()
+		// Assign user.id from user.Id.
+		user.Uid()
 	}
 	deletedAt := now.Add(10 * time.Minute)
 	users[2].State = types.StateDeleted
@@ -252,7 +255,7 @@ func initSubs(now time.Time, users []*types.User, topics []*types.Topic) []*type
 	return subs
 }
 
-func initMessages(users []*types.User, topics []*types.Topic, uGen *types.UidGenerator) []*types.Message {
+func initMessages(users []*types.User, topics []*types.Topic) []*types.Message {
 	msgs := make([]*types.Message, 0, 6)
 	msgs = append(msgs, &types.Message{
 		SeqId:   1,
@@ -294,9 +297,9 @@ func initMessages(users []*types.User, topics []*types.Topic, uGen *types.UidGen
 		Content: "msg3",
 	})
 
-	for _, msg := range msgs {
+	for i, msg := range msgs {
 		msg.InitTimes()
-		msg.SetUid(uGen.Get())
+		msg.SetUid(types.Uid(i + 1))
 	}
 	return msgs
 }
@@ -318,11 +321,10 @@ func initDevices(now time.Time) []*types.DeviceDef {
 	return devs
 }
 
-func initFileDefs(now time.Time, users []*types.User, uGen *types.UidGenerator) []*types.FileDef {
+func initFileDefs(now time.Time, users []*types.User) []*types.FileDef {
 	files := make([]*types.FileDef, 0, 2)
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
-			Id:        uGen.GetStr(),
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
@@ -330,17 +332,20 @@ func initFileDefs(now time.Time, users []*types.User, uGen *types.UidGenerator) 
 		User:     users[0].Id,
 		MimeType: "application/pdf",
 		Location: "uploads/qwerty.pdf",
+		Size:     123456,
 	})
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
-			Id:        uGen.GetStr(),
 			CreatedAt: now.Add(60 * time.Minute),
 			UpdatedAt: now.Add(60 * time.Minute),
 		},
 		Status:   types.UploadStarted,
 		User:     users[0].Id,
 		Location: "uploads/asdf.txt",
+		Size:     654321,
 	})
+	files[0].SetUid(types.Uid(1001))
+	files[1].SetUid(types.Uid(1002))
 	return files
 }
 
@@ -368,9 +373,9 @@ func InitTestData() *TestData {
 		Recs:   initAuthRecords(now, users),
 		Topics: topics,
 		Subs:   initSubs(now, users, topics),
-		Msgs:   initMessages(users, topics, uGen),
+		Msgs:   initMessages(users, topics),
 		Devs:   initDevices(now),
-		Files:  initFileDefs(now, users, uGen),
+		Files:  initFileDefs(now, users),
 		Tags:   initTags(),
 		Now:    now,
 	}
