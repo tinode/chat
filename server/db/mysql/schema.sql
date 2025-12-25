@@ -166,6 +166,20 @@ CREATE TABLE messages(
 	UNIQUE INDEX messages_topic_seqid (topic, seqid)
 );
 
+# Message reactions
+CREATE TABLE reactions(
+	id          INT NOT NULL AUTO_INCREMENT,
+	createdat   DATETIME(3) NOT NULL,
+	topic       CHAR(25) NOT NULL,
+	seqid       INT NOT NULL,
+	userid      BIGINT NOT NULL,
+	content     VARCHAR(32) NOT NULL,
+
+	PRIMARY KEY(id),
+	UNIQUE INDEX reactions_topic_seqid_userid(topic, seqid, userid),
+	FOREIGN KEY(topic) REFERENCES topics(name)
+);
+
 # Deletion log
 CREATE TABLE dellog(
 	id			INT NOT NULL AUTO_INCREMENT,

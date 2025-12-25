@@ -670,6 +670,9 @@ type MessagesPersistenceInterface interface {
 	DeleteList(topic string, delID int, forUser types.Uid, msgDelAge time.Duration, ranges []types.Range) error
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
+	SaveReaction(topic string, seqId int, userId types.Uid, content string) error
+	DeleteReaction(topic string, seqId int, userId types.Uid) error
+	GetReactions(topic string, seqId int) ([]types.Reaction, error)
 }
 
 // messagesMapper is a concrete type implementing MessagesPersistenceInterface.
@@ -793,6 +796,27 @@ func (messagesMapper) GetDeleted(topic string, forUser types.Uid, opt *types.Que
 	ranges = types.RangeSorter(ranges).Normalize()
 
 	return ranges, maxID, nil
+}
+
+// SaveReaction saves a reaction to a message.
+func (messagesMapper) SaveReaction(topic string, seqId int, userId types.Uid, content string) error {
+	return adp.ReactionSave(&types.Reaction{
+		Topic:     topic,
+		SeqId:     seqId,
+		UserId:    userId,
+		Content:   content,
+		CreatedAt: types.TimeNow(),
+	})
+}
+
+// DeleteReaction deletes a reaction to a message.
+func (messagesMapper) DeleteReaction(topic string, seqId int, userId types.Uid) error {
+	return adp.ReactionDelete(topic, seqId, userId)
+}
+
+// GetReactions returns all reactions for a message.
+func (messagesMapper) GetReactions(topic string, seqId int) ([]types.Reaction, error) {
+	return adp.ReactionGetAll(topic, seqId)
 }
 
 // Registered authentication handlers.

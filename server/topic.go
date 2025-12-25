@@ -9,6 +9,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -1175,6 +1176,21 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		// Handle calls separately.
 		t.handleCallEvent(msg)
 		return
+	case "react":
+		if !mode.IsReader() {
+			return
+		}
+		var payload struct {
+			Content string `json:"content"`
+		}
+		if len(msg.Note.Payload) > 0 {
+			json.Unmarshal(msg.Note.Payload, &payload)
+		}
+		if payload.Content != "" {
+			store.Messages.SaveReaction(t.name, msg.Note.SeqId, asUid, payload.Content)
+		} else {
+			store.Messages.DeleteReaction(t.name, msg.Note.SeqId, asUid)
+		}
 	}
 
 	var read, recv, unread, seq int
@@ -2769,7 +2785,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
-	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+	if req != nil && (req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid MsgGetOpts query")
 	}
@@ -2804,6 +2820,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 							From:      from,
 							Timestamp: mm.CreatedAt,
 							Content:   mm.Content,
+							Reactions: mm.Reactions,
 						},
 					}
 				}

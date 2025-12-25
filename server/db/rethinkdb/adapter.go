@@ -33,7 +33,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 116
+	adpVersion  = 117
 	adapterName = "rethinkdb"
 
 	defaultHost     = "localhost:28015"
@@ -556,6 +556,39 @@ func (a *adapter) UpgradeDb() error {
 
 		// Just bump the version.
 		if err := bumpVersion(a, 116); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 116 {
+		// Create reactions table.
+		if _, err := rdb.DB(a.dbName).TableCreate("reactions").RunWrite(a.conn); err != nil {
+			return err
+		}
+		// Create secondary index on reactions(topic, seqid).
+		if _, err := rdb.DB(a.dbName).Table("reactions").IndexCreateFunc("TopicSeqId",
+			func(row rdb.Term) interface{} {
+				return []interface{}{row.Field("Topic"), row.Field("SeqId")}
+			}).RunWrite(a.conn); err != nil {
+			return err
+		}
+		// Create secondary index on reactions(topic, userid, seqid) for uniqueness.
+		if _, err := rdb.DB(a.dbName).Table("reactions").IndexCreateFunc("TopicUserSeqId",
+			func(row rdb.Term) interface{} {
+				return []interface{}{row.Field("Topic"), row.Field("UserId"), row.Field("SeqId")}
+			}).RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Create index on messages(Topic, UpdatedAt) for fetching updates.
+		if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_UpdatedAt",
+			func(row rdb.Term) interface{} {
+				return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
+			}).RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 117); err != nil {
 			return err
 		}
 	}
@@ -2250,8 +2283,23 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	upper = []any{topic, upper}
 
 	requester := forUser.String()
-	cursor, err := rdb.DB(a.dbName).Table("messages").
-		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
+
+	// Base query for range
+	q1 := rdb.DB(a.dbName).Table("messages").
+		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"})
+
+	var query rdb.Term
+	if opts != nil && opts.IfModifiedSince != nil {
+		// Query for updates
+		q2 := rdb.DB(a.dbName).Table("messages").
+			Between([]any{topic, opts.IfModifiedSince}, []any{topic, rdb.MaxVal}, rdb.BetweenOpts{Index: "Topic_UpdatedAt", LeftBound: "open"})
+
+		query = q1.Union(q2).Distinct()
+	} else {
+		query = q1
+	}
+
+	cursor, err := query.
 		// Ordering by index must come before filtering
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
 		// Skip hard-deleted messages
@@ -2274,7 +2322,98 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		return nil, err
 	}
 
+	if len(msgs) > 0 {
+		// Fetch reactions.
+		seqIds := make([]int, len(msgs))
+		msgMap := make(map[int]*t.Message)
+		for i := range msgs {
+			seqIds[i] = msgs[i].SeqId
+			msgMap[msgs[i].SeqId] = &msgs[i]
+		}
+
+		// Fetch reactions for these messages.
+		keys := make([]any, len(seqIds))
+		for i, seqId := range seqIds {
+			keys[i] = []any{topic, seqId}
+		}
+
+		cursor, err := rdb.DB(a.dbName).Table("reactions").
+			GetAll(keys...).OptArgs(rdb.GetAllOpts{Index: "TopicSeqId"}).
+			Run(a.conn)
+		if err != nil {
+			return nil, err
+		}
+		defer cursor.Close()
+
+		var reactions []t.Reaction
+		if err = cursor.All(&reactions); err != nil {
+			return nil, err
+		}
+
+		for _, r := range reactions {
+			msg := msgMap[r.SeqId]
+			if msg.Reactions == nil {
+				msg.Reactions = make(map[string][]string)
+			}
+			msg.Reactions[r.Content] = append(msg.Reactions[r.Content], r.UserId.UserId())
+		}
+	}
+
 	return msgs, nil
+}
+
+// ReactionSave saves a reaction to a message.
+func (a *adapter) ReactionSave(r *t.Reaction) error {
+	// Upsert reaction.
+	_, err := rdb.DB(a.dbName).Table("reactions").Insert(map[string]any{
+		"Topic":   r.Topic,
+		"UserId":  r.UserId,
+		"SeqId":   r.SeqId,
+		"Content": r.Content,
+	}, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = rdb.DB(a.dbName).Table("messages").
+		GetAll([]any{r.Topic, r.SeqId}).OptArgs(rdb.GetAllOpts{Index: "Topic_SeqId"}).
+		Update(map[string]any{"UpdatedAt": t.TimeNow()}).RunWrite(a.conn)
+	return err
+}
+
+// ReactionDelete deletes a reaction to a message.
+func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
+	// Delete reaction.
+	_, err := rdb.DB(a.dbName).Table("reactions").
+		GetAll([]any{topic, userId, seqId}).OptArgs(rdb.GetAllOpts{Index: "TopicUserSeqId"}).
+		Delete().RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = rdb.DB(a.dbName).Table("messages").
+		GetAll([]any{topic, seqId}).OptArgs(rdb.GetAllOpts{Index: "Topic_SeqId"}).
+		Update(map[string]any{"UpdatedAt": t.TimeNow()}).RunWrite(a.conn)
+	return err
+}
+
+// ReactionGetAll returns all reactions for a message.
+func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) {
+	cursor, err := rdb.DB(a.dbName).Table("reactions").
+		GetAll([]any{topic, seqId}).OptArgs(rdb.GetAllOpts{Index: "TopicSeqId"}).
+		Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	var reactions []t.Reaction
+	if err = cursor.All(&reactions); err != nil {
+		return nil, err
+	}
+	return reactions, nil
 }
 
 // MessageGetDeleted returns ranges of deleted messages.

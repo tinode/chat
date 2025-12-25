@@ -40,7 +40,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 116
+	adpVersion  = 117
 	adapterName = "mongodb"
 
 	defaultHost     = "localhost:27017"
@@ -561,6 +561,22 @@ func (a *adapter) UpgradeDb() error {
 		// Version 115: SQL indexes added.
 		// Version 116: topics.subcnt added.
 		if err := bumpVersion(a, 116); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 116 {
+		// Create reactions collection.
+		if err := a.db.CreateCollection(a.ctx, "reactions"); err != nil {
+			return err
+		}
+		// Create index on reactions(topic, seqid).
+		if _, err = a.db.Collection("reactions").Indexes().CreateOne(a.ctx,
+			mdb.IndexModel{Keys: b.D{{"topic", 1}, {"seqid", 1}}}); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 117); err != nil {
 			return err
 		}
 	}
@@ -2487,16 +2503,28 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 			limit = opts.Limit
 		}
 	}
+
 	filter := b.M{
 		"topic":           topic,
 		"delid":           b.M{"$exists": false},
 		"deletedfor.user": b.M{"$ne": requester},
 	}
+	seqIdFilter := b.M{}
 	if upper == 0 {
-		filter["seqid"] = b.M{"$gte": lower}
+		seqIdFilter = b.M{"$gte": lower}
 	} else {
-		filter["seqid"] = b.M{"$gte": lower, "$lt": upper}
+		seqIdFilter = b.M{"$gte": lower, "$lt": upper}
 	}
+
+	if opts != nil && opts.IfModifiedSince != nil {
+		filter["$or"] = []b.M{
+			{"seqid": seqIdFilter},
+			{"updatedat": b.M{"$gt": opts.IfModifiedSince}},
+		}
+	} else {
+		filter["seqid"] = seqIdFilter
+	}
+
 	findOpts := mdbopts.Find().SetSort(b.D{{"topic", -1}, {"seqid", -1}})
 	findOpts.SetLimit(int64(limit))
 
@@ -2516,7 +2544,86 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		msgs = append(msgs, msg)
 	}
 
+	if len(msgs) > 0 {
+		// Fetch reactions.
+		seqIds := make([]int, len(msgs))
+		msgMap := make(map[int]*t.Message)
+		for i := range msgs {
+			seqIds[i] = msgs[i].SeqId
+			msgMap[msgs[i].SeqId] = &msgs[i]
+		}
+
+		cur, err := a.db.Collection("reactions").Find(a.ctx, b.M{"topic": topic, "seqid": b.M{"$in": seqIds}})
+		if err != nil {
+			return nil, err
+		}
+		defer cur.Close(a.ctx)
+
+		for cur.Next(a.ctx) {
+			var r t.Reaction
+			if err = cur.Decode(&r); err != nil {
+				return nil, err
+			}
+			msg := msgMap[r.SeqId]
+			if msg.Reactions == nil {
+				msg.Reactions = make(map[string][]string)
+			}
+			msg.Reactions[r.Content] = append(msg.Reactions[r.Content], r.UserId.UserId())
+		}
+	}
+
 	return msgs, nil
+}
+
+// ReactionSave saves a reaction to a message.
+func (a *adapter) ReactionSave(r *t.Reaction) error {
+	_, err := a.db.Collection("reactions").UpdateOne(a.ctx,
+		b.M{"topic": r.Topic, "userid": r.UserId, "seqid": r.SeqId},
+		b.M{"$set": b.M{"content": r.Content}},
+		mdbopts.Update().SetUpsert(true))
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = a.db.Collection("messages").UpdateOne(a.ctx,
+		b.M{"topic": r.Topic, "seqid": r.SeqId},
+		b.M{"$set": b.M{"updatedat": t.TimeNow()}})
+	return err
+}
+
+// ReactionDelete deletes a reaction to a message.
+func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
+	_, err := a.db.Collection("reactions").DeleteOne(a.ctx,
+		b.M{"topic": topic, "userid": userId, "seqid": seqId})
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = a.db.Collection("messages").UpdateOne(a.ctx,
+		b.M{"topic": topic, "seqid": seqId},
+		b.M{"$set": b.M{"updatedat": t.TimeNow()}})
+	return err
+}
+
+// ReactionGetAll returns all reactions for a message.
+func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) {
+	cur, err := a.db.Collection("reactions").Find(a.ctx, b.M{"topic": topic, "seqid": seqId})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var reactions []t.Reaction
+	for cur.Next(a.ctx) {
+		var r t.Reaction
+		if err = cur.Decode(&r); err != nil {
+			return nil, err
+		}
+		reactions = append(reactions, r)
+	}
+	return reactions, nil
 }
 
 func (a *adapter) messagesHardDelete(topic string) error {

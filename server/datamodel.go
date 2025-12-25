@@ -534,7 +534,7 @@ type MsgTopicSub struct {
 	// Id of the latest Delete operation
 	DelId int `json:"clear,omitempty"`
 	// Number of subscribers, group topics only.
-	SubCnt  int `json:"subcnt,omitempty"`
+	SubCnt int `json:"subcnt,omitempty"`
 	// P2P topics in 'me' {get subs} response:
 
 	// Other user's last online timestamp & user agent
@@ -556,7 +556,7 @@ func (src *MsgTopicSub) describe() string {
 	if src.DelId != 0 {
 		s += " clear=" + strconv.Itoa(src.DelId)
 	}
-		if src.SubCnt != 0 {
+	if src.SubCnt != 0 {
 		s += " subcnt=" + strconv.Itoa(src.SubCnt)
 	}
 	if src.Public != nil {
@@ -608,12 +608,13 @@ func (src *MsgServerCtrl) describe() string {
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
-	From      string         `json:"from,omitempty"`
-	Timestamp time.Time      `json:"ts"`
-	DeletedAt *time.Time     `json:"deleted,omitempty"`
-	SeqId     int            `json:"seq"`
-	Head      map[string]any `json:"head,omitempty"`
-	Content   any            `json:"content"`
+	From      string              `json:"from,omitempty"`
+	Timestamp time.Time           `json:"ts"`
+	DeletedAt *time.Time          `json:"deleted,omitempty"`
+	SeqId     int                 `json:"seq"`
+	Head      map[string]any      `json:"head,omitempty"`
+	Content   any                 `json:"content"`
+	Reactions map[string][]string `json:"reactions,omitempty"`
 }
 
 // Deep-shallow copy.

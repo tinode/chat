@@ -167,6 +167,11 @@ type Adapter interface {
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
 
+	// Reactions
+	ReactionSave(reaction *t.Reaction) error
+	ReactionDelete(topic string, seqid int, userid t.Uid) error
+	ReactionGetAll(topic string, seqid int) ([]t.Reaction, error)
+
 	// Devices (for push notifications)
 
 	// DeviceUpsert creates or updates a device record

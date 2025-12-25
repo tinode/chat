@@ -47,7 +47,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 116
+	adpVersion  = 117
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -498,6 +498,22 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// Message reactions
+	if _, err = tx.Exec(ctx,
+		`CREATE TABLE reactions(
+			id        SERIAL NOT NULL,
+			createdat TIMESTAMP(3) NOT NULL,
+			topic     VARCHAR(25) NOT NULL,
+			seqid     INT NOT NULL,
+			userid    BIGINT NOT NULL,
+			content   VARCHAR(32) NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(topic) REFERENCES topics(name)
+		);
+		CREATE UNIQUE INDEX reactions_topic_seqid_userid ON reactions(topic, seqid, userid);`); err != nil {
+		return err
+	}
+
 	// Deletion log
 	if _, err = tx.Exec(ctx,
 		`CREATE TABLE dellog(
@@ -685,6 +701,30 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 116); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 116 {
+		// Perform database upgrade from version 116 to version 117.
+
+		// Message reactions
+		if _, err := a.db.Exec(context.Background(),
+			`CREATE TABLE reactions(
+				id        SERIAL NOT NULL,
+				createdat TIMESTAMP(3) NOT NULL,
+				topic     VARCHAR(25) NOT NULL,
+				seqid     INT NOT NULL,
+				userid    BIGINT NOT NULL,
+				content   VARCHAR(32) NOT NULL,
+				PRIMARY KEY(id),
+				FOREIGN KEY(topic) REFERENCES topics(name)
+			);
+			CREATE UNIQUE INDEX reactions_topic_seqid_userid ON reactions(topic, seqid, userid);`); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 117); err != nil {
 			return err
 		}
 	}
@@ -2620,9 +2660,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	var limit = a.maxMessageResults
 
 	args := []any{store.DecodeUid(forUser), topic}
-	seqIdConstraint := ""
+	seqIdConstraint := "m.seqid "
 	if opts != nil {
-		seqIdConstraint = "AND m.seqid "
 		if len(opts.IdRanges) > 0 {
 			constr, newargs := common.RangesToSql(opts.IdRanges)
 			seqIdConstraint += constr
@@ -2645,6 +2684,14 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
+	} else {
+		seqIdConstraint += "BETWEEN 0 AND 2147483647"
+	}
+
+	imsConstraint := ""
+	if opts != nil && opts.IfModifiedSince != nil {
+		imsConstraint = " OR m.updatedat > ?"
+		args = append(args, opts.IfModifiedSince)
 	}
 
 	args = append(args, limit)
@@ -2657,7 +2704,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	query, args := expandQuery(`SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m."from",m.head,m.content`+
 		" FROM messages AS m LEFT JOIN dellog AS d"+
 		" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
-		" WHERE m.delid=0 AND m.topic=? "+seqIdConstraint+" AND d.deletedfor IS NULL"+
+		" WHERE m.delid=0 AND m.topic=? AND ("+seqIdConstraint+imsConstraint+") AND d.deletedfor IS NULL"+
 		" ORDER BY m.seqid DESC LIMIT ?", args...)
 	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
@@ -2680,7 +2727,98 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		err = rows.Err()
 	}
 
+	if len(msgs) > 0 {
+		// Fetch reactions.
+		seqIds := make([]int, len(msgs))
+		msgMap := make(map[int]*t.Message)
+		for i := range msgs {
+			seqIds[i] = msgs[i].SeqId
+			msgMap[msgs[i].SeqId] = &msgs[i]
+		}
+
+		query, args := expandQuery("SELECT seqid, userid, content FROM reactions WHERE topic=? AND seqid IN (?)", topic, seqIds)
+		rows, err := a.db.Query(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var seqId int
+			var userId int64
+			var content string
+			if err = rows.Scan(&seqId, &userId, &content); err != nil {
+				return nil, err
+			}
+
+			msg := msgMap[seqId]
+			if msg.Reactions == nil {
+				msg.Reactions = make(map[string][]string)
+			}
+			uid := store.EncodeUid(userId).UserId()
+			msg.Reactions[content] = append(msg.Reactions[content], uid)
+		}
+	}
+
 	return msgs, err
+}
+
+// ReactionSave saves a reaction to a message.
+func (a *adapter) ReactionSave(r *t.Reaction) error {
+	uid := store.DecodeUid(r.UserId)
+	_, err := a.db.Exec(context.Background(),
+		"INSERT INTO reactions (topic, userid, seqid, content) VALUES ($1, $2, $3, $4) "+
+			"ON CONFLICT (topic, userid, seqid) DO UPDATE SET content = $4",
+		r.Topic, uid, r.SeqId, r.Content)
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = a.db.Exec(context.Background(), "UPDATE messages SET updatedat=$1 WHERE topic=$2 AND seqid=$3",
+		t.TimeNow(), r.Topic, r.SeqId)
+	return err
+}
+
+// ReactionDelete deletes a reaction to a message.
+func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
+	uid := store.DecodeUid(userId)
+	_, err := a.db.Exec(context.Background(),
+		"DELETE FROM reactions WHERE topic=$1 AND userid=$2 AND seqid=$3",
+		topic, uid, seqId)
+	if err != nil {
+		return err
+	}
+
+	// Update message timestamp.
+	_, err = a.db.Exec(context.Background(), "UPDATE messages SET updatedat=$1 WHERE topic=$2 AND seqid=$3",
+		t.TimeNow(), topic, seqId)
+	return err
+}
+
+// ReactionGetAll returns all reactions for a message.
+func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) {
+	rows, err := a.db.Query(context.Background(),
+		"SELECT userid, content FROM reactions WHERE topic=$1 AND seqid=$2",
+		topic, seqId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions []t.Reaction
+	for rows.Next() {
+		var userId int64
+		var content string
+		if err = rows.Scan(&userId, &content); err != nil {
+			return nil, err
+		}
+		reactions = append(reactions, t.Reaction{
+			UserId:  store.EncodeUid(userId).UserId(),
+			Content: content,
+		})
+	}
+	return reactions, rows.Err()
 }
 
 // Get ranges of deleted messages
