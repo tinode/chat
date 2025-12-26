@@ -1,5 +1,4 @@
 //go:build mongodb
-// +build mongodb
 
 // Package mongodb is a database adapter for MongoDB.
 package mongodb
