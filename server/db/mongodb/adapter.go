@@ -427,6 +427,21 @@ func (a *adapter) CreateDb(reset bool) error {
 			Collection: "fileuploads",
 			Field:      "usecount",
 		},
+
+		// Reactions to messages.
+		// Compound index on 'topic - seqid' for fetching reactions for messages.
+		{
+			Collection: "reactions",
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"topic", 1}, {"seqid", 1}}},
+		},
+		// Compound unique index on 'topic - userid - seqid' to ensure one reaction per user per message.
+		{
+			Collection: "reactions",
+			IndexOpts: mdb.IndexModel{
+				Keys:    b.D{{"topic", 1}, {"userid", 1}, {"seqid", 1}},
+				Options: mdbopts.Index().SetUnique(true),
+			},
+		},
 	}
 
 	var err error
@@ -572,6 +587,14 @@ func (a *adapter) UpgradeDb() error {
 		// Create index on reactions(topic, seqid).
 		if _, err = a.db.Collection("reactions").Indexes().CreateOne(a.ctx,
 			mdb.IndexModel{Keys: b.D{{"topic", 1}, {"seqid", 1}}}); err != nil {
+			return err
+		}
+		// Create unique index on reactions(topic, userid, seqid).
+		if _, err = a.db.Collection("reactions").Indexes().CreateOne(a.ctx,
+			mdb.IndexModel{
+				Keys:    b.D{{"topic", 1}, {"userid", 1}, {"seqid", 1}},
+				Options: mdbopts.Index().SetUnique(true),
+			}); err != nil {
 			return err
 		}
 
@@ -1953,6 +1976,10 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 		if err = a.decFileUseCounter(a.ctx, "topics", filter); err != nil {
 			return err
 		}
+		// Delete reactions.
+		if _, err = a.db.Collection("reactions").DeleteMany(a.ctx, b.M{"topic": topic}); err != nil {
+			return err
+		}
 		if err = a.MessageDeleteList(topic, nil); err != nil {
 			return err
 		}
@@ -2634,6 +2661,11 @@ func (a *adapter) messagesHardDelete(topic string) error {
 		return err
 	}
 
+	// Delete reactions.
+	if _, err = a.db.Collection("reactions").DeleteMany(a.ctx, filter); err != nil {
+		return err
+	}
+
 	if err = a.decFileUseCounter(a.ctx, "messages", filter); err != nil {
 		return err
 	}
@@ -2734,6 +2766,16 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		if err = a.decFileUseCounter(a.ctx, "messages", filter); err != nil {
 			return err
 		}
+
+		// Delete reactions for these messages.
+		_, err = a.db.Collection("reactions").DeleteMany(a.ctx, b.M{
+			"topic": topic,
+			"seqid": b.M{"$in": seqIDs},
+		})
+		if err != nil {
+			return err
+		}
+
 		// Hard-delete individual messages. Message is not deleted but all fields with content
 		// are replaced with nulls.
 		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{

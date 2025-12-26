@@ -491,7 +491,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			userid    BIGINT NOT NULL,
 			content   VARCHAR(32) NOT NULL,
 			PRIMARY KEY(id),
-			FOREIGN KEY(topic) REFERENCES topics(name),
+			FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE,
 			UNIQUE INDEX reactions_topic_seqid_userid(topic, seqid, userid)
 		)`); err != nil {
 		return err
@@ -853,7 +853,7 @@ func (a *adapter) UpgradeDb() error {
 				userid    BIGINT NOT NULL,
 				content   VARCHAR(32) NOT NULL,
 				PRIMARY KEY(id),
-				FOREIGN KEY(topic) REFERENCES topics(name),
+				FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE,
 				UNIQUE INDEX reactions_topic_seqid_userid(topic, seqid, userid)
 			)`); err != nil {
 			return err
@@ -2919,7 +2919,8 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 		if err == nil {
 			_, err = tx.Exec("DELETE FROM messages WHERE topic=?", topic)
 		}
-		// filemsglinks will be deleted because of ON DELETE CASCADE
+		// reactions are deleted because of ON DELETE CASCADE
+		// filemsglinks are deleted because of ON DELETE CASCADE
 		return err
 	}
 
@@ -2973,6 +2974,13 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 
 		_, err = tx.Exec("DELETE fml.* FROM filemsglinks AS fml INNER JOIN messages AS m ON m.id=fml.msgid WHERE "+
 			where, args...)
+		if err != nil {
+			return err
+		}
+
+		// Delete reactions for these messages.
+		_, err = tx.Exec("DELETE FROM reactions WHERE topic=? AND seqid IN ("+
+			"SELECT seqid FROM messages AS m WHERE "+where+")", args...)
 		if err != nil {
 			return err
 		}
