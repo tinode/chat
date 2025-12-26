@@ -1,6 +1,6 @@
 //go:build rethinkdb
 
-// Package rethinkdb s a database adapter for RethinkDB.
+// Package rethinkdb is a database adapter for RethinkDB.
 package rethinkdb
 
 import (
@@ -2692,7 +2692,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	count := 0
 	var uid t.Uid
 	for cursor.Next(&row) {
-		if row.Devices != nil && len(row.Devices) > 0 {
+		if len(row.Devices) > 0 {
 			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
 				continue
 			}
