@@ -55,6 +55,7 @@ cp ./tinode-db/credentials.sh ./releases/tmp
 if [[ -d ./server/static ]]
 then
   mkdir -p ./releases/tmp/static/img
+  mkdir ./releases/tmp/static/img/bkg
   mkdir ./releases/tmp/static/css
   mkdir ./releases/tmp/static/audio
   mkdir ./releases/tmp/static/src
@@ -63,6 +64,7 @@ then
   cp ./server/static/img/*.png ./releases/tmp/static/img
   cp ./server/static/img/*.svg ./releases/tmp/static/img
   cp ./server/static/img/*.jpeg ./releases/tmp/static/img
+  cp ./server/static/img/bkg/*.* ./releases/tmp/static/img/bkg
   cp ./server/static/audio/*.m4a ./releases/tmp/static/audio
   cp ./server/static/css/*.css ./releases/tmp/static/css
   cp ./server/static/index.html ./releases/tmp/static
