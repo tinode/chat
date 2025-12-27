@@ -930,3 +930,34 @@ func isRoutableIP(ipStr string) bool {
 	}
 	return true
 }
+
+// Check if reaction is valid. A valid reaction is an single unicode emoji grapheme cluster.
+func isValidReaction(reaction string) bool {
+	if reaction == nullValue {
+		return true
+	}
+
+	// Limit length to 8 runes to prevent abuse.
+	runes := []rune(reaction)
+	if len(runes) == 0 || len(runes) > 8 {
+		return false
+	}
+
+	// A simple check for emoji presentation characters.
+	// More complex checks can be added later if needed.
+	for _, r := range runes {
+		if (r >= 0x1F600 && r <= 0x1F64F) || // Emoticons
+			(r >= 0x1F300 && r <= 0x1F5FF) || // Misc Symbols, Pictographs, Skin tone modifiers (Fitzpatrick)
+			(r >= 0x1F680 && r <= 0x1F6FF) || // Transport and Map
+			(r >= 0x2600 && r <= 0x26FF) || // Misc symbols
+			(r >= 0x2700 && r <= 0x27BF) || // Dingbats
+			(r >= 0xFE00 && r <= 0xFE0F) || // Variation Selectors
+			(r >= 0x1F900 && r <= 0x1F9FF) || // Supplemental Symbols and Pictographs
+			(r >= 0x1FA70 && r <= 0x1FAFF) || // Symbols and Pictographs Extended-A
+			(r == 0x200D) { // Zero Width Joiner
+			return true
+		}
+	}
+
+	return false
+}

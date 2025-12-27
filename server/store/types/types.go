@@ -1224,18 +1224,36 @@ type Message struct {
 	From    string
 	Head    KVMap `json:"Head,omitempty" bson:",omitempty"`
 	Content any
-	// Map of emoji -> list of user IDs (as strings).
-	// Not stored in the DB as a column, but populated from a separate table.
-	Reactions map[string][]string `json:"reactions,omitempty" bson:",omitempty"`
+
+	// Aggregate reactions, not stored in DB.
+	Reactions []OneTypeReaction `json:"-" bson:"-"`
 }
 
-// Reaction is a user's reaction to a message.
+// Reaction of one type, e.g. all likes in one message.
+type OneTypeReaction struct {
+	// Reaction content: emoji grapheme cluster or poll vote.
+	Content string
+	// Number of users who reacted with this content.
+	Cnt int
+	// List of user IDs who reacted with this content.
+	Users []string
+}
+
+// AggrReaction is an aggregate of all reactions to a message.
+type AggrReaction struct {
+	// Message ID these reactions are for.
+	SeqId int
+	// Reactions data.
+	Data []OneTypeReaction
+}
+
+// Reaction is an individual reaction to a message as stored in DB.
 type Reaction struct {
+	CreatedAt time.Time
 	Topic     string
 	SeqId     int
-	UserId    Uid
+	User      string
 	Content   string
-	CreatedAt time.Time
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).

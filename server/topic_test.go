@@ -2518,7 +2518,7 @@ func TestHandleMetaGet(t *testing.T) {
 	defer helper.tearDown()
 
 	uid := helper.uids[0]
-	helper.mm.EXPECT().GetAll(topicName, uid, gomock.Any()).Return([]types.Message{}, nil)
+	helper.mm.EXPECT().GetAll(topicName, uid, false, gomock.Any()).Return([]types.Message{}, nil)
 	helper.mm.EXPECT().GetDeleted(topicName, uid, gomock.Any()).Return([]types.Range{}, 0, nil)
 	helper.uu.EXPECT().GetTopics(uid, gomock.Any()).Return([]types.Subscription{}, nil)
 

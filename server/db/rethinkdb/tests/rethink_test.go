@@ -614,20 +614,275 @@ func TestMessageGetAll(t *testing.T) {
 		Before: 2,
 		Limit:  999,
 	}
-	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), &opts)
+	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), false, &opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(gotMsgs) != 1 {
 		t.Error(mismatchErrorString("Messages length opts", len(gotMsgs), 1))
 	}
-	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), nil)
+	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), false, nil)
 	if len(gotMsgs) != 2 {
 		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
 	}
-	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, nil)
+	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, false, nil)
 	if len(gotMsgs) != 3 {
 		t.Error(mismatchErrorString("Messages length zero uid", len(gotMsgs), 3))
+	}
+}
+
+func TestReactionsCRUD(t *testing.T) {
+	// Create a fresh topic to avoid interference with other tests.
+	topic := testData.UGen.GetStr()
+	if err := adp.TopicCreate(&types.Topic{ObjHeader: types.ObjHeader{Id: topic, CreatedAt: time.Now(), UpdatedAt: time.Now()}, TouchedAt: time.Now(), Owner: testData.Users[0].Id}); err != nil {
+		t.Fatal(err)
+	}
+	// Set seqid so MessageGetAll will work as expected if needed.
+	if err := adp.TopicUpdate(topic, map[string]any{"seqid": 10}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a message in the topic to attach reactions.
+	seq := 1
+	msg := &types.Message{ObjHeader: types.ObjHeader{Id: testData.UGen.GetStr(), CreatedAt: time.Now(), UpdatedAt: time.Now()}, SeqId: seq, Topic: topic, From: testData.Users[0].Id, Content: "msg1"}
+	if err := adp.MessageSave(msg); err != nil {
+		t.Fatal(err)
+	}
+
+	u1 := types.ParseUserId("usr" + testData.Users[0].Id)
+	u2 := types.ParseUserId("usr" + testData.Users[1].Id)
+
+	// nil opts should return empty map and no error
+	got, err := adp.ReactionGetAll(topic, u1, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Error("Expected no reactions for nil opts")
+	}
+
+	// Save two identical reactions from two users
+	r1 := &types.Reaction{
+		CreatedAt: time.Now().Add(-1 * time.Hour),
+		Topic:     topic,
+		SeqId:     seq,
+		User:      u1.UserId(),
+		Content:   "👍",
+	}
+	if err := adp.ReactionSave(r1); err != nil {
+		t.Fatal(err)
+	}
+
+	r2 := &types.Reaction{
+		CreatedAt: time.Now().Add(-30 * time.Minute),
+		Topic:     topic,
+		SeqId:     seq,
+		User:      u2.UserId(),
+		Content:   "👍",
+	}
+	if err := adp.ReactionSave(r2); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := &types.QueryOpt{IdRanges: []types.Range{{Low: seq}}}
+	// Debug: dump raw reactions from DB for topic+seq
+	{
+		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_SeqId", []any{topic, seq}).Run(conn)
+		if err == nil {
+			var raw []types.Reaction
+			if err = cursor.All(&raw); err == nil {
+				t.Logf("raw reactions after insert: %+v", raw)
+			}
+			cursor.Close()
+		}
+	}
+	// Debug: try selecting by composite index Topic_UserId_SeqId for u1 and u2
+	{
+		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_UserId_SeqId", []any{topic, u1.UserId(), seq}).Run(conn)
+		if err == nil {
+			var raw []types.Reaction
+			if err = cursor.All(&raw); err == nil {
+				t.Logf("raw reactions for u1 after insert: %+v", raw)
+			}
+			cursor.Close()
+		}
+		cursor, err = rdb.Table("reactions").GetAllByIndex("Topic_UserId_SeqId", []any{topic, u2.UserId(), seq}).Run(conn)
+		if err == nil {
+			var raw []types.Reaction
+			if err = cursor.All(&raw); err == nil {
+				t.Logf("raw reactions for u2 after insert: %+v", raw)
+			}
+			cursor.Close()
+		}
+	}
+
+	reacts, err := adp.ReactionGetAll(topic, u1, false, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reacts) == 0 {
+		t.Fatal("No reactions returned")
+	}
+	found := false
+	for _, arr := range reacts {
+		for _, r := range arr {
+			if r.Content == "👍" {
+				found = true
+				if r.Cnt != 2 {
+					t.Error("Expected cnt 2 got", r.Cnt)
+				}
+				if len(r.Users) != 2 {
+					t.Error("Expected 2 users, got", r.Users)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("expected 👍 reaction")
+	}
+
+	// asChan mode: counts and current user's marking
+	reactsChan, err := adp.ReactionGetAll(topic, u1, true, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rarr := reactsChan[seq]
+	if len(rarr) == 0 {
+		t.Fatal("No reactions in asChan")
+	}
+	var gotCnt int
+	var gotMarked bool
+	for _, r := range rarr {
+		if r.Content == "👍" {
+			gotCnt = r.Cnt
+			if len(r.Users) == 1 && r.Users[0] == u1.UserId() {
+				gotMarked = true
+			}
+		}
+	}
+	if gotCnt != 2 {
+		t.Error("asChan cnt expected 2 got", gotCnt)
+	}
+	if !gotMarked {
+		t.Error("current user's reaction not marked")
+	}
+
+	// Update reaction by changing u1 reaction to ❤️
+	r1b := &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     topic,
+		SeqId:     seq,
+		User:      u1.UserId(),
+		Content:   "❤️",
+	}
+	if err := adp.ReactionSave(r1b); err != nil {
+		t.Fatal(err)
+	}
+	// Debug: dump raw reactions after update
+	{
+		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_SeqId", []any{topic, seq}).Run(conn)
+		if err == nil {
+			var raw []types.Reaction
+			if err = cursor.All(&raw); err == nil {
+				t.Logf("raw reactions after update: %+v", raw)
+			}
+			cursor.Close()
+		}
+	}
+	reacts, err = adp.ReactionGetAll(topic, u1, false, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expect ❤️ cnt 1 and 👍 cnt 1
+	foundPlus := false
+	foundHeart := false
+	for _, arr := range reacts {
+		for _, r := range arr {
+			switch r.Content {
+			case "👍":
+				if r.Cnt != 1 {
+					t.Error("Expected 👍 cnt 1 got", r.Cnt)
+				}
+				foundPlus = true
+			case "❤️":
+				if r.Cnt != 1 {
+					t.Error("Expected ❤️ cnt 1 got", r.Cnt)
+				}
+				foundHeart = true
+			}
+		}
+	}
+	if !foundPlus || !foundHeart {
+		t.Error("expected both 👍 and ❤️ reactions")
+	}
+
+	// Delete u2 reaction
+	if err := adp.ReactionDelete(topic, seq, u2); err != nil {
+		t.Fatal(err)
+	}
+	reacts, err = adp.ReactionGetAll(topic, u1, false, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// After delete only ❤️ remains
+	onlyHeart := false
+	for _, arr := range reacts {
+		for _, r := range arr {
+			if r.Content == "❤️" {
+				onlyHeart = true
+			}
+			if r.Content == "👍" {
+				t.Error("👍 should be deleted")
+			}
+		}
+	}
+	if !onlyHeart {
+		t.Error("expected only ❤️ reaction")
+	}
+
+	// IfModifiedSince filter
+	// create old reaction and new reaction on another seq
+	seq2 := 2
+	old := &types.Reaction{
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		Topic:     topic,
+		SeqId:     seq2,
+		User:      u1.UserId(),
+		Content:   "old",
+	}
+	newr := &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     topic,
+		SeqId:     seq2,
+		User:      u2.UserId(),
+		Content:   "new",
+	}
+	if err := adp.ReactionSave(old); err != nil {
+		t.Fatal(err)
+	}
+	if err := adp.ReactionSave(newr); err != nil {
+		t.Fatal(err)
+	}
+
+	ims := time.Now().Add(-30 * time.Minute)
+	opts2 := &types.QueryOpt{IdRanges: []types.Range{{Low: seq2}}, IfModifiedSince: &ims}
+	reacts, err = adp.ReactionGetAll(topic, u1, false, opts2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// expect only "new"
+	for _, arr := range reacts {
+		for _, r := range arr {
+			if r.Content == "old" {
+				t.Error("old reaction should be filtered out by IfModifiedSince")
+			}
+		}
+	}
+
+	// Invalid QueryOpt (non-nil but no ranges/since/before) => error
+	_, err = adp.ReactionGetAll(topic, u1, false, &types.QueryOpt{})
+	if err == nil {
+		t.Error("expected error for invalid query options")
 	}
 }
 
@@ -1174,7 +1429,7 @@ func TestDeviceDelete(t *testing.T) {
 	if err = cursor2.One(&allDevices); err != nil && err != rdb.ErrEmptyResult {
 		t.Fatal(err)
 	}
-	if allDevices != nil && len(allDevices) > 0 {
+	if len(allDevices) > 0 {
 		t.Error("All devices not deleted:", allDevices)
 	}
 }

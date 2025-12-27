@@ -668,11 +668,11 @@ func (subsMapper) Delete(topic string, user types.Uid) error {
 type MessagesPersistenceInterface interface {
 	Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool)
 	DeleteList(topic string, delID int, forUser types.Uid, msgDelAge time.Duration, ranges []types.Range) error
-	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
+	GetAll(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
 	SaveReaction(topic string, seqId int, userId types.Uid, content string) error
 	DeleteReaction(topic string, seqId int, userId types.Uid) error
-	GetReactions(topic string, seqId int) ([]types.Reaction, error)
+	GetReactions(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error)
 }
 
 // messagesMapper is a concrete type implementing MessagesPersistenceInterface.
@@ -771,8 +771,8 @@ func (messagesMapper) DeleteList(topic string, delID int, forUser types.Uid, msg
 }
 
 // GetAll returns multiple messages.
-func (messagesMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
-	return adp.MessageGetAll(topic, forUser, opt)
+func (messagesMapper) GetAll(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.Message, error) {
+	return adp.MessageGetAll(topic, forUser, asChan, opt)
 }
 
 // GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
@@ -799,11 +799,11 @@ func (messagesMapper) GetDeleted(topic string, forUser types.Uid, opt *types.Que
 }
 
 // SaveReaction saves a reaction to a message.
-func (messagesMapper) SaveReaction(topic string, seqId int, userId types.Uid, content string) error {
+func (messagesMapper) SaveReaction(topic string, seqId int, user types.Uid, content string) error {
 	return adp.ReactionSave(&types.Reaction{
 		Topic:     topic,
 		SeqId:     seqId,
-		UserId:    userId,
+		User:      user.UserId(),
 		Content:   content,
 		CreatedAt: types.TimeNow(),
 	})
@@ -815,8 +815,21 @@ func (messagesMapper) DeleteReaction(topic string, seqId int, userId types.Uid) 
 }
 
 // GetReactions returns all reactions for a message.
-func (messagesMapper) GetReactions(topic string, seqId int) ([]types.Reaction, error) {
-	return adp.ReactionGetAll(topic, seqId)
+func (messagesMapper) GetReactions(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error) {
+	reacts, err := adp.ReactionGetAll(topic, forUser, asChan, opt)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]types.AggrReaction, 0, len(reacts))
+	for seqId, otr := range reacts {
+		aggr := types.AggrReaction{
+			SeqId: seqId,
+			Data:  otr,
+		}
+		result = append(result, aggr)
+	}
+
+	return result, nil
 }
 
 // Registered authentication handlers.

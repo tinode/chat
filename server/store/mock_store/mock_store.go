@@ -1072,18 +1072,18 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) DeleteReaction(topic, se
 }
 
 // GetAll mocks base method.
-func (m *MockMessagesPersistenceInterface) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
+func (m *MockMessagesPersistenceInterface) GetAll(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAll", topic, forUser, opt)
+	ret := m.ctrl.Call(m, "GetAll", topic, forUser, asChan, opt)
 	ret0, _ := ret[0].([]types.Message)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAll indicates an expected call of GetAll.
-func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetAll(topic, forUser, opt interface{}) *gomock.Call {
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetAll(topic, forUser, asChan, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetAll), topic, forUser, opt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetAll), topic, forUser, asChan, opt)
 }
 
 // GetDeleted mocks base method.
@@ -1103,18 +1103,18 @@ func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetDeleted(topic, forUse
 }
 
 // GetReactions mocks base method.
-func (m *MockMessagesPersistenceInterface) GetReactions(topic string, seqId int) ([]types.Reaction, error) {
+func (m *MockMessagesPersistenceInterface) GetReactions(topic string, forUser types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReactions", topic, seqId)
-	ret0, _ := ret[0].([]types.Reaction)
+	ret := m.ctrl.Call(m, "GetReactions", topic, forUser, asChan, opt)
+	ret0, _ := ret[0].([]types.AggrReaction)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReactions indicates an expected call of GetReactions.
-func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetReactions(topic, seqId interface{}) *gomock.Call {
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) GetReactions(topic, forUser, asChan, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReactions", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetReactions), topic, seqId)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReactions", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).GetReactions), topic, forUser, asChan, opt)
 }
 
 // Save mocks base method.

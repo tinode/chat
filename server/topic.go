@@ -1144,7 +1144,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 	}
 
 	if msg.Note.SeqId > t.lastID {
-		// Drop bogus read notification
+		// Drop bogus notification.
 		return
 	}
 
@@ -1167,8 +1167,8 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		if !mode.IsWriter() || t.isReadOnly() {
 			return
 		}
-	case "read", "recv":
-		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
+	case "read", "recv", "react":
+		// Filter out "read/recv/react" from users with no 'R' permission (or people without a subscription).
 		if !mode.IsReader() {
 			return
 		}
@@ -1176,21 +1176,6 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		// Handle calls separately.
 		t.handleCallEvent(msg)
 		return
-	case "react":
-		if !mode.IsReader() {
-			return
-		}
-		var payload struct {
-			Content string `json:"content"`
-		}
-		if len(msg.Note.Payload) > 0 {
-			json.Unmarshal(msg.Note.Payload, &payload)
-		}
-		if payload.Content != "" {
-			store.Messages.SaveReaction(t.name, msg.Note.SeqId, asUid, payload.Content)
-		} else {
-			store.Messages.DeleteReaction(t.name, msg.Note.SeqId, asUid)
-		}
 	}
 
 	var read, recv, unread, seq int
@@ -1230,6 +1215,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 			topicName = msg.Note.Topic
 		}
 
+		// Update read/recv in the database.
 		upd := map[string]any{}
 		if recv > 0 {
 			upd["RecvSeqId"] = recv
@@ -1256,24 +1242,46 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		}
 	}
 
-	if asChan {
-		// No need to forward {note} to other subscribers in channels
+	if msg.Note.What == "react" {
+		var payload struct {
+			Emo string `json:"emo"`
+		}
+		err := json.Unmarshal(msg.Note.Payload, &payload)
+		if err != nil || !isValidReaction(payload.Emo) {
+			// Silently drop invalid reaction.
+			return
+		}
+		if payload.Emo == nullValue {
+			err = store.Messages.DeleteReaction(t.name, msg.Note.SeqId, asUid)
+		} else {
+			err = store.Messages.SaveReaction(t.name, msg.Note.SeqId, asUid, payload.Emo)
+		}
+		if err != nil {
+			logs.Warn.Printf("topic[%s]: failed to update reaction: %v", t.name, err)
+			return
+		}
+	} else if asChan {
+		// No need to forward kp, read, recv {note} to other subscribers in channels.
+		// FIXME: Forwarding "react" could be inefficient in large channels. Some sort of batching
+		// should be implemented later.
 		return
 	}
 
 	if seq > 0 {
+		// read, recv
 		t.perUser[asUid] = pud
 	}
 
-	// Read/recv/kp: notify users offline in the topic on their 'me'.
-	t.infoSubsOffline(asUid, msg.Note.What, seq, msg.sess.sid)
+	// Read/recv/kp/react: notify users offline in the topic on their 'me'.
+	t.infoSubsOffline(asUid, msg.Note.What, seq, msg.Note.Payload, msg.sess.sid)
 
 	info := &ServerComMessage{
 		Info: &MsgServerInfo{
-			Topic: msg.Original,
-			From:  msg.AsUser,
-			What:  msg.Note.What,
-			SeqId: msg.Note.SeqId,
+			Topic:   msg.Original,
+			From:    msg.AsUser,
+			What:    msg.Note.What,
+			SeqId:   msg.Note.SeqId,
+			Payload: msg.Note.Payload,
 		},
 		RcptTo:    msg.RcptTo,
 		AsUser:    msg.AsUser,
@@ -2794,7 +2802,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 	count := 0
 	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		// Read messages from DB
-		messages, err := store.Messages.GetAll(t.name, asUid, msgOpts2storeOpts(req))
+		messages, err := store.Messages.GetAll(t.name, asUid, asChan, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknownReply(msg, now))
 			return err
@@ -2807,20 +2815,26 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 				outgoingMessages := make([]*ServerComMessage, count)
 				for i := range messages {
 					mm := &messages[i]
-					from := ""
-					if !asChan {
-						// Don't show sender for channel readers
-						from = types.ParseUid(mm.From).UserId()
+					var reactions []MsgReaction
+					if mm.Reactions != nil {
+						reactions = make([]MsgReaction, len(mm.Reactions))
+						for j, r := range mm.Reactions {
+							reactions[j] = MsgReaction{
+								Value: r.Content,
+								Count: r.Cnt,
+								Users: r.Users,
+							}
+						}
 					}
 					outgoingMessages[i] = &ServerComMessage{
 						Data: &MsgServerData{
 							Topic:     toriginal,
 							Head:      mm.Head,
 							SeqId:     mm.SeqId,
-							From:      from,
+							From:      mm.From,
 							Timestamp: mm.CreatedAt,
 							Content:   mm.Content,
-							Reactions: mm.Reactions,
+							Reactions: reactions,
 						},
 					}
 				}

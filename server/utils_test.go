@@ -530,3 +530,29 @@ func TestHasDuplicateNamespaceTags(t *testing.T) {
 		}
 	}
 }
+
+func TestIsValidReaction(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"simple emoji", "👍", true},
+		{"emoji with skin tone", "👍🏽", true},
+		{"zwj sequence (woman health worker)", "👩‍⚕️", true},
+		{"zwj family", "👨‍👩‍👦", true},
+		{"null value", nullValue, true},
+		{"ascii letter", "A", false},
+		{"long (>8 runes)", "😊😊😊😊😊😊😊😊😊", false},
+		{"multi-codepoint text", "e\u0301", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isValidReaction(tc.in)
+			if got != tc.want {
+				t.Fatalf("isValidReaction(%q) = %v; want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}

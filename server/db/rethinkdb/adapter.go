@@ -402,10 +402,11 @@ func (a *adapter) CreateDb(reset bool) error {
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on reactions(topic, userid, seqid) for uniqueness.
+	// Create secondary index on reactions(topic, user, seqid) for uniqueness.
 	if _, err := rdb.DB(a.dbName).Table("reactions").IndexCreateFunc("Topic_UserId_SeqId",
 		func(row rdb.Term) any {
-			return []any{row.Field("Topic"), row.Field("UserId"), row.Field("SeqId")}
+			// use 'User' field name (Reaction.User) in documents
+			return []any{row.Field("Topic"), row.Field("User"), row.Field("SeqId")}
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
@@ -590,10 +591,11 @@ func (a *adapter) UpgradeDb() error {
 			}).RunWrite(a.conn); err != nil {
 			return err
 		}
-		// Create secondary index on reactions(topic, userid, seqid) for uniqueness.
+		// Create secondary index on reactions(topic, user, seqid) for uniqueness.
 		if _, err := rdb.DB(a.dbName).Table("reactions").IndexCreateFunc("Topic_UserId_SeqId",
 			func(row rdb.Term) any {
-				return []any{row.Field("Topic"), row.Field("UserId"), row.Field("SeqId")}
+				// index 'User' field (matches Reaction.User)
+				return []any{row.Field("Topic"), row.Field("User"), row.Field("SeqId")}
 			}).RunWrite(a.conn); err != nil {
 			return err
 		}
@@ -810,6 +812,8 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	if err = cursor.One(&user); err != nil {
 		return nil, err
 	}
+	// Ensure internal Uid is set so tests comparing structs match other adapters behavior.
+	user.SetUid(t.ParseUid(user.Id))
 	return &user, nil
 }
 
@@ -837,6 +841,8 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			stateAt := user.StateAt.UTC()
 			user.StateAt = &stateAt
 		}
+		// Ensure internal Uid is set so tests comparing structs match other adapters behavior.
+		user.SetUid(t.ParseUid(user.Id))
 		users = append(users, user)
 	}
 
@@ -2283,7 +2289,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 }
 
 // MessageGetAll retrieves all messages available to the given user.
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
 
 	var limit = a.maxMessageResults
 	var lower, upper any
@@ -2348,38 +2354,29 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	}
 
 	if len(msgs) > 0 {
-		// Fetch reactions.
-		seqIds := make([]int, len(msgs))
-		msgMap := make(map[int]*t.Message)
+		var seqIds []int
 		for i := range msgs {
-			seqIds[i] = msgs[i].SeqId
-			msgMap[msgs[i].SeqId] = &msgs[i]
+			seqIds = append(seqIds, msgs[i].SeqId)
 		}
-
 		// Fetch reactions for these messages.
-		keys := make([]any, len(seqIds))
-		for i, seqId := range seqIds {
-			keys[i] = []any{topic, seqId}
+		reactOpts := &t.QueryOpt{IdRanges: t.SliceToRanges(seqIds)}
+		if opts != nil && opts.IfModifiedSince != nil {
+			reactOpts.IfModifiedSince = opts.IfModifiedSince
 		}
-
-		cursor, err := rdb.DB(a.dbName).Table("reactions").
-			GetAllByIndex("Topic_SeqId", keys...).Run(a.conn)
+		if opts != nil && opts.Limit > 0 {
+			reactOpts.Limit = opts.Limit
+		}
+		reacts, err := a.reactionsForSet(topic, forUser, asChan, reactOpts)
 		if err != nil {
 			return nil, err
 		}
-		defer cursor.Close()
-
-		var reactions []t.Reaction
-		if err = cursor.All(&reactions); err != nil {
-			return nil, err
-		}
-
-		for _, r := range reactions {
-			msg := msgMap[r.SeqId]
-			if msg.Reactions == nil {
-				msg.Reactions = make(map[string][]string)
+		if len(reacts) > 0 {
+			// Attach reactions to messages.
+			for i := range msgs {
+				if r, ok := reacts[msgs[i].SeqId]; ok {
+					msgs[i].Reactions = r
+				}
 			}
-			msg.Reactions[r.Content] = append(msg.Reactions[r.Content], r.UserId.UserId())
 		}
 	}
 
@@ -2388,10 +2385,17 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // ReactionSave saves a reaction to a message.
 func (a *adapter) ReactionSave(r *t.Reaction) error {
-	// Upsert reaction.
-	_, err := rdb.DB(a.dbName).Table("reactions").
-		Insert(r, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
+	var err error
+	// Ensure there's at most one reaction per topic/user/seq: delete existing via index then insert.
+	_, err = rdb.DB(a.dbName).Table("reactions").
+		GetAllByIndex("Topic_UserId_SeqId", []any{r.Topic, r.User, r.SeqId}).
+		Delete().RunWrite(a.conn)
 	if err != nil {
+		return err
+	}
+
+	// Insert new reaction.
+	if _, err = rdb.DB(a.dbName).Table("reactions").Insert(r).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -2404,9 +2408,9 @@ func (a *adapter) ReactionSave(r *t.Reaction) error {
 
 // ReactionDelete deletes a reaction to a message.
 func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
-	// Delete reaction.
+	// Delete reaction using index for efficiency.
 	_, err := rdb.DB(a.dbName).Table("reactions").
-		GetAllByIndex("Topic_UserId_SeqId", []any{topic, userId, seqId}).
+		GetAllByIndex("Topic_UserId_SeqId", []any{topic, userId.UserId(), seqId}).
 		Delete().RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -2419,20 +2423,95 @@ func (a *adapter) ReactionDelete(topic string, seqId int, userId t.Uid) error {
 	return err
 }
 
-// ReactionGetAll returns all reactions for a message.
-func (a *adapter) ReactionGetAll(topic string, seqId int) ([]t.Reaction, error) {
-	cursor, err := rdb.DB(a.dbName).Table("reactions").
-		GetAllByIndex("Topic_SeqId", []any{topic, seqId}).
-		Run(a.conn)
+// ReactionGetAll returns all reactions for a query.
+func (a *adapter) ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *t.QueryOpt) (map[int][]t.OneTypeReaction, error) {
+	return a.reactionsForSet(topic, forUser, asChan, opt)
+}
+
+// reactionsForSet loads reactions for messages identified by seqIds in the given topic.
+// Returns a map of seqId to list of aggregate reactions.
+func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opt *t.QueryOpt) (map[int][]t.OneTypeReaction, error) {
+	if opt == nil {
+		return nil, nil
+	}
+
+	var term rdb.Term
+	// Use IdRanges -> explicit keys or Since+Before -> Between
+	if len(opt.IdRanges) > 0 {
+		// Build explicit keys for Topic_SeqId index.
+		keys := make([]any, 0)
+		for _, r := range opt.IdRanges {
+			if r.Hi == 0 {
+				keys = append(keys, []any{topic, r.Low})
+			} else {
+				for i := r.Low; i < r.Hi; i++ {
+					keys = append(keys, []any{topic, i})
+				}
+			}
+		}
+		term = rdb.DB(a.dbName).Table("reactions").GetAllByIndex("Topic_SeqId", keys...)
+	} else if opt.Since > 0 || opt.Before > 1 {
+		var lower, upper any
+		lower = rdb.MinVal
+		if opt.Since > 0 {
+			lower = opt.Since
+		}
+		upper = rdb.MaxVal
+		if opt.Before > 1 {
+			upper = opt.Before
+		}
+		term = rdb.DB(a.dbName).Table("reactions").Between([]any{topic, lower}, []any{topic, upper},
+			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "open"})
+	} else {
+		return nil, errors.New("invalid query options")
+	}
+
+	// Apply IfModifiedSince filter to reaction creation time if present
+	if opt.IfModifiedSince != nil {
+		term = term.Filter(func(row rdb.Term) any { return row.Field("CreatedAt").Gt(opt.IfModifiedSince) })
+	}
+
+	// Apply limit if requested (limit number of reaction rows fetched)
+	if opt.Limit > 0 {
+		term = term.Limit(opt.Limit)
+	}
+
+	cursor, err := term.Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
 
-	var reactions []t.Reaction
-	if err = cursor.All(&reactions); err != nil {
+	var raw []t.Reaction
+	if err = cursor.All(&raw); err != nil {
 		return nil, err
 	}
+
+	// Aggregate into map[seqid]map[content]*OneTypeReaction
+	agg := make(map[int]map[string]*t.OneTypeReaction)
+	for _, r := range raw {
+		if _, ok := agg[r.SeqId]; !ok {
+			agg[r.SeqId] = make(map[string]*t.OneTypeReaction)
+		}
+		ar, ok := agg[r.SeqId][r.Content]
+		if !ok {
+			ar = &t.OneTypeReaction{Content: r.Content, Users: make([]string, 0)}
+			agg[r.SeqId][r.Content] = ar
+		}
+		ar.Cnt++
+		if !asChan || r.User == forUser.UserId() {
+			ar.Users = append(ar.Users, r.User)
+		}
+	}
+
+	// Convert to final map type
+	reactions := make(map[int][]t.OneTypeReaction)
+	for seqId, cmap := range agg {
+		for _, ar := range cmap {
+			reactions[seqId] = append(reactions[seqId], *ar)
+		}
+	}
+
 	return reactions, nil
 }
 

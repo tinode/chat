@@ -20,6 +20,7 @@
     - [Access Control](#access-control)
   - [Topics](#topics)
     - [me Topic](#me-topic)
+    - [slf Topic](#slf-topic)
     - [fnd and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
       - [Query Language](#query-language)
       - [Incremental Updates to Queries](#incremental-updates-to-queries)
@@ -1146,18 +1147,19 @@ note: {
   unread: 10, // integer, client-reported total count of unread messages, optional.
   event: "ringing", // string, subaction; surrently used only by video/audio calls,
                     // when what="call".
-  payload: {  // object, required payload for 'call' and 'data'.
+  payload: {  // object, required payload for 'call', 'data', 'react'.
     ...
   }
 }
 ```
 
-The following actions types are currently defined:
+The following actions types `what` are currently defined:
  * call: a video call status update.
  * data: a generic packet of structured data, usually a form response.
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * kpa: audio message is in the process of recording.
  * kpv: video message is in the process of recording.
+ * react: reaction to a message, such as an emoji reaction or a poll answer.
  * read: a `{data}` message is seen (read) by the user. It implies `recv` as well.
  * recv: a `{data}` message is received by the client software but may not yet seen by user.
 
@@ -1166,6 +1168,13 @@ The `read` and `recv` notifications may optionally include `unread` value which 
   <img src="./ios-pill-128.png" alt="Tinode iOS icon with a pill counter" width=64 height=64 />
 </p>
 
+The following call events `what="call"` are currently defined:
+* ringing: call is being established.
+* accept: calling party has accepted the call.
+* offer: WebRTC SDP & ICE data exchange events.
+* answer: same as above.
+* ice-candidate: save as above.
+* hang-up: call finished by either party or by the server.
 
 ### Server to Client Messages
 

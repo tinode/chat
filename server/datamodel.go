@@ -24,15 +24,15 @@ type MsgGetOpts struct {
 	User string `json:"user,omitempty"`
 	// Optional topic name to return result(s) for one topic.
 	Topic string `json:"topic,omitempty"`
-	// Return results modified since this timespamp.
+	// Return results modified since this timestamp.
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
-	// Load messages/ranges with IDs equal or greater than this (inclusive or closed).
+	// Load object with IDs equal or greater than this (inclusive or closed).
 	SinceId int `json:"since,omitempty"`
-	// Load messages/ranges with IDs lower than this (exclusive or open).
+	// Load objects with IDs lower than this (exclusive or open).
 	BeforeId int `json:"before,omitempty"`
-	// Limit the number of messages loaded.
+	// Limit the number of objects loaded.
 	Limit int `json:"limit,omitempty"`
-	// Fetch messages with IDs in these ranges.
+	// Fetch objects with IDs in these ranges.
 	IdRanges []MsgRange `json:"ranges,omitempty"`
 }
 
@@ -48,6 +48,8 @@ type MsgGetQuery struct {
 	Data *MsgGetOpts `json:"data,omitempty"`
 	// Parameters of "del" request: Since, Before, Limit.
 	Del *MsgGetOpts `json:"del,omitempty"`
+	// Parameters of reactions request: IfModifiedSince, Since, Before, IdRanges, Limit.
+	React *MsgGetOpts `json:"react,omitempty"`
 }
 
 // MsgSetSub is a payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub".
@@ -102,6 +104,29 @@ type MsgSetQuery struct {
 type MsgRange struct {
 	LowId int `json:"low,omitempty"`
 	HiId  int `json:"hi,omitempty"`
+}
+
+type MsgReaction struct {
+	// SeqId is 0 when MsgReaction is embedded in MsgServerData message.
+	SeqId int `json:"seq,omitempty"`
+	// Reaction content (emoji etc.).
+	Value string `json:"val,omitempty"`
+	// Number of users who reacted with this value (count be 0 for p2p and group topics).
+	Count int `json:"count,omitempty"`
+	// User IDs of users who reacted with this value (count be nil for channels).
+	Users []string `json:"users,omitempty"`
+}
+
+func (src *MsgReaction) describe() string {
+	var s string
+	if src.SeqId != 0 {
+		s = "seq=" + strconv.Itoa(src.SeqId) + " "
+	}
+	s += "val='" + src.Value + "' count=" + strconv.Itoa(src.Count)
+	if src.Users != nil {
+		s += " users=[" + strings.Join(src.Users, ",") + "]"
+	}
+	return s
 }
 
 /****************************************************************
@@ -608,13 +633,13 @@ func (src *MsgServerCtrl) describe() string {
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
-	From      string              `json:"from,omitempty"`
-	Timestamp time.Time           `json:"ts"`
-	DeletedAt *time.Time          `json:"deleted,omitempty"`
-	SeqId     int                 `json:"seq"`
-	Head      map[string]any      `json:"head,omitempty"`
-	Content   any                 `json:"content"`
-	Reactions map[string][]string `json:"reactions,omitempty"`
+	From      string         `json:"from,omitempty"`
+	Timestamp time.Time      `json:"ts"`
+	DeletedAt *time.Time     `json:"deleted,omitempty"`
+	SeqId     int            `json:"seq"`
+	Head      map[string]any `json:"head,omitempty"`
+	Content   any            `json:"content"`
+	Reactions []MsgReaction  `json:"react,omitempty"`
 }
 
 // Deep-shallow copy.
@@ -737,6 +762,8 @@ type MsgServerMeta struct {
 	Cred []*MsgCredServer `json:"cred,omitempty"`
 	// Auxiliary data
 	Aux map[string]any `json:"aux,omitempty"`
+	// Reactions
+	Reactions []MsgReaction `json:"react,omitempty"`
 }
 
 // Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.
@@ -776,6 +803,14 @@ func (src *MsgServerMeta) describe() string {
 		x, _ := json.Marshal(src.Aux)
 		s += " aux=[" + string(x) + "]"
 	}
+	if src.Reactions != nil {
+		var x []string
+		for _, react := range src.Reactions {
+			x = append(x, react.describe())
+		}
+		s += " react=[{" + strings.Join(x, "},{") + "}]"
+	}
+
 	return s
 }
 
@@ -787,13 +822,13 @@ type MsgServerInfo struct {
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from,omitempty"`
-	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
+	// The event being reported: "recv" - message received, "read" - message read, "kp" - typing notification, "call" - video call.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
 	// Call event.
 	Event string `json:"event,omitempty"`
-	// Arbitrary json payload (used by video calls).
+	// Arbitrary json payload (used by video calls and reactions).
 	Payload json.RawMessage `json:"payload,omitempty"`
 
 	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.

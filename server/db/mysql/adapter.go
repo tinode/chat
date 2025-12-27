@@ -2717,18 +2717,19 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 }
 
 // MessageGetAll returns messages matching the query.
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = a.maxMessageResults
 
 	args := []any{store.DecodeUid(forUser), topic}
-	seqIdConstraint := "m.seqid "
+	seqIdConstraint := ""
 	if opts != nil {
 		if len(opts.IdRanges) > 0 {
 			constr, newargs := common.RangesToSql(opts.IdRanges)
-			seqIdConstraint += constr
+			seqIdConstraint += " AND m.seqid " + constr
 			args = append(args, newargs...)
 		} else {
-			seqIdConstraint += "BETWEEN ? AND ?"
+			// Use m.seqid BETWEEN low AND high-1
+			seqIdConstraint += " AND m.seqid BETWEEN ? AND ?"
 			if opts.Since > 0 {
 				args = append(args, opts.Since)
 			} else {
@@ -2745,14 +2746,6 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
-	} else {
-		seqIdConstraint += "BETWEEN 0 AND 2147483647"
-	}
-
-	imsConstraint := ""
-	if opts != nil && opts.IfModifiedSince != nil {
-		imsConstraint = " OR m.updatedat > ?"
-		args = append(args, opts.IfModifiedSince)
 	}
 
 	args = append(args, limit)
@@ -2767,7 +2760,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
 			" FROM messages AS m LEFT JOIN dellog AS d"+
 			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
-			" WHERE m.delid=0 AND m.topic=? AND ("+seqIdConstraint+imsConstraint+") AND d.deletedfor IS NULL"+
+			" WHERE m.delid=0 AND m.topic=? "+seqIdConstraint+" AND d.deletedfor IS NULL"+
 			" ORDER BY m.seqid DESC LIMIT ?",
 		args...)
 	if err != nil {
@@ -2776,55 +2769,46 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	defer rows.Close()
 
 	msgs := make([]t.Message, 0, limit)
+	seqIds := make([]int, 0, limit)
+	msgMap := make(map[int]*t.Message)
 	for rows.Next() {
 		var msg t.Message
 		if err = rows.StructScan(&msg); err != nil {
 			break
 		}
-		msg.From = common.EncodeUidString(msg.From).String()
+		if !asChan {
+			// Convert from numeric user ID to string UID.
+			// From is blank for channel readers.
+			msg.From = common.EncodeUidString(msg.From).UserId()
+		}
 		msg.Content = common.FromJSON(msg.Content)
 		msgs = append(msgs, msg)
+
+		// Prepare for reaction fetching.
+		seqIds = append(seqIds, msg.SeqId)
+		msgMap[msg.SeqId] = &msgs[len(msgs)-1]
 	}
 	if err == nil {
 		err = rows.Err()
 	}
 
-	if len(msgs) > 0 {
-		// Fetch reactions.
-		seqIds := make([]int, len(msgs))
-		msgMap := make(map[int]*t.Message)
-		for i := range msgs {
-			seqIds[i] = msgs[i].SeqId
-			msgMap[msgs[i].SeqId] = &msgs[i]
+	if len(seqIds) > 0 {
+		// Load reactions for the messages. Build QueryOpt using IdRanges from seqIds and preserve IfModifiedSince and Limit.
+		reactOpts := &t.QueryOpt{IdRanges: t.SliceToRanges(seqIds)}
+		if opts != nil && opts.IfModifiedSince != nil {
+			reactOpts.IfModifiedSince = opts.IfModifiedSince
 		}
-
-		query, args, err := sqlx.In("SELECT seqid, userid, content FROM reactions WHERE topic=? AND seqid IN (?)", topic, seqIds)
+		if opts != nil && opts.Limit > 0 {
+			reactOpts.Limit = opts.Limit
+		}
+		reacts, err := a.reactionsForSet(topic, forUser, asChan, reactOpts)
 		if err != nil {
 			return nil, err
 		}
-		query = a.db.Rebind(query)
-		rows, err := a.db.QueryxContext(ctx, query, args...)
-		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var r struct {
-				SeqId   int
-				UserId  int64
-				Content string
+		for seqId, rlist := range reacts {
+			if m, found := msgMap[seqId]; found {
+				m.Reactions = rlist
 			}
-			if err = rows.StructScan(&r); err != nil {
-				return nil, err
-			}
-
-			msg := msgMap[r.SeqId]
-			if msg.Reactions == nil {
-				msg.Reactions = make(map[string][]string)
-			}
-			uid := store.EncodeUid(r.UserId).UserId()
-			msg.Reactions[r.Content] = append(msg.Reactions[r.Content], uid)
 		}
 	}
 
@@ -2979,8 +2963,10 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 		}
 
 		// Delete reactions for these messages.
+		// Delete reactions for these messages. First arg is outer topic, the rest are inner WHERE args.
+		delArgs := append([]any{topic}, args...)
 		_, err = tx.Exec("DELETE FROM reactions WHERE topic=? AND seqid IN ("+
-			"SELECT seqid FROM messages AS m WHERE "+where+")", args...)
+			"SELECT seqid FROM messages AS m WHERE "+where+")", delArgs...)
 		if err != nil {
 			return err
 		}
@@ -3037,6 +3023,204 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 	}
 
 	return tx.Commit()
+}
+
+// ReactionSave saves a reaction to a message.
+func (a *adapter) ReactionSave(r *t.Reaction) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO reactions(createdat,topic,seqid,userid,content) VALUES(?,?,?,?,?) "+
+			"ON DUPLICATE KEY UPDATE content=?,createdat=?",
+		r.CreatedAt, r.Topic, r.SeqId, store.DecodeUid(t.ParseUserId(r.User)), r.Content, r.Content, r.CreatedAt)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Update message UpdatedAt
+	_, err = tx.ExecContext(ctx, "UPDATE messages SET updatedat=? WHERE topic=? AND seqid=?", r.CreatedAt, r.Topic, r.SeqId)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ReactionDelete deletes a reaction to a message.
+func (a *adapter) ReactionDelete(topic string, seqid int, userid t.Uid) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx,
+		"DELETE FROM reactions WHERE topic=? AND seqid=? AND userid=?",
+		topic, seqid, store.DecodeUid(userid))
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Update message UpdatedAt
+	_, err = tx.ExecContext(ctx, "UPDATE messages SET updatedat=? WHERE topic=? AND seqid=?", time.Now(), topic, seqid)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ReactionGetAll returns all reactions for a query.
+func (a *adapter) ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *t.QueryOpt) (map[int][]t.OneTypeReaction, error) {
+	return a.reactionsForSet(topic, forUser, asChan, opt)
+}
+
+// reactionsForSet loads reactions for messages identified by seqIds in the given topic.
+// Returns a map of seqId to list of aggregate reactions.
+func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) (map[int][]t.OneTypeReaction, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	projection := "seqid,content,JSON_ARRAYAGG(userid) AS users"
+	if asChan {
+		projection = "seqid,content,COUNT(*) AS cnt"
+	}
+
+	// Build sequence constraints from opts: either IdRanges OR Since+Before.
+	seqConstraint := ""
+	seqArgs := make([]any, 0)
+	if opts != nil {
+		if len(opts.IdRanges) > 0 {
+			constr, newargs := common.RangesToSql(opts.IdRanges)
+			seqConstraint = " AND seqid " + constr
+			seqArgs = append(seqArgs, newargs...)
+		} else if opts.Before > 1 || opts.Since > 0 {
+			if opts.Since > 0 && opts.Before > 1 {
+				// Use BETWEEN when both bounds specified. Before is exclusive.
+				seqConstraint = " AND seqid BETWEEN ? AND ?"
+				seqArgs = append(seqArgs, opts.Since, opts.Before-1)
+			} else if opts.Since > 0 {
+				seqConstraint = " AND seqid >= ?"
+				seqArgs = append(seqArgs, opts.Since)
+			} else {
+				// only Before set
+				seqConstraint = " AND seqid < ?"
+				seqArgs = append(seqArgs, opts.Before)
+			}
+		} else {
+			return nil, errors.New("invalid query options")
+		}
+
+		// IfModifiedSince applies as an additional filter on reactions' created time.
+		if opts.IfModifiedSince != nil {
+			seqConstraint += " AND createdat > ?"
+			seqArgs = append(seqArgs, *opts.IfModifiedSince)
+		}
+	} else {
+		// No options specified -> nothing to select.
+		return make(map[int][]t.OneTypeReaction), nil
+	}
+
+	query := "SELECT " + projection + " FROM reactions WHERE topic=?" + seqConstraint + " GROUP BY seqid,content"
+	if opts.Limit > 0 {
+		query += " LIMIT ?"
+		seqArgs = append(seqArgs, opts.Limit)
+	}
+
+	args := append([]any{topic}, seqArgs...)
+	query, args, _ = sqlx.In(query, args...)
+	query = a.db.Rebind(query)
+	rows, err := a.db.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions map[int][]t.OneTypeReaction = make(map[int][]t.OneTypeReaction)
+	if asChan {
+		for rows.Next() {
+			var seqId int
+			var content string
+			var cnt int
+			if err = rows.Scan(&seqId, &content, &cnt); err != nil {
+				return nil, err
+			}
+			r := t.OneTypeReaction{
+				Content: content,
+				Cnt:     cnt,
+				Users:   nil,
+			}
+			reactions[seqId] = append(reactions[seqId], r)
+		}
+
+		// Now get reactions of the current user to mark them in the list.
+		userQuery := "SELECT seqid,content FROM reactions WHERE topic=? AND userid=?" + seqConstraint
+		userArgs := append([]any{topic, store.DecodeUid(forUser)}, seqArgs...)
+		userQuery, userArgs, _ = sqlx.In(userQuery, userArgs...)
+		userQuery = a.db.Rebind(userQuery)
+		userReacts, err := a.db.QueryxContext(ctx, userQuery, userArgs...)
+		if err != nil {
+			return nil, err
+		}
+		defer userReacts.Close()
+
+		for userReacts.Next() {
+			var seqId int
+			var content string
+			if err = userReacts.Scan(&seqId, &content); err != nil {
+				return nil, err
+			}
+			if rlist, found := reactions[seqId]; found {
+				for i, r := range rlist {
+					if r.Content == content {
+						rlist[i].Users = []string{forUser.UserId()}
+						break
+					}
+				}
+			}
+		}
+	} else {
+		for rows.Next() {
+			var seqId int
+			var content string
+			var usersRaw []byte
+			if err = rows.Scan(&seqId, &content, &usersRaw); err != nil {
+				return nil, err
+			}
+
+			// Parse users JSON array. Expect numeric array, but handle string IDs as fallback.
+			var ids []int64
+			if err = json.Unmarshal(usersRaw, &ids); err != nil {
+				return nil, err
+			}
+
+			r := t.OneTypeReaction{
+				Content: content,
+				Cnt:     len(ids),
+				Users:   make([]string, 0, len(ids)),
+			}
+			for _, id := range ids {
+				r.Users = append(r.Users, store.EncodeUid(id).UserId())
+			}
+			reactions[seqId] = append(reactions[seqId], r)
+		}
+	}
+	return reactions, nil
 }
 
 func deviceHasher(deviceID string) string {
@@ -3724,90 +3908,6 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 
 	_, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key` LIKE ? AND createdat<?", keyPrefix+"%", olderThan)
 	return err
-}
-
-// ReactionSave saves a reaction to a message.
-func (a *adapter) ReactionSave(r *t.Reaction) error {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	tx, err := a.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx,
-		"INSERT INTO reactions(createdat,topic,seqid,userid,content) VALUES(?,?,?,?,?) "+
-			"ON DUPLICATE KEY UPDATE content=?,createdat=?",
-		r.CreatedAt, r.Topic, r.SeqId, store.DecodeUid(r.UserId), r.Content, r.Content, r.CreatedAt)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Update message UpdatedAt
-	_, err = tx.ExecContext(ctx, "UPDATE messages SET updatedat=? WHERE topic=? AND seqid=?", r.CreatedAt, r.Topic, r.SeqId)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// ReactionDelete deletes a reaction to a message.
-func (a *adapter) ReactionDelete(topic string, seqid int, userid t.Uid) error {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	tx, err := a.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.ExecContext(ctx,
-		"DELETE FROM reactions WHERE topic=? AND seqid=? AND userid=?",
-		topic, seqid, store.DecodeUid(userid))
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	// Update message UpdatedAt
-	_, err = tx.ExecContext(ctx, "UPDATE messages SET updatedat=? WHERE topic=? AND seqid=?", time.Now(), topic, seqid)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// ReactionGetAll returns all reactions for a message.
-func (a *adapter) ReactionGetAll(topic string, seqid int) ([]t.Reaction, error) {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	rows, err := a.db.QueryxContext(ctx,
-		"SELECT createdat,topic,seqid,userid,content FROM reactions WHERE topic=? AND seqid=?",
-		topic, seqid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var reactions []t.Reaction
-	for rows.Next() {
-		var r t.Reaction
-		if err = rows.StructScan(&r); err != nil {
-			return nil, err
-		}
-		reactions = append(reactions, r)
-	}
-	return reactions, nil
 }
 
 // GetTestDB returns a currently open database connection.

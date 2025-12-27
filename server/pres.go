@@ -474,9 +474,9 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 	}
 }
 
-// Publish {info what=read|recv|kp} to topic subscribers's sessions currently offline in the topic,
+// Publish {info what=read|recv|kp|react} to topic subscribers's sessions currently offline in the topic,
 // on subscriber's 'me'. Group and P2P.
-func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid string) {
+func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, payload json.RawMessage, skipSid string) {
 	user := from.UserId()
 
 	for uid, pud := range t.perUser {
@@ -492,6 +492,7 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 				From:      user,
 				What:      what,
 				SeqId:     seq,
+				Payload:   payload,
 				SkipTopic: t.name,
 			},
 			RcptTo:  uid.UserId(),

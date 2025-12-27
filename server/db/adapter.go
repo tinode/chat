@@ -160,7 +160,7 @@ type Adapter interface {
 	// MessageSave saves message to database
 	MessageSave(msg *t.Message) error
 	// MessageGetAll returns messages matching the query
-	MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error)
+	MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error)
 	// MessageDeleteList marks messages as deleted.
 	// Soft- or Hard- is defined by forUser value: forUser.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
@@ -168,9 +168,13 @@ type Adapter interface {
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
 
 	// Reactions
+
+	// ReactionSave saves a reaction.
 	ReactionSave(reaction *t.Reaction) error
+	// ReactionDelete deletes a reaction.
 	ReactionDelete(topic string, seqid int, userid t.Uid) error
-	ReactionGetAll(topic string, seqid int) ([]t.Reaction, error)
+	// ReactionGetAll returns all reactions for a given query.
+	ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *t.QueryOpt) (map[int][]t.OneTypeReaction, error)
 
 	// Devices (for push notifications)
 
