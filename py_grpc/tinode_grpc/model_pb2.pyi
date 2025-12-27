@@ -20,6 +20,7 @@ class InfoNote(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     RECV: _ClassVar[InfoNote]
     KP: _ClassVar[InfoNote]
     CALL: _ClassVar[InfoNote]
+    REACT: _ClassVar[InfoNote]
 
 class CallEvent(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = []
@@ -53,6 +54,7 @@ READ: InfoNote
 RECV: InfoNote
 KP: InfoNote
 CALL: InfoNote
+REACT: InfoNote
 X2: CallEvent
 ACCEPT: CallEvent
 ANSWER: CallEvent
@@ -155,16 +157,31 @@ class GetOpts(_message.Message):
     def __init__(self, if_modified_since: _Optional[int] = ..., user: _Optional[str] = ..., topic: _Optional[str] = ..., since_id: _Optional[int] = ..., before_id: _Optional[int] = ..., limit: _Optional[int] = ..., ranges: _Optional[_Iterable[_Union[SeqRange, _Mapping]]] = ...) -> None: ...
 
 class GetQuery(_message.Message):
-    __slots__ = ["what", "desc", "sub", "data"]
+    __slots__ = ["what", "desc", "sub", "data", "react"]
     WHAT_FIELD_NUMBER: _ClassVar[int]
     DESC_FIELD_NUMBER: _ClassVar[int]
     SUB_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
+    DEL_FIELD_NUMBER: _ClassVar[int]
+    REACT_FIELD_NUMBER: _ClassVar[int]
     what: str
     desc: GetOpts
     sub: GetOpts
     data: GetOpts
-    def __init__(self, what: _Optional[str] = ..., desc: _Optional[_Union[GetOpts, _Mapping]] = ..., sub: _Optional[_Union[GetOpts, _Mapping]] = ..., data: _Optional[_Union[GetOpts, _Mapping]] = ...) -> None: ...
+    react: GetOpts
+    def __init__(self, what: _Optional[str] = ..., desc: _Optional[_Union[GetOpts, _Mapping]] = ..., sub: _Optional[_Union[GetOpts, _Mapping]] = ..., data: _Optional[_Union[GetOpts, _Mapping]] = ..., react: _Optional[_Union[GetOpts, _Mapping]] = ..., **kwargs) -> None: ...
+
+class MsgReaction(_message.Message):
+    __slots__ = ["seq_id", "value", "count", "users"]
+    SEQ_ID_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    USERS_FIELD_NUMBER: _ClassVar[int]
+    seq_id: int
+    value: str
+    count: int
+    users: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, seq_id: _Optional[int] = ..., value: _Optional[str] = ..., count: _Optional[int] = ..., users: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class SetQuery(_message.Message):
     __slots__ = ["desc", "sub", "tags", "cred", "aux"]
@@ -509,7 +526,7 @@ class ServerCtrl(_message.Message):
     def __init__(self, id: _Optional[str] = ..., topic: _Optional[str] = ..., code: _Optional[int] = ..., text: _Optional[str] = ..., params: _Optional[_Mapping[str, bytes]] = ...) -> None: ...
 
 class ServerData(_message.Message):
-    __slots__ = ["topic", "from_user_id", "timestamp", "deleted_at", "seq_id", "head", "content"]
+    __slots__ = ["topic", "from_user_id", "timestamp", "deleted_at", "seq_id", "head", "content", "react"]
     class HeadEntry(_message.Message):
         __slots__ = ["key", "value"]
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -524,6 +541,7 @@ class ServerData(_message.Message):
     SEQ_ID_FIELD_NUMBER: _ClassVar[int]
     HEAD_FIELD_NUMBER: _ClassVar[int]
     CONTENT_FIELD_NUMBER: _ClassVar[int]
+    REACT_FIELD_NUMBER: _ClassVar[int]
     topic: str
     from_user_id: str
     timestamp: int
@@ -531,7 +549,8 @@ class ServerData(_message.Message):
     seq_id: int
     head: _containers.ScalarMap[str, bytes]
     content: bytes
-    def __init__(self, topic: _Optional[str] = ..., from_user_id: _Optional[str] = ..., timestamp: _Optional[int] = ..., deleted_at: _Optional[int] = ..., seq_id: _Optional[int] = ..., head: _Optional[_Mapping[str, bytes]] = ..., content: _Optional[bytes] = ...) -> None: ...
+    react: _containers.RepeatedCompositeFieldContainer[MsgReaction]
+    def __init__(self, topic: _Optional[str] = ..., from_user_id: _Optional[str] = ..., timestamp: _Optional[int] = ..., deleted_at: _Optional[int] = ..., seq_id: _Optional[int] = ..., head: _Optional[_Mapping[str, bytes]] = ..., content: _Optional[bytes] = ..., react: _Optional[_Iterable[_Union[MsgReaction, _Mapping]]] = ...) -> None: ...
 
 class ServerPres(_message.Message):
     __slots__ = ["topic", "src", "what", "user_agent", "seq_id", "del_id", "del_seq", "target_user_id", "actor_user_id", "acs"]
@@ -551,6 +570,7 @@ class ServerPres(_message.Message):
         DEL: _ClassVar[ServerPres.What]
         TAGS: _ClassVar[ServerPres.What]
         AUX: _ClassVar[ServerPres.What]
+        REACT: _ClassVar[ServerPres.What]
     X3: ServerPres.What
     ON: ServerPres.What
     OFF: ServerPres.What
@@ -565,6 +585,7 @@ class ServerPres(_message.Message):
     DEL: ServerPres.What
     TAGS: ServerPres.What
     AUX: ServerPres.What
+    REACT: ServerPres.What
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     SRC_FIELD_NUMBER: _ClassVar[int]
     WHAT_FIELD_NUMBER: _ClassVar[int]
@@ -588,7 +609,7 @@ class ServerPres(_message.Message):
     def __init__(self, topic: _Optional[str] = ..., src: _Optional[str] = ..., what: _Optional[_Union[ServerPres.What, str]] = ..., user_agent: _Optional[str] = ..., seq_id: _Optional[int] = ..., del_id: _Optional[int] = ..., del_seq: _Optional[_Iterable[_Union[SeqRange, _Mapping]]] = ..., target_user_id: _Optional[str] = ..., actor_user_id: _Optional[str] = ..., acs: _Optional[_Union[AccessMode, _Mapping]] = ...) -> None: ...
 
 class ServerMeta(_message.Message):
-    __slots__ = ["id", "topic", "desc", "sub", "tags", "cred", "aux"]
+    __slots__ = ["id", "topic", "desc", "sub", "tags", "cred", "aux", "react"]
     class AuxEntry(_message.Message):
         __slots__ = ["key", "value"]
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -604,6 +625,7 @@ class ServerMeta(_message.Message):
     TAGS_FIELD_NUMBER: _ClassVar[int]
     CRED_FIELD_NUMBER: _ClassVar[int]
     AUX_FIELD_NUMBER: _ClassVar[int]
+    REACT_FIELD_NUMBER: _ClassVar[int]
     id: str
     topic: str
     desc: TopicDesc
@@ -611,7 +633,8 @@ class ServerMeta(_message.Message):
     tags: _containers.RepeatedScalarFieldContainer[str]
     cred: _containers.RepeatedCompositeFieldContainer[ServerCred]
     aux: _containers.ScalarMap[str, bytes]
-    def __init__(self, id: _Optional[str] = ..., topic: _Optional[str] = ..., desc: _Optional[_Union[TopicDesc, _Mapping]] = ..., sub: _Optional[_Iterable[_Union[TopicSub, _Mapping]]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Iterable[_Union[ServerCred, _Mapping]]] = ..., aux: _Optional[_Mapping[str, bytes]] = ..., **kwargs) -> None: ...
+    react: _containers.RepeatedCompositeFieldContainer[MsgReaction]
+    def __init__(self, id: _Optional[str] = ..., topic: _Optional[str] = ..., desc: _Optional[_Union[TopicDesc, _Mapping]] = ..., sub: _Optional[_Iterable[_Union[TopicSub, _Mapping]]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Iterable[_Union[ServerCred, _Mapping]]] = ..., aux: _Optional[_Mapping[str, bytes]] = ..., react: _Optional[_Iterable[_Union[MsgReaction, _Mapping]]] = ..., **kwargs) -> None: ...
 
 class ServerInfo(_message.Message):
     __slots__ = ["topic", "from_user_id", "what", "seq_id", "src", "event", "payload"]
