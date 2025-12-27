@@ -26,9 +26,15 @@ func main() {
 	apikey := flag.String("validate", "", "API key to validate")
 	hmacSalt := flag.String("salt", "", "HMAC salt, 32 random bytes base64-encoded")
 
+	// Encryption key generation flags
+	encryptionKey := flag.Bool("encryption", false, "Generate encryption key instead of API key")
+	keySize := flag.Int("keysize", 32, "Encryption key size in bytes (16, 24, or 32 for AES-128/192/256)")
+
 	flag.Parse()
 
-	if *apikey != "" {
+	if *encryptionKey {
+		os.Exit(generateEncryptionKey(*keySize))
+	} else if *apikey != "" {
 		if *hmacSalt == "" {
 			log.Println("Error: must provide HMAC salt for key validation")
 			os.Exit(1)
@@ -169,6 +175,35 @@ func validate(apikey string, hmacSaltB64 string) int {
 	}
 
 	fmt.Printf("Valid v%d seq%d, [%s]\n", version, sequence, strIsRoot)
+
+	return 0
+}
+
+// generateEncryptionKey generates a random encryption key of specified size
+func generateEncryptionKey(keySize int) int {
+	// Validate key size - AES supports 16, 24, or 32 bytes
+	if keySize != 16 && keySize != 24 && keySize != 32 {
+		log.Printf("Error: Invalid key size %d. Must be 16 (AES-128), 24 (AES-192), or 32 (AES-256) bytes", keySize)
+		return 1
+	}
+
+	// Generate random key
+	key := make([]byte, keySize)
+	if _, err := rand.Read(key); err != nil {
+		log.Println("Error: Failed to generate random key", err)
+		return 1
+	}
+
+	// Encode to base64
+	encodedKey := base64.StdEncoding.EncodeToString(key)
+
+	// Output
+	fmt.Printf("Generated %d-byte encryption key:\n", keySize)
+	fmt.Printf("%s\n", encodedKey)
+	fmt.Printf("\nAdd this to your tinode.conf:\n")
+	fmt.Printf(`"encrypt_at_rest": {
+    "key": "%s"
+}`, encodedKey)
 
 	return 0
 }
