@@ -130,6 +130,22 @@ message GetQuery {
 	GetOpts sub = 3;
 	// Parameters of "data" request
 	GetOpts data = 4;
+	// Parameters of "del" request
+	GetOpts del = 5;
+	// Parameters of reactions request
+	GetOpts react = 6;
+}
+
+// Reaction summary for a message (used in Meta and Data messages)
+message MsgReaction {
+	// SeqId is 0 when MsgReaction is embedded in ServerData message.
+	int32 seq_id = 1;
+	// Reaction content (emoji etc.).
+	string value = 2;
+	// Number of users who reacted with this value (can be 0 for p2p and group topics).
+	int32 count = 3;
+	// User IDs of users who reacted with this value (can be nil for channels).
+	repeated string users = 4;
 }
 
 message SetQuery {
@@ -270,6 +286,8 @@ enum InfoNote {
 	RECV = 2;
 	KP = 3;
 	CALL = 4;
+	// Reaction notification
+	REACT = 5;
 }
 
 enum CallEvent {
@@ -308,7 +326,7 @@ message ClientExtra {
 }
 
 message ClientMsg {
-	oneof Message {
+	oneof message {
 		ClientHi hi = 1;
 		ClientAcc acc = 2;
 		ClientLogin login = 3;
@@ -423,6 +441,8 @@ message ServerData {
 	int32 seq_id = 4;
 	map<string, bytes> head = 5;
 	bytes content = 6;
+	// Aggregated reactions for this message
+	repeated MsgReaction react = 8;
 }
 
 // {pres} message
@@ -445,6 +465,7 @@ message ServerPres {
 		DEL = 11;
 		TAGS = 12;
 		AUX = 13;
+		REACT = 14;
 	}
 	What what = 3;
 	string user_agent = 4;
@@ -467,6 +488,8 @@ message ServerMeta {
 	repeated string tags = 6;
 	repeated ServerCred cred = 7;
 	map<string, bytes> aux = 8;
+	// Aggregated reactions for topic/messages (used by clients requesting react info)
+	repeated MsgReaction react = 9;
 }
 
 // {info} message: server-side copy of ClientNote with From and optional Src added.
@@ -482,7 +505,7 @@ message ServerInfo {
 
 // Cumulative message
 message ServerMsg {
-	oneof Message {
+	oneof message {
 		ServerCtrl ctrl = 1;
 		ServerData data = 2;
 		ServerPres pres = 3;

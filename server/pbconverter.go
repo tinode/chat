@@ -44,6 +44,7 @@ func pbServDataSerialize(data *MsgServerData) *pbx.ServerMsg_Data {
 			SeqId:      int32(data.SeqId),
 			Head:       interfaceMapToByteMap(data.Head),
 			Content:    interfaceToBytes(data.Content),
+			React:      pbMsgReactionsSerialize(data.Reactions),
 		},
 	}
 }
@@ -77,6 +78,8 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 		what = pbx.ServerPres_TAGS
 	case "aux":
 		what = pbx.ServerPres_AUX
+	case "react":
+		what = pbx.ServerPres_REACT
 	default:
 		logs.Info.Println("Unknown pres.what value", pres.What)
 	}
@@ -121,6 +124,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 			Tags:  meta.Tags,
 			Cred:  pbServerCredsSerialize(meta.Cred),
 			Aux:   interfaceMapToByteMap(meta.Aux),
+			React: pbMsgReactionsSerialize(meta.Reactions),
 		},
 	}
 }
@@ -168,6 +172,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			SeqId:     int(data.GetSeqId()),
 			Head:      byteMapToInterfaceMap(data.GetHead()),
 			Content:   data.GetContent(),
+			Reactions: pbMsgReactionsDeserialize(data.GetReact()),
 		}
 	} else if pres := pkt.GetPres(); pres != nil {
 		var what string
@@ -198,6 +203,8 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			what = "tags"
 		case pbx.ServerPres_AUX:
 			what = "aux"
+		case pbx.ServerPres_REACT:
+			what = "react"
 		}
 		msg.Pres = &MsgServerPres{
 			Topic:     pres.GetTopic(),
@@ -223,14 +230,15 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 		}
 	} else if meta := pkt.GetMeta(); meta != nil {
 		msg.Meta = &MsgServerMeta{
-			Id:    meta.GetId(),
-			Topic: meta.GetTopic(),
-			Desc:  pbTopicDescDeserialize(meta.GetDesc()),
-			Sub:   pbTopicSubSliceDeserialize(meta.GetSub()),
-			Del:   pbDelValuesDeserialize(meta.GetDel()),
-			Tags:  meta.GetTags(),
-			Cred:  pbServerCredsDeserialize(meta.GetCred()),
-			Aux:   byteMapToInterfaceMap(meta.GetAux()),
+			Id:        meta.GetId(),
+			Topic:     meta.GetTopic(),
+			Desc:      pbTopicDescDeserialize(meta.GetDesc()),
+			Sub:       pbTopicSubSliceDeserialize(meta.GetSub()),
+			Del:       pbDelValuesDeserialize(meta.GetDel()),
+			Tags:      meta.GetTags(),
+			Cred:      pbServerCredsDeserialize(meta.GetCred()),
+			Aux:       byteMapToInterfaceMap(meta.GetAux()),
+			Reactions: pbMsgReactionsDeserialize(meta.GetReact()),
 		}
 	}
 	return &msg
@@ -556,6 +564,50 @@ func int64ToTime(ts int64) *time.Time {
 	return nil
 }
 
+// MsgReaction <-> pbx.MsgReaction
+func pbMsgReactionSerialize(r MsgReaction) *pbx.MsgReaction {
+	if r.Value == "" && r.Count == 0 && r.SeqId == 0 && len(r.Users) == 0 {
+		return nil
+	}
+	return &pbx.MsgReaction{
+		SeqId: int32(r.SeqId),
+		Value: r.Value,
+		Count: int32(r.Count),
+		Users: r.Users,
+	}
+}
+
+func pbMsgReactionsSerialize(in []MsgReaction) []*pbx.MsgReaction {
+	if in == nil {
+		return nil
+	}
+	out := make([]*pbx.MsgReaction, 0, len(in))
+	for _, r := range in {
+		if pr := pbMsgReactionSerialize(r); pr != nil {
+			out = append(out, pr)
+		}
+	}
+	return out
+}
+
+func pbMsgReactionDeserialize(r *pbx.MsgReaction) MsgReaction {
+	if r == nil {
+		return MsgReaction{}
+	}
+	return MsgReaction{SeqId: int(r.GetSeqId()), Value: r.GetValue(), Count: int(r.GetCount()), Users: r.GetUsers()}
+}
+
+func pbMsgReactionsDeserialize(in []*pbx.MsgReaction) []MsgReaction {
+	if in == nil {
+		return nil
+	}
+	out := make([]MsgReaction, len(in))
+	for i, r := range in {
+		out[i] = pbMsgReactionDeserialize(r)
+	}
+	return out
+}
+
 func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 	if in == nil {
 		return nil
@@ -595,10 +647,32 @@ func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 			}
 		}
 	}
+	if in.Del != nil {
+		out.Del = &pbx.GetOpts{
+			BeforeId: int32(in.Del.BeforeId),
+			SinceId:  int32(in.Del.SinceId),
+			Limit:    int32(in.Del.Limit),
+		}
+	}
+	if in.React != nil {
+		out.React = &pbx.GetOpts{
+			IfModifiedSince: timeToInt64(in.React.IfModifiedSince),
+			BeforeId:        int32(in.React.BeforeId),
+			SinceId:         int32(in.React.SinceId),
+			Limit:           int32(in.React.Limit),
+		}
+		if len(in.React.IdRanges) > 0 {
+			out.React.Ranges = make([]*pbx.SeqRange, len(in.React.IdRanges))
+			for i, dq := range in.React.IdRanges {
+				out.React.Ranges[i] = &pbx.SeqRange{Low: int32(dq.LowId), Hi: int32(dq.HiId)}
+			}
+		}
+	}
 	return out
 }
 
 func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
+	// helper functions for reaction range conversions not necessary; implemented inline
 	if in == nil {
 		return nil
 	}
@@ -631,6 +705,28 @@ func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
 			for i, sr := range ranges {
 				msg.Data.IdRanges[i].LowId = int(sr.GetLow())
 				msg.Data.IdRanges[i].HiId = int(sr.GetHi())
+			}
+		}
+	}
+	if del := in.GetDel(); del != nil {
+		msg.Del = &MsgGetOpts{
+			BeforeId: int(del.GetBeforeId()),
+			SinceId:  int(del.GetSinceId()),
+			Limit:    int(del.GetLimit()),
+		}
+	}
+	if react := in.GetReact(); react != nil {
+		msg.React = &MsgGetOpts{
+			IfModifiedSince: int64ToTime(react.GetIfModifiedSince()),
+			BeforeId:        int(react.GetBeforeId()),
+			SinceId:         int(react.GetSinceId()),
+			Limit:           int(react.GetLimit()),
+		}
+		if ranges := react.GetRanges(); len(ranges) > 0 {
+			msg.React.IdRanges = make([]MsgRange, len(ranges))
+			for i, sr := range ranges {
+				msg.React.IdRanges[i].LowId = int(sr.GetLow())
+				msg.React.IdRanges[i].HiId = int(sr.GetHi())
 			}
 		}
 	}
@@ -756,6 +852,8 @@ func pbInfoNoteWhatSerialize(what string) pbx.InfoNote {
 		out = pbx.InfoNote_RECV
 	case "call":
 		out = pbx.InfoNote_CALL
+	case "react":
+		out = pbx.InfoNote_REACT
 	default:
 		logs.Info.Println("unknown info-note.what", what)
 	}
@@ -773,6 +871,8 @@ func pbInfoNoteWhatDeserialize(what pbx.InfoNote) string {
 		out = "recv"
 	case pbx.InfoNote_CALL:
 		out = "call"
+	case pbx.InfoNote_REACT:
+		out = "react"
 	default:
 	}
 	return out

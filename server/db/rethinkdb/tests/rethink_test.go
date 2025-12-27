@@ -685,36 +685,6 @@ func TestReactionsCRUD(t *testing.T) {
 	}
 
 	opts := &types.QueryOpt{IdRanges: []types.Range{{Low: seq}}}
-	// Debug: dump raw reactions from DB for topic+seq
-	{
-		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_SeqId", []any{topic, seq}).Run(conn)
-		if err == nil {
-			var raw []types.Reaction
-			if err = cursor.All(&raw); err == nil {
-				t.Logf("raw reactions after insert: %+v", raw)
-			}
-			cursor.Close()
-		}
-	}
-	// Debug: try selecting by composite index Topic_UserId_SeqId for u1 and u2
-	{
-		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_UserId_SeqId", []any{topic, u1.UserId(), seq}).Run(conn)
-		if err == nil {
-			var raw []types.Reaction
-			if err = cursor.All(&raw); err == nil {
-				t.Logf("raw reactions for u1 after insert: %+v", raw)
-			}
-			cursor.Close()
-		}
-		cursor, err = rdb.Table("reactions").GetAllByIndex("Topic_UserId_SeqId", []any{topic, u2.UserId(), seq}).Run(conn)
-		if err == nil {
-			var raw []types.Reaction
-			if err = cursor.All(&raw); err == nil {
-				t.Logf("raw reactions for u2 after insert: %+v", raw)
-			}
-			cursor.Close()
-		}
-	}
 
 	reacts, err := adp.ReactionGetAll(topic, u1, false, opts)
 	if err != nil {
@@ -778,17 +748,7 @@ func TestReactionsCRUD(t *testing.T) {
 	if err := adp.ReactionSave(r1b); err != nil {
 		t.Fatal(err)
 	}
-	// Debug: dump raw reactions after update
-	{
-		cursor, err := rdb.Table("reactions").GetAllByIndex("Topic_SeqId", []any{topic, seq}).Run(conn)
-		if err == nil {
-			var raw []types.Reaction
-			if err = cursor.All(&raw); err == nil {
-				t.Logf("raw reactions after update: %+v", raw)
-			}
-			cursor.Close()
-		}
-	}
+
 	reacts, err = adp.ReactionGetAll(topic, u1, false, opts)
 	if err != nil {
 		t.Fatal(err)
