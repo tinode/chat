@@ -16,6 +16,7 @@ type TestData struct {
 	Topics []*types.Topic
 	Subs   []*types.Subscription
 	Msgs   []*types.Message
+	Reacts []*types.Reaction
 	Devs   []*types.DeviceDef
 	Files  []*types.FileDef
 	// Tags: add, remove, reset
@@ -257,12 +258,14 @@ func initSubs(now time.Time, users []*types.User, topics []*types.Topic) []*type
 
 func initMessages(users []*types.User, topics []*types.Topic) []*types.Message {
 	msgs := make([]*types.Message, 0, 6)
+	// 0
 	msgs = append(msgs, &types.Message{
 		SeqId:   1,
 		Topic:   topics[0].Id,
 		From:    users[0].Id,
 		Content: "msg1",
 	})
+	// 1
 	msgs = append(msgs, &types.Message{
 		SeqId:   2,
 		Topic:   topics[0].Id,
@@ -272,24 +275,28 @@ func initMessages(users []*types.User, topics []*types.Topic) []*types.Message {
 			User:  users[0].Id,
 			DelId: 1}},
 	})
+	// 2
 	msgs = append(msgs, &types.Message{
 		SeqId:   3,
 		Topic:   topics[0].Id,
 		From:    users[0].Id,
 		Content: "msg31",
 	})
+	// 3
 	msgs = append(msgs, &types.Message{
 		SeqId:   1,
 		Topic:   topics[1].Id,
 		From:    users[1].Id,
 		Content: "msg1",
 	})
+	// 4
 	msgs = append(msgs, &types.Message{
 		SeqId:   5,
 		Topic:   topics[1].Id,
 		From:    users[1].Id,
 		Content: "msg2",
 	})
+	// 5
 	msgs = append(msgs, &types.Message{
 		SeqId:   11,
 		Topic:   topics[1].Id,
@@ -302,6 +309,76 @@ func initMessages(users []*types.User, topics []*types.Topic) []*types.Message {
 		msg.SetUid(types.Uid(i + 1))
 	}
 	return msgs
+}
+
+func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction {
+	reactions := make([]*types.Reaction, 0, 4)
+
+	// 0
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now().Add(-30 * time.Minute),
+		Topic:     msgs[3].Topic,
+		SeqId:     msgs[3].SeqId,
+		User:      users[0].Id,
+		Content:   "👍",
+	})
+	// 1
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now().Add(-20 * time.Minute),
+		Topic:     msgs[3].Topic,
+		SeqId:     msgs[3].SeqId,
+		User:      users[1].Id,
+		Content:   "👍",
+	})
+	// 2
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     msgs[3].Topic,
+		SeqId:     msgs[3].SeqId,
+		User:      users[1].Id,
+		Content:   "❤️",
+	})
+	// 3
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		Topic:     msgs[4].Topic,
+		SeqId:     msgs[4].SeqId,
+		User:      users[0].Id,
+		Content:   "old",
+	})
+	// 4
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     msgs[4].Topic,
+		SeqId:     msgs[4].SeqId,
+		User:      users[1].Id,
+		Content:   "new",
+	})
+	// 5
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     msgs[4].Topic,
+		SeqId:     msgs[4].SeqId,
+		User:      users[0].Id,
+		Content:   "A1",
+	})
+	// 6
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     msgs[4].Topic,
+		SeqId:     msgs[4].SeqId,
+		User:      users[1].Id,
+		Content:   "A2",
+	})
+	// 7
+	reactions = append(reactions, &types.Reaction{
+		CreatedAt: time.Now(),
+		Topic:     msgs[4].Topic,
+		SeqId:     msgs[5].SeqId,
+		User:      users[0].Id,
+		Content:   "B1",
+	})
+	return reactions
 }
 
 func initDevices(now time.Time) []*types.DeviceDef {
@@ -366,6 +443,7 @@ func InitTestData() *TestData {
 	}
 	var users = initUsers(now)
 	var topics = initTopics(now, users)
+	var messages = initMessages(users, topics)
 	return &TestData{
 		UGen:   uGen,
 		Users:  users,
@@ -373,7 +451,8 @@ func InitTestData() *TestData {
 		Recs:   initAuthRecords(now, users),
 		Topics: topics,
 		Subs:   initSubs(now, users, topics),
-		Msgs:   initMessages(users, topics),
+		Msgs:   messages,
+		Reacts: initReactions(messages, users),
 		Devs:   initDevices(now),
 		Files:  initFileDefs(now, users),
 		Tags:   initTags(),
