@@ -2729,7 +2729,6 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 			args = append(args, newargs...)
 		} else if opts.Since > 0 || opts.Before > 1 {
 			if opts.Since > 0 && opts.Before > 1 {
-				// Use m.seqid BETWEEN low AND high-1
 				args = append(args, opts.Since, opts.Before-1)
 				seqIdConstraint += " AND m.seqid BETWEEN ? AND ?"
 			} else if opts.Since > 0 {
@@ -2775,8 +2774,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 			break
 		}
 		if !asChan {
-			// Convert from numeric user ID to string UID.
-			// From is blank for channel readers.
+			// 'From' is blank for channel readers.
 			msg.From = common.EncodeUidString(msg.From).UserId()
 		}
 		msg.Content = common.FromJSON(msg.Content)
@@ -2788,6 +2786,9 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 	}
 	if err == nil {
 		err = rows.Err()
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if len(seqIds) > 0 {
@@ -3026,19 +3027,23 @@ func (a *adapter) ReactionSave(r *t.Reaction) error {
 		return err
 	}
 
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	_, err = tx.ExecContext(ctx,
 		"INSERT INTO reactions(createdat,topic,seqid,userid,content) VALUES(?,?,?,?,?) "+
 			"ON DUPLICATE KEY UPDATE content=?,createdat=?",
 		r.CreatedAt, r.Topic, r.SeqId, store.DecodeUid(t.ParseUid(r.User)), r.Content, r.Content, r.CreatedAt)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
 
 	// Update message UpdatedAt
 	_, err = tx.ExecContext(ctx, "UPDATE messages SET updatedat=? WHERE topic=? AND seqid=?", r.CreatedAt, r.Topic, r.SeqId)
 	if err != nil {
-		tx.Rollback()
 		return err
 	}
 

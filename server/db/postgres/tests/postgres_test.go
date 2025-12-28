@@ -264,7 +264,7 @@ func TestUserGet(t *testing.T) {
 		t.Error("user should be nil.")
 	}
 
-	got, err = adp.UserGet(types.ParseUserId("usr" + testData.Users[0].Id))
+	got, err = adp.UserGet(types.ParseUid(testData.Users[0].Id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestUserGetAll(t *testing.T) {
 		t.Error("result users should be zero length, got", len(got))
 	}
 
-	got, err = adp.UserGetAll(types.ParseUserId("usr"+testData.Users[0].Id), types.ParseUserId("usr"+testData.Users[1].Id))
+	got, err = adp.UserGetAll(types.ParseUid(testData.Users[0].Id), types.ParseUid(testData.Users[1].Id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestUserGetByCred(t *testing.T) {
 }
 
 func TestCredGetActive(t *testing.T) {
-	got, err := adp.CredGetActive(types.ParseUserId("usr"+testData.Users[2].Id), "tel")
+	got, err := adp.CredGetActive(types.ParseUid(testData.Users[2].Id), "tel")
 	if err != nil {
 		t.Error(err)
 	}
@@ -339,7 +339,7 @@ func TestCredGetActive(t *testing.T) {
 }
 
 func TestCredGetAll(t *testing.T) {
-	got, err := adp.CredGetAll(types.ParseUserId("usr"+testData.Users[2].Id), "", false)
+	got, err := adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,17 +347,17 @@ func TestCredGetAll(t *testing.T) {
 		t.Error(mismatchErrorString("Credentials length", len(got), 3))
 	}
 
-	got, _ = adp.CredGetAll(types.ParseUserId("usr"+testData.Users[2].Id), "tel", false)
+	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "tel", false)
 	if len(got) != 2 {
 		t.Error(mismatchErrorString("Credentials length", len(got), 2))
 	}
 
-	got, _ = adp.CredGetAll(types.ParseUserId("usr"+testData.Users[2].Id), "", true)
+	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "", true)
 	if len(got) != 1 {
 		t.Error(mismatchErrorString("Credentials length", len(got), 1))
 	}
 
-	got, _ = adp.CredGetAll(types.ParseUserId("usr"+testData.Users[2].Id), "tel", true)
+	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "tel", true)
 	if len(got) != 1 {
 		t.Error(mismatchErrorString("Credentials length", len(got), 1))
 	}
@@ -368,7 +368,7 @@ func TestAuthGetUniqueRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uid != types.ParseUserId("usr"+testData.Recs[0].UserId) ||
+	if uid != types.ParseUid(testData.Recs[0].UserId) ||
 		authLvl != testData.Recs[0].AuthLvl ||
 		!reflect.DeepEqual(secret, testData.Recs[0].Secret) ||
 		expires != testData.Recs[0].Expires {
@@ -620,17 +620,25 @@ func TestMessageGetAll(t *testing.T) {
 		Before: 2,
 		Limit:  999,
 	}
-	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), false, &opts)
+
+	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUid(testData.Users[0].Id), false, &opts)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Error getting messages with opts: %v", err)
 	}
 	if len(gotMsgs) != 1 {
 		t.Error(mismatchErrorString("Messages length opts", len(gotMsgs), 1))
 	}
-	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), false, nil)
+
+	gotMsgs, err = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUid(testData.Users[0].Id), false, nil)
+	if err != nil {
+		t.Fatalf("Error getting messages without opts: %v", err)
+	}
+
 	if len(gotMsgs) != 2 {
 		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
+		t.Fatalf("Got messages %+v", gotMsgs)
 	}
+
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, false, nil)
 	if len(gotMsgs) != 3 {
 		t.Error(mismatchErrorString("Messages length zero uid", len(gotMsgs), 3))
@@ -638,60 +646,33 @@ func TestMessageGetAll(t *testing.T) {
 }
 
 func TestReactionsCRUD(t *testing.T) {
-	// Create a fresh topic to avoid interference with other tests.
-	topic := testData.UGen.GetStr()
-	if err := adp.TopicCreate(&types.Topic{ObjHeader: types.ObjHeader{Id: topic, CreatedAt: time.Now(), UpdatedAt: time.Now()}, TouchedAt: time.Now(), Owner: testData.Users[0].Id}); err != nil {
-		t.Fatal(err)
-	}
-	// Set seqid so MessageGetAll will work as expected if needed.
-	if err := adp.TopicUpdate(topic, map[string]any{"seqid": 10}); err != nil {
-		t.Fatal(err)
-	}
+	// Use topic[1] which still has messages at this point in the test suite.
+	topic := testData.Topics[1].Id
 
-	// Create a message in the topic to attach reactions.
-	seq := 1
-	msg := &types.Message{ObjHeader: types.ObjHeader{CreatedAt: time.Now(), UpdatedAt: time.Now()}, SeqId: seq, Topic: topic, From: testData.Users[0].Id, Content: "msg1"}
-	if err := adp.MessageSave(msg); err != nil {
-		t.Fatal(err)
-	}
+	seq := testData.Reacts[0].SeqId
 
-	u1 := types.ParseUserId("usr" + testData.Users[0].Id)
-	u2 := types.ParseUserId("usr" + testData.Users[1].Id)
+	u00 := types.ParseUid(testData.Reacts[0].User)
+	u10 := types.ParseUid(testData.Reacts[1].User)
 
-	// nil opts should return empty map and no error
-	got, err := adp.ReactionGetAll(topic, u1, false, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
+	// No reactions added yet: should return nil map and no error.
+	got, err := adp.ReactionGetAll(topic, u00, false, nil)
+	if err == nil || len(got) != 0 {
 		t.Error("Expected no reactions for nil opts")
 	}
 
 	// Save two identical reactions from two users
-	r1 := &types.Reaction{
-		CreatedAt: time.Now().Add(-1 * time.Hour),
-		Topic:     topic,
-		SeqId:     seq,
-		User:      u1.UserId(),
-		Content:   "👍",
-	}
+	r1 := testData.Reacts[0]
 	if err := adp.ReactionSave(r1); err != nil {
 		t.Fatal(err)
 	}
 
-	r2 := &types.Reaction{
-		CreatedAt: time.Now().Add(-30 * time.Minute),
-		Topic:     topic,
-		SeqId:     seq,
-		User:      u2.UserId(),
-		Content:   "👍",
-	}
+	r2 := testData.Reacts[1]
 	if err := adp.ReactionSave(r2); err != nil {
 		t.Fatal(err)
 	}
 
 	opts := &types.QueryOpt{IdRanges: []types.Range{{Low: seq}}}
-	reacts, err := adp.ReactionGetAll(topic, u1, false, opts)
+	reacts, err := adp.ReactionGetAll(topic, u00, false, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -712,12 +693,13 @@ func TestReactionsCRUD(t *testing.T) {
 			}
 		}
 	}
+
 	if !found {
 		t.Error("expected 👍 reaction")
 	}
 
 	// asChan mode: counts and current user's marking
-	reactsChan, err := adp.ReactionGetAll(topic, u1, true, opts)
+	reactsChan, err := adp.ReactionGetAll(topic, u00, true, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -730,7 +712,7 @@ func TestReactionsCRUD(t *testing.T) {
 	for _, r := range rarr {
 		if r.Content == "👍" {
 			gotCnt = r.Cnt
-			if len(r.Users) == 1 && r.Users[0] == u1.UserId() {
+			if len(r.Users) == 1 && r.Users[0] == u00.UserId() {
 				gotMarked = true
 			}
 		}
@@ -743,17 +725,11 @@ func TestReactionsCRUD(t *testing.T) {
 	}
 
 	// Update reaction by changing u1 reaction to ❤️
-	r1b := &types.Reaction{
-		CreatedAt: time.Now(),
-		Topic:     topic,
-		SeqId:     seq,
-		User:      u1.UserId(),
-		Content:   "❤️",
-	}
+	r1b := testData.Reacts[2]
 	if err := adp.ReactionSave(r1b); err != nil {
 		t.Fatal(err)
 	}
-	reacts, err = adp.ReactionGetAll(topic, u1, false, opts)
+	reacts, err = adp.ReactionGetAll(topic, u00, false, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -781,46 +757,32 @@ func TestReactionsCRUD(t *testing.T) {
 	}
 
 	// Delete u2 reaction
-	if err := adp.ReactionDelete(topic, seq, u2); err != nil {
+	if err := adp.ReactionDelete(topic, seq, u00); err != nil {
 		t.Fatal(err)
 	}
-	reacts, err = adp.ReactionGetAll(topic, u1, false, opts)
+
+	reacts, err = adp.ReactionGetAll(topic, u00, false, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// After delete only ❤️ remains
-	onlyHeart := false
-	for _, arr := range reacts {
-		for _, r := range arr {
-			if r.Content == "❤️" {
-				onlyHeart = true
-			}
-			if r.Content == "👍" {
-				t.Error("👍 should be deleted")
-			}
-		}
+	if len(reacts) != 1 {
+		t.Error("Expected reaction to one message only after delete, got", len(reacts))
 	}
-	if !onlyHeart {
-		t.Error("expected only ❤️ reaction")
+
+	// After delete only ❤️ remains
+	for _, arr := range reacts {
+		if len(arr) != 1 {
+			t.Error("Expected only one reaction type after delete, got", len(arr))
+		} else if arr[0].Content != "❤️" {
+			t.Error("expected only ❤️ reaction")
+		}
 	}
 
 	// IfModifiedSince filter
 	// create old reaction and new reaction on another seq
-	seq2 := 2
-	old := &types.Reaction{
-		CreatedAt: time.Now().Add(-2 * time.Hour),
-		Topic:     topic,
-		SeqId:     seq2,
-		User:      u1.UserId(),
-		Content:   "old",
-	}
-	newr := &types.Reaction{
-		CreatedAt: time.Now(),
-		Topic:     topic,
-		SeqId:     seq2,
-		User:      u2.UserId(),
-		Content:   "new",
-	}
+	seq2 := testData.Reacts[3].SeqId
+	old := testData.Reacts[3]
+	newr := testData.Reacts[3]
 	if err := adp.ReactionSave(old); err != nil {
 		t.Fatal(err)
 	}
@@ -830,7 +792,7 @@ func TestReactionsCRUD(t *testing.T) {
 
 	ims := time.Now().Add(-30 * time.Minute)
 	opts2 := &types.QueryOpt{IdRanges: []types.Range{{Low: seq2}}, IfModifiedSince: &ims}
-	reacts, err = adp.ReactionGetAll(topic, u1, false, opts2)
+	reacts, err = adp.ReactionGetAll(topic, u10, false, opts2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -845,11 +807,9 @@ func TestReactionsCRUD(t *testing.T) {
 
 	// Check that LIMIT applies to number of messages (seqids), not number of reaction rows
 	// Create reactions for two different seqids
-	seqA := 10
-	seqB := 20
-	rA1 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqA, User: u1.UserId(), Content: "A1"}
-	rA2 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqA, User: u2.UserId(), Content: "A2"}
-	rB1 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqB, User: u1.UserId(), Content: "B1"}
+	rA1 := testData.Reacts[5]
+	rA2 := testData.Reacts[6]
+	rB1 := testData.Reacts[7]
 	if err := adp.ReactionSave(rA1); err != nil {
 		t.Fatal(err)
 	}
@@ -860,8 +820,8 @@ func TestReactionsCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	optsLimit := &types.QueryOpt{IdRanges: []types.Range{{Low: seqA}, {Low: seqB}}, Limit: 1}
-	reactsLimit, err := adp.ReactionGetAll(topic, u1, false, optsLimit)
+	optsLimit := &types.QueryOpt{IdRanges: []types.Range{{Low: testData.Reacts[5].SeqId}, {Low: testData.Reacts[7].SeqId}}, Limit: 1}
+	reactsLimit, err := adp.ReactionGetAll(topic, u00, false, optsLimit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -870,13 +830,13 @@ func TestReactionsCRUD(t *testing.T) {
 		t.Fatalf("expected 1 seqid due to limit, got %d", len(reactsLimit))
 	}
 	for k := range reactsLimit {
-		if k != seqB {
-			t.Fatalf("expected seqid %d (highest), got %d", seqB, k)
+		if k != testData.Reacts[7].SeqId {
+			t.Fatalf("expected seqid %d (highest), got %d", testData.Reacts[7].SeqId, k)
 		}
 	}
 
 	// Invalid QueryOpt (non-nil but no ranges/since/before) => error
-	_, err = adp.ReactionGetAll(topic, u1, false, &types.QueryOpt{})
+	_, err = adp.ReactionGetAll(topic, u00, false, &types.QueryOpt{})
 	if err == nil {
 		t.Error("expected error for invalid query options")
 	}
