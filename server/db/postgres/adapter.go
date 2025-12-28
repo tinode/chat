@@ -2804,8 +2804,9 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 
 	// Build sequence constraints from opts: either IdRanges OR Since+Before.
 	if opts == nil {
-		return make(map[int][]t.OneTypeReaction), nil
+		return nil, errors.New("missing query options")
 	}
+
 	seqConstraint := ""
 	seqArgs := make([]any, 0)
 	if len(opts.IdRanges) > 0 {
@@ -2830,15 +2831,41 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 	}
 
 	if opts.IfModifiedSince != nil {
-		seqConstraint += " AND createdat > ?"
+		seqConstraint += " AND updatedat > ?"
 		seqArgs = append(seqArgs, *opts.IfModifiedSince)
 	}
 
-	query, args := expandQuery("SELECT "+projection+" FROM reactions WHERE topic=?"+seqConstraint+" GROUP BY seqid,content",
-		topic, seqArgs)
-	if opts.Limit > 0 {
-		query += " LIMIT " + strconv.Itoa(opts.Limit)
+	var limit = a.maxResults
+	if opts.Limit > 0 && opts.Limit < limit {
+		limit = opts.Limit
 	}
+
+	// First, select DISTINCT seqids that match the constraints up to the limit
+	// so that LIMIT applies to number of messages (seqids) rather than total reaction rows.
+	seqIds := []int{}
+	q, qargs := expandQuery("SELECT seqid FROM messages WHERE topic=?"+seqConstraint+" ORDER BY seqid DESC LIMIT ?",
+		topic, seqArgs, limit)
+	rowsIds, err := a.db.Query(ctx, q, qargs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rowsIds.Close()
+	for rowsIds.Next() {
+		var seq int
+		if err := rowsIds.Scan(&seq); err != nil {
+			return nil, err
+		}
+		seqIds = append(seqIds, seq)
+	}
+
+	if len(seqIds) == 0 {
+		return nil, nil
+	}
+
+	// Restrict main query to these seqIds. Keep IfModifiedSince filter for main query as well.
+	seqConstraint = " AND seqid IN (?)"
+	query, args := expandQuery("SELECT "+projection+" FROM reactions WHERE topic=?"+seqConstraint+" GROUP BY seqid,content",
+		topic, seqIds)
 	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err

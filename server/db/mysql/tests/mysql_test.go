@@ -586,8 +586,8 @@ func TestMessageGetAll(t *testing.T) {
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUserId("usr"+testData.Users[0].Id), false, nil)
 	if len(gotMsgs) != 2 {
-		t.Fatalf("%+v", gotMsgs)
 		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
+		t.Fatalf("Got messages %+v", gotMsgs)
 	}
 	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, false, nil)
 	if len(gotMsgs) != 3 {
@@ -1318,10 +1318,7 @@ func TestReactionsCRUD(t *testing.T) {
 
 	// nil opts should return empty map and no error
 	got, err := adp.ReactionGetAll(topic, u1, false, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
+	if err == nil || len(got) != 0 {
 		t.Error("Expected no reactions for nil opts")
 	}
 
@@ -1507,6 +1504,38 @@ func TestReactionsCRUD(t *testing.T) {
 			if r.Content == "old" {
 				t.Error("old reaction should be filtered out by IfModifiedSince")
 			}
+		}
+	}
+
+	// Check that LIMIT applies to number of messages (seqids), not number of reaction rows
+	// Create reactions for two different seqids
+	seqA := 10
+	seqB := 20
+	rA1 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqA, User: u1.UserId(), Content: "A1"}
+	rA2 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqA, User: u2.UserId(), Content: "A2"}
+	rB1 := &types.Reaction{CreatedAt: time.Now(), Topic: topic, SeqId: seqB, User: u1.UserId(), Content: "B1"}
+	if err := adp.ReactionSave(rA1); err != nil {
+		t.Fatal(err)
+	}
+	if err := adp.ReactionSave(rA2); err != nil {
+		t.Fatal(err)
+	}
+	if err := adp.ReactionSave(rB1); err != nil {
+		t.Fatal(err)
+	}
+
+	optsLimit := &types.QueryOpt{IdRanges: []types.Range{{Low: seqA}, {Low: seqB}}, Limit: 1}
+	reactsLimit, err := adp.ReactionGetAll(topic, u1, false, optsLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Expect only one seqid returned (the highest seqid due to ORDER BY seqid DESC in adapter)
+	if len(reactsLimit) != 1 {
+		t.Fatalf("expected 1 seqid due to limit, got %d", len(reactsLimit))
+	}
+	for k := range reactsLimit {
+		if k != seqB {
+			t.Fatalf("expected seqid %d (highest), got %d", seqB, k)
 		}
 	}
 

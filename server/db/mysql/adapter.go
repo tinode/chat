@@ -2772,16 +2772,46 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 	seqIds := make([]int, 0, limit)
 	msgMap := make(map[int]*t.Message)
 	for rows.Next() {
-		var msg t.Message
-		if err = rows.StructScan(&msg); err != nil {
+		var (
+			createdAt  time.Time
+			updatedAt  time.Time
+			deletedAt  sql.NullTime
+			delId      int
+			seqId      int
+			topicName  string
+			fromId     sql.NullInt64
+			headRaw    []byte
+			contentRaw []byte
+		)
+		if err = rows.Scan(&createdAt, &updatedAt, &deletedAt, &delId, &seqId, &topicName, &fromId, &headRaw, &contentRaw); err != nil {
 			break
 		}
-		if !asChan {
-			// Convert from numeric user ID to string UID.
-			// From is blank for channel readers.
-			msg.From = common.EncodeUidString(msg.From).UserId()
+
+		var msg t.Message
+		msg.CreatedAt = createdAt
+		msg.UpdatedAt = updatedAt
+		if deletedAt.Valid {
+			msg.DeletedAt = &deletedAt.Time
 		}
-		msg.Content = common.FromJSON(msg.Content)
+		msg.DelId = delId
+		msg.SeqId = seqId
+		msg.Topic = topicName
+		if !asChan {
+			if fromId.Valid {
+				msg.From = store.EncodeUid(fromId.Int64).UserId()
+			} else {
+				msg.From = ""
+			}
+		}
+		if len(headRaw) > 0 {
+			if h := common.FromJSON(headRaw); h != nil {
+				if hm, ok := h.(map[string]any); ok {
+					msg.Head = t.KVMap(hm)
+				}
+			}
+		}
+		msg.Content = common.FromJSON(contentRaw)
+
 		msgs = append(msgs, msg)
 
 		// Prepare for reaction fetching.
@@ -3101,48 +3131,77 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 		projection = "seqid,content,COUNT(*) AS cnt"
 	}
 
+	if opts == nil {
+		return nil, errors.New("missing query options")
+	}
+
 	// Build sequence constraints from opts: either IdRanges OR Since+Before.
 	seqConstraint := ""
 	seqArgs := make([]any, 0)
-	if opts != nil {
-		if len(opts.IdRanges) > 0 {
-			constr, newargs := common.RangesToSql(opts.IdRanges)
-			seqConstraint = " AND seqid " + constr
-			seqArgs = append(seqArgs, newargs...)
-		} else if opts.Before > 1 || opts.Since > 0 {
-			if opts.Since > 0 && opts.Before > 1 {
-				// Use BETWEEN when both bounds specified. Before is exclusive.
-				seqConstraint = " AND seqid BETWEEN ? AND ?"
-				seqArgs = append(seqArgs, opts.Since, opts.Before-1)
-			} else if opts.Since > 0 {
-				seqConstraint = " AND seqid >= ?"
-				seqArgs = append(seqArgs, opts.Since)
-			} else {
-				// only Before set
-				seqConstraint = " AND seqid < ?"
-				seqArgs = append(seqArgs, opts.Before)
-			}
+	if len(opts.IdRanges) > 0 {
+		constr, newargs := common.RangesToSql(opts.IdRanges)
+		seqConstraint = " AND seqid " + constr
+		seqArgs = append(seqArgs, newargs...)
+	} else if opts.Before > 1 || opts.Since > 0 {
+		if opts.Since > 0 && opts.Before > 1 {
+			// Use BETWEEN when both bounds specified. Before is exclusive.
+			seqConstraint = " AND seqid BETWEEN ? AND ?"
+			seqArgs = append(seqArgs, opts.Since, opts.Before-1)
+		} else if opts.Since > 0 {
+			seqConstraint = " AND seqid >= ?"
+			seqArgs = append(seqArgs, opts.Since)
 		} else {
-			return nil, errors.New("invalid query options")
-		}
-
-		// IfModifiedSince applies as an additional filter on reactions' created time.
-		if opts.IfModifiedSince != nil {
-			seqConstraint += " AND createdat > ?"
-			seqArgs = append(seqArgs, *opts.IfModifiedSince)
+			// only Before set
+			seqConstraint = " AND seqid < ?"
+			seqArgs = append(seqArgs, opts.Before)
 		}
 	} else {
-		// No options specified -> nothing to select.
-		return make(map[int][]t.OneTypeReaction), nil
+		return nil, errors.New("invalid query options")
 	}
 
-	query := "SELECT " + projection + " FROM reactions WHERE topic=?" + seqConstraint + " GROUP BY seqid,content"
-	if opts.Limit > 0 {
-		query += " LIMIT ?"
-		seqArgs = append(seqArgs, opts.Limit)
+	// IfModifiedSince applies as an additional filter on messages' updated time.
+	if opts.IfModifiedSince != nil {
+		seqConstraint += " AND updatedat > ?"
+		seqArgs = append(seqArgs, *opts.IfModifiedSince)
 	}
 
+	var limit = a.maxResults
+	if opts.Limit > 0 && opts.Limit < limit {
+		limit = opts.Limit
+	}
+
+	// First, select seqids (messages) and restrict the main query to them so LIMIT applies to messages, not reactions.
+	seqIds := []int{}
+	query := "SELECT seqid FROM messages WHERE topic=?" + seqConstraint + " ORDER BY seqid DESC LIMIT ?"
 	args := append([]any{topic}, seqArgs...)
+	args = append(args, limit)
+	query, args, _ = sqlx.In(query, args...)
+	query = a.db.Rebind(query)
+	rowsIds, err := a.db.QueryxContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rowsIds.Close()
+	for rowsIds.Next() {
+		var seq int
+		if err := rowsIds.Scan(&seq); err != nil {
+			return nil, err
+		}
+		seqIds = append(seqIds, seq)
+	}
+
+	if len(seqIds) == 0 {
+		return nil, nil
+	}
+	// Restrict to the collected seqIds
+	seqConstraint = " AND seqid IN (?)"
+	seqArgs = make([]any, len(seqIds))
+	for i, s := range seqIds {
+		seqArgs[i] = s
+	}
+
+	query = "SELECT " + projection + " FROM reactions WHERE topic=?" + seqConstraint + " GROUP BY seqid,content"
+	args = append([]any{topic}, seqArgs...)
 	query, args, _ = sqlx.In(query, args...)
 	query = a.db.Rebind(query)
 	rows, err := a.db.QueryxContext(ctx, query, args...)
