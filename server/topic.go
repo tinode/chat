@@ -408,6 +408,11 @@ func (t *Topic) handleMetaGet(msg *ClientComMessage, asUid types.Uid, asChan boo
 			logs.Warn.Printf("topic[%s] meta.Get.Aux failed: %s", t.name, err)
 		}
 	}
+	if msg.MetaWhat&constMsgMetaReact != 0 {
+		if err := t.replyGetReact(msg.sess, asUid, msg.Get.React, msg); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.React failed: %s", t.name, err)
+		}
+	}
 }
 
 func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
@@ -689,7 +694,7 @@ func (t *Topic) handleSubscription(msg *ClientComMessage) error {
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
-		// Send get.tags response as a separate {meta} packet
+		// Send get.cred response as a separate {meta} packet
 		if err := t.replyGetCreds(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
@@ -713,6 +718,13 @@ func (t *Topic) handleSubscription(msg *ClientComMessage) error {
 		// Send get.del response as a separate {meta} packet
 		if err := t.replyGetDel(msg.sess, asUid, msgsub.Get.Del, msg); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, msg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaReact != 0 {
+		// Send get.react response as a separate {meta} packet
+		if err := t.replyGetReact(msg.sess, asUid, msgsub.Get.React, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.React failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
@@ -2815,11 +2827,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 				outgoingMessages := make([]*ServerComMessage, count)
 				for i := range messages {
 					mm := &messages[i]
-					var reactions []MsgReaction
+					var reactions []MsgOneReaction
 					if mm.Reactions != nil {
-						reactions = make([]MsgReaction, len(mm.Reactions))
+						reactions = make([]MsgOneReaction, len(mm.Reactions))
 						for j, r := range mm.Reactions {
-							reactions[j] = MsgReaction{
+							reactions[j] = MsgOneReaction{
 								Value: r.Content,
 								Count: r.Cnt,
 								Users: r.Users,
@@ -3197,6 +3209,66 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 
 	sess.queueOut(NoContentParams(id, toriginal, now, incomingReqTs, map[string]string{"what": "del"}))
 
+	return nil
+}
+
+// replyGetReact handles get.react requests by returning aggregated reactions for messages
+// identified by the requested ranges / since / before parameters. Response is sent as a
+// {meta} message with Meta.Reactions filled.
+func (t *Topic) replyGetReact(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
+	now := types.TimeNow()
+	toriginal := t.original(asUid)
+
+	id := msg.Id
+	incomingReqTs := msg.Timestamp
+	// Treating all requests as coming from a channel if the topic is a channel.
+	asChan := t.isChan
+	// Certain fields are not allowed in get.react
+	if req != nil && (req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformedReply(msg, now))
+		return errors.New("invalid MsgGetOpts query")
+	}
+
+	// Permission check: user must be able to read messages
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
+		// Fetch aggregated reactions from store
+		reacts, err := store.Messages.GetReactions(t.name, asUid, asChan, msgOpts2storeOpts(req))
+		if err != nil {
+			sess.queueOut(ErrUnknownReply(msg, now))
+			return err
+		}
+
+		if len(reacts) > 0 {
+			// Convert to MsgReactions list (one entry per message)
+			var rlist []MsgReactions
+			for _, agr := range reacts {
+				rs := MsgReactions{SeqId: agr.SeqId}
+				if len(agr.Data) > 0 {
+					rs.Reacts = make([]MsgOneReaction, len(agr.Data))
+					for i, dt := range agr.Data {
+						rs.Reacts[i] = MsgOneReaction{
+							Value: dt.Content,
+							Count: dt.Cnt,
+							Users: dt.Users,
+						}
+					}
+				}
+				rlist = append(rlist, rs)
+			}
+
+			sess.queueOut(&ServerComMessage{
+				Meta: &MsgServerMeta{
+					Id:        id,
+					Topic:     toriginal,
+					Reactions: rlist,
+					Timestamp: &now,
+				},
+			})
+			return nil
+		}
+	}
+
+	sess.queueOut(NoContentParams(id, toriginal, now, incomingReqTs, map[string]string{"what": "react"}))
 	return nil
 }
 

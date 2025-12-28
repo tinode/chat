@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.12
-// source: pbx/model.proto
+// source: model.proto
 
 package pbx
 
@@ -272,7 +272,7 @@ var Node_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "pbx/model.proto",
+	Metadata: "model.proto",
 }
 
 // PluginClient is the client API for Plugin service.
@@ -556,5 +556,5 @@ var Plugin_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "pbx/model.proto",
+	Metadata: "model.proto",
 }

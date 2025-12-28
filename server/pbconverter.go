@@ -44,7 +44,7 @@ func pbServDataSerialize(data *MsgServerData) *pbx.ServerMsg_Data {
 			SeqId:      int32(data.SeqId),
 			Head:       interfaceMapToByteMap(data.Head),
 			Content:    interfaceToBytes(data.Content),
-			React:      pbMsgReactionsSerialize(data.Reactions),
+			React:      pbMsgOneReactionsSerialize(data.Reactions),
 		},
 	}
 }
@@ -124,7 +124,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 			Tags:  meta.Tags,
 			Cred:  pbServerCredsSerialize(meta.Cred),
 			Aux:   interfaceMapToByteMap(meta.Aux),
-			React: pbMsgReactionsSerialize(meta.Reactions),
+			React: pbMsgReactionsMetaSerialize(meta.Reactions),
 		},
 	}
 }
@@ -172,7 +172,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			SeqId:     int(data.GetSeqId()),
 			Head:      byteMapToInterfaceMap(data.GetHead()),
 			Content:   data.GetContent(),
-			Reactions: pbMsgReactionsDeserialize(data.GetReact()),
+			Reactions: pbMsgOneReactionsDeserialize(data.GetReact()),
 		}
 	} else if pres := pkt.GetPres(); pres != nil {
 		var what string
@@ -238,7 +238,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Tags:      meta.GetTags(),
 			Cred:      pbServerCredsDeserialize(meta.GetCred()),
 			Aux:       byteMapToInterfaceMap(meta.GetAux()),
-			Reactions: pbMsgReactionsDeserialize(meta.GetReact()),
+			Reactions: pbMsgReactionsMetaDeserialize(meta.GetReact()),
 		}
 	}
 	return &msg
@@ -564,46 +564,69 @@ func int64ToTime(ts int64) *time.Time {
 	return nil
 }
 
-// MsgReaction <-> pbx.MsgReaction
-func pbMsgReactionSerialize(r MsgReaction) *pbx.MsgReaction {
-	if r.Value == "" && r.Count == 0 && r.SeqId == 0 && len(r.Users) == 0 {
+// MsgOneReaction <-> pbx.MsgOneReaction
+func pbMsgOneReactionSerialize(r MsgOneReaction) *pbx.MsgOneReaction {
+	if r.Value == "" && r.Count == 0 && len(r.Users) == 0 {
 		return nil
 	}
-	return &pbx.MsgReaction{
-		SeqId: int32(r.SeqId),
+	return &pbx.MsgOneReaction{
 		Value: r.Value,
 		Count: int32(r.Count),
 		Users: r.Users,
 	}
 }
 
-func pbMsgReactionsSerialize(in []MsgReaction) []*pbx.MsgReaction {
+func pbMsgOneReactionsSerialize(in []MsgOneReaction) []*pbx.MsgOneReaction {
 	if in == nil {
 		return nil
 	}
-	out := make([]*pbx.MsgReaction, 0, len(in))
+	out := make([]*pbx.MsgOneReaction, 0, len(in))
 	for _, r := range in {
-		if pr := pbMsgReactionSerialize(r); pr != nil {
+		if pr := pbMsgOneReactionSerialize(r); pr != nil {
 			out = append(out, pr)
 		}
 	}
 	return out
 }
 
-func pbMsgReactionDeserialize(r *pbx.MsgReaction) MsgReaction {
+func pbMsgOneReactionDeserialize(r *pbx.MsgOneReaction) MsgOneReaction {
 	if r == nil {
-		return MsgReaction{}
+		return MsgOneReaction{}
 	}
-	return MsgReaction{SeqId: int(r.GetSeqId()), Value: r.GetValue(), Count: int(r.GetCount()), Users: r.GetUsers()}
+	return MsgOneReaction{Value: r.GetValue(), Count: int(r.GetCount()), Users: r.GetUsers()}
 }
 
-func pbMsgReactionsDeserialize(in []*pbx.MsgReaction) []MsgReaction {
+func pbMsgOneReactionsDeserialize(in []*pbx.MsgOneReaction) []MsgOneReaction {
 	if in == nil {
 		return nil
 	}
-	out := make([]MsgReaction, len(in))
+	out := make([]MsgOneReaction, len(in))
 	for i, r := range in {
-		out[i] = pbMsgReactionDeserialize(r)
+		out[i] = pbMsgOneReactionDeserialize(r)
+	}
+	return out
+}
+
+// MsgReactions (meta) <-> pbx.MsgReactions
+func pbMsgReactionsMetaSerialize(in []MsgReactions) []*pbx.MsgReactions {
+	if in == nil {
+		return nil
+	}
+	out := make([]*pbx.MsgReactions, 0, len(in))
+	for _, r := range in {
+		pr := &pbx.MsgReactions{SeqId: int32(r.SeqId), Data: pbMsgOneReactionsSerialize(r.Reacts)}
+		out = append(out, pr)
+	}
+	return out
+}
+
+func pbMsgReactionsMetaDeserialize(in []*pbx.MsgReactions) []MsgReactions {
+	if in == nil {
+		return nil
+	}
+	out := make([]MsgReactions, len(in))
+	for i, r := range in {
+		out[i] = MsgReactions{SeqId: int(r.GetSeqId()), Reacts: pbMsgOneReactionsDeserialize(r.GetData())}
 	}
 	return out
 }

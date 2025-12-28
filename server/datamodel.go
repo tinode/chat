@@ -106,9 +106,8 @@ type MsgRange struct {
 	HiId  int `json:"hi,omitempty"`
 }
 
-type MsgReaction struct {
-	// SeqId is 0 when MsgReaction is embedded in MsgServerData message.
-	SeqId int `json:"seq,omitempty"`
+// MsgOneReaction describes one reaction type for a single message.
+type MsgOneReaction struct {
 	// Reaction content (emoji etc.).
 	Value string `json:"val,omitempty"`
 	// Number of users who reacted with this value (count be 0 for p2p and group topics).
@@ -117,14 +116,32 @@ type MsgReaction struct {
 	Users []string `json:"users,omitempty"`
 }
 
-func (src *MsgReaction) describe() string {
+func (src *MsgOneReaction) describe() string {
 	var s string
-	if src.SeqId != 0 {
-		s = "seq=" + strconv.Itoa(src.SeqId) + " "
-	}
 	s += "val='" + src.Value + "' count=" + strconv.Itoa(src.Count)
 	if src.Users != nil {
 		s += " users=[" + strings.Join(src.Users, ",") + "]"
+	}
+	return s
+}
+
+// MsgReactions describes all reactions for a single message.
+type MsgReactions struct {
+	// Message ID
+	SeqId int `json:"seq,omitempty"`
+	// Reactions
+	Reacts []MsgOneReaction `json:"reacts,omitempty"`
+}
+
+func (src *MsgReactions) describe() string {
+	var s string
+	s += "seq=" + strconv.Itoa(src.SeqId)
+	if src.Reacts != nil {
+		var x []string
+		for _, r := range src.Reacts {
+			x = append(x, r.describe())
+		}
+		s += " reacts=[" + strings.Join(x, ",") + "]"
 	}
 	return s
 }
@@ -147,7 +164,7 @@ type MsgClientHi struct {
 	Lang string `json:"lang,omitempty"`
 	// Platform code: ios, android, web.
 	Platform string `json:"platf,omitempty"`
-	// Session is initially in non-iteractive, i.e. issued by a service. Presence notifications are delayed.
+	// Session is initially non-interactive, i.e. issued by a service. Presence notifications are delayed.
 	Background bool `json:"bkg,omitempty"`
 }
 
@@ -220,6 +237,7 @@ const (
 	constMsgMetaDel
 	constMsgMetaCred
 	constMsgMetaAux
+	constMsgMetaReact
 )
 
 const (
@@ -249,8 +267,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaCred
 		case "aux":
 			bits |= constMsgMetaAux
-		default:
-			// ignore unknown
+		case "react":
+			bits |= constMsgMetaReact
 		}
 	}
 	return bits
@@ -633,13 +651,13 @@ func (src *MsgServerCtrl) describe() string {
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
-	From      string         `json:"from,omitempty"`
-	Timestamp time.Time      `json:"ts"`
-	DeletedAt *time.Time     `json:"deleted,omitempty"`
-	SeqId     int            `json:"seq"`
-	Head      map[string]any `json:"head,omitempty"`
-	Content   any            `json:"content"`
-	Reactions []MsgReaction  `json:"react,omitempty"`
+	From      string           `json:"from,omitempty"`
+	Timestamp time.Time        `json:"ts"`
+	DeletedAt *time.Time       `json:"deleted,omitempty"`
+	SeqId     int              `json:"seq"`
+	Head      map[string]any   `json:"head,omitempty"`
+	Content   any              `json:"content"`
+	Reactions []MsgOneReaction `json:"react,omitempty"`
 }
 
 // Deep-shallow copy.
@@ -763,7 +781,7 @@ type MsgServerMeta struct {
 	// Auxiliary data
 	Aux map[string]any `json:"aux,omitempty"`
 	// Reactions
-	Reactions []MsgReaction `json:"react,omitempty"`
+	Reactions []MsgReactions `json:"react,omitempty"`
 }
 
 // Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.

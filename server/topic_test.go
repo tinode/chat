@@ -398,6 +398,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
 
 	// User 3 isn't allowed to read.
+
 	pu3 := helper.topic.perUser[helper.uids[3]]
 	pu3.modeWant = types.ModeJoin | types.ModeWrite | types.ModePres
 	pu3.modeGiven = pu3.modeWant
@@ -3192,7 +3193,7 @@ func TestReplyDelMsgHardDelete(t *testing.T) {
 
 	pud1 := helper.topic.perUser[user1]
 	pud1.readID = 10
-	pud1.modeGiven = types.ModeCFull  // Full permissions including delete
+	pud1.modeGiven = types.ModeCFull // Full permissions including delete
 	pud1.modeWant = types.ModeCFull
 	helper.topic.perUser[user1] = pud1
 
@@ -3205,7 +3206,7 @@ func TestReplyDelMsgHardDelete(t *testing.T) {
 	// Simulate user1 doing a hard delete of messages 7 and 8
 	msg := &ClientComMessage{
 		Del: &MsgClientDel{
-			Id: "del123",
+			Id:   "del123",
 			What: "msg",
 			DelSeq: []MsgRange{
 				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
@@ -3260,17 +3261,17 @@ func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
 	helper.topic.lastID = 10
 
 	pud1 := helper.topic.perUser[user1]
-	pud1.readID = 10  // user1 has read all
+	pud1.readID = 10 // user1 has read all
 	helper.topic.perUser[user1] = pud1
 
 	pud2 := helper.topic.perUser[user2]
-	pud2.readID = 5   // user2 has 5 unread messages
+	pud2.readID = 5 // user2 has 5 unread messages
 	helper.topic.perUser[user2] = pud2
 
 	// Simulate user1 deleting messages 7 and 8 (2 of user2's unread messages)
 	msg := &ClientComMessage{
 		Del: &MsgClientDel{
-			Id: "del123",
+			Id:   "del123",
 			What: "msg",
 			DelSeq: []MsgRange{
 				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
@@ -3373,6 +3374,245 @@ func TestCalculateUnreadInRanges(t *testing.T) {
 					tt.readID, tt.lastID, tt.ranges, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestReplyGetReact_Malformed(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	// Clear any existing messages in session buffer
+	helper.results[0].messages = nil
+
+	msg := &ClientComMessage{Id: "mid", Original: "grp-test", Timestamp: time.Now()}
+	req := &MsgGetOpts{User: "usr123"} // invalid for get.react
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], req, msg)
+	if err == nil {
+		t.Fatal("expected error for malformed request")
+	}
+
+	// Wait briefly for session write loop to receive the message
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Ctrl == nil || m.Ctrl.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Malformed ctrl, got %+v", m.Ctrl)
+	}
+}
+
+func TestReplyGetReact_NoPermission(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	// Make user non-reader
+	pud := helper.topic.perUser[helper.uids[0]]
+	pud.modeGiven = types.ModeNone
+	pud.modeWant = types.ModeNone
+	helper.topic.perUser[helper.uids[0]] = pud
+
+	// Clear any existing messages in session buffer
+	helper.results[0].messages = nil
+
+	msg := &ClientComMessage{Id: "mid2", Original: "grp-test", Timestamp: time.Now()}
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], nil, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Wait briefly for session write loop to receive the message
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Ctrl == nil || m.Ctrl.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content, got %+v", m.Ctrl)
+	}
+}
+
+func TestReplyGetReact_WithReactions(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	// Clear any existing messages in session buffer
+	helper.results[0].messages = nil
+
+	// Expect store.GetReactions to be called and return one aggregated reaction
+	helper.mm.EXPECT().GetReactions("grp-test", helper.uids[0], false, gomock.Any()).Return([]types.AggrReaction{
+		{SeqId: 10, Data: []types.OneTypeReaction{{Content: ":+1:", Cnt: 2, Users: []string{helper.uids[0].UserId()}}}},
+	}, nil)
+
+	msg := &ClientComMessage{Id: "mid3", Original: "grp-test", Timestamp: time.Now()}
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], nil, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Wait briefly for session write loop to receive the message
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Meta == nil {
+		t.Fatalf("expected meta response, got %+v", m)
+	}
+	if len(m.Meta.Reactions) != 1 {
+		t.Fatalf("expected 1 message reactions, got %d", len(m.Meta.Reactions))
+	}
+	r := m.Meta.Reactions[0]
+	if r.SeqId != 10 {
+		t.Fatalf("expected SeqId=10, got %d", r.SeqId)
+	}
+	if len(r.Reacts) != 1 {
+		t.Fatalf("expected 1 react entry, got %d", len(r.Reacts))
+	}
+	r0 := r.Reacts[0]
+	if r0.Value != ":+1:" || r0.Count != 2 || len(r0.Users) != 1 || r0.Users[0] != helper.uids[0].UserId() {
+		t.Fatalf("unexpected reaction payload: %+v", r0)
+	}
+}
+
+func TestReplyGetReact_IfModifiedSince(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	helper.results[0].messages = nil
+
+	ims := time.Now().Add(-1 * time.Hour).UTC()
+	req := &MsgGetOpts{IfModifiedSince: &ims}
+
+	helper.mm.EXPECT().GetReactions("grp-test", helper.uids[0], false, gomock.Any()).DoAndReturn(
+		func(topic string, uid types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error) {
+			if opt == nil || opt.IfModifiedSince == nil || !opt.IfModifiedSince.Equal(ims) {
+				t.Fatalf("expected IfModifiedSince=%v, got %+v", ims, opt)
+			}
+			return nil, nil
+		})
+
+	msg := &ClientComMessage{Id: "mid-ims", Original: "grp-test", Timestamp: time.Now()}
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], req, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Wait for the response (204 expected)
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Ctrl == nil || m.Ctrl.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content, got %+v", m.Ctrl)
+	}
+}
+
+func TestReplyGetReact_Ranges(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	helper.results[0].messages = nil
+
+	req := &MsgGetOpts{IdRanges: []MsgRange{{LowId: 5, HiId: 10}, {LowId: 12, HiId: 15}}}
+
+	helper.mm.EXPECT().GetReactions("grp-test", helper.uids[0], false, gomock.Any()).DoAndReturn(
+		func(topic string, uid types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error) {
+			if opt == nil || len(opt.IdRanges) != 2 || opt.IdRanges[0].Low != 5 || opt.IdRanges[0].Hi != 10 {
+				t.Fatalf("unexpected IdRanges in opt: %+v", opt.IdRanges)
+			}
+			return nil, nil
+		})
+
+	msg := &ClientComMessage{Id: "mid-rng", Original: "grp-test", Timestamp: time.Now()}
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], req, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Wait for the response (204 expected)
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Ctrl == nil || m.Ctrl.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content, got %+v", m.Ctrl)
+	}
+}
+
+func TestReplyGetReact_AsChan(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 1, types.TopicCatGrp, "grp-test", true)
+	defer func() { helper.finish(); helper.tearDown() }()
+
+	// Make topic a channel
+	helper.topic.isChan = true
+	helper.results[0].messages = nil
+
+	helper.mm.EXPECT().GetReactions("grp-test", helper.uids[0], true, gomock.Any()).DoAndReturn(
+		func(topic string, uid types.Uid, asChan bool, opt *types.QueryOpt) ([]types.AggrReaction, error) {
+			if !asChan {
+				t.Fatalf("expected asChan=true, got false")
+			}
+			return []types.AggrReaction{{SeqId: 7, Data: []types.OneTypeReaction{{Content: ":heart:", Cnt: 3, Users: nil}}}}, nil
+		})
+
+	msg := &ClientComMessage{Id: "mid-chn", Original: "grp-test", Timestamp: time.Now()}
+
+	err := helper.topic.replyGetReact(helper.sessions[0], helper.uids[0], nil, msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for len(helper.results[0].messages) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(helper.results[0].messages) == 0 {
+		t.Fatal("expected a response in session")
+	}
+	m := helper.results[0].messages[0].(*ServerComMessage)
+	if m.Meta == nil {
+		t.Fatalf("expected meta response, got %+v", m)
+	}
+	if len(m.Meta.Reactions) != 1 {
+		t.Fatalf("expected 1 message reactions, got %d", len(m.Meta.Reactions))
+	}
+	if m.Meta.Reactions[0].SeqId != 7 {
+		t.Fatalf("expected SeqId=7, got %d", m.Meta.Reactions[0].SeqId)
+	}
+	if len(m.Meta.Reactions[0].Reacts) != 1 {
+		t.Fatalf("expected 1 react, got %d", len(m.Meta.Reactions[0].Reacts))
+	}
+	if m.Meta.Reactions[0].Reacts[0].Value != ":heart:" || m.Meta.Reactions[0].Reacts[0].Count != 3 {
+		t.Fatalf("unexpected reaction content: %+v", m.Meta.Reactions[0].Reacts[0])
 	}
 }
 

@@ -136,16 +136,22 @@ message GetQuery {
 	GetOpts react = 6;
 }
 
-// Reaction summary for a message (used in Meta and Data messages)
-message MsgReaction {
-	// SeqId is 0 when MsgReaction is embedded in ServerData message.
-	int32 seq_id = 1;
+// Reaction of a single type for one message.
+message MsgOneReaction {
 	// Reaction content (emoji etc.).
 	string value = 2;
 	// Number of users who reacted with this value (can be 0 for p2p and group topics).
 	int32 count = 3;
 	// User IDs of users who reacted with this value (can be nil for channels).
 	repeated string users = 4;
+}
+
+// Aggregated reactions of all types for a message
+message MsgReactions {
+	// Message sequence ID.
+	int32 seq_id = 1;
+	// List of reactions for this message.
+	repeated MsgOneReaction data = 2;
 }
 
 message SetQuery {
@@ -442,7 +448,7 @@ message ServerData {
 	map<string, bytes> head = 5;
 	bytes content = 6;
 	// Aggregated reactions for this message
-	repeated MsgReaction react = 8;
+	repeated MsgOneReaction react = 8;
 }
 
 // {pres} message
@@ -488,8 +494,8 @@ message ServerMeta {
 	repeated string tags = 6;
 	repeated ServerCred cred = 7;
 	map<string, bytes> aux = 8;
-	// Aggregated reactions for topic/messages (used by clients requesting react info)
-	repeated MsgReaction react = 9;
+	// Aggregated reactions for messages.
+	repeated MsgReactions react = 9;
 }
 
 // {info} message: server-side copy of ClientNote with From and optional Src added.
