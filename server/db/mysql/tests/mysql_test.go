@@ -19,14 +19,13 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jmoiron/sqlx"
 	adapter "github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/store"
 	jcr "github.com/tinode/jsonco"
 
 	"github.com/tinode/chat/server/db/common/test_data"
+	"github.com/tinode/chat/server/db/common/testsuite"
 	backend "github.com/tinode/chat/server/db/mysql"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
@@ -77,79 +76,15 @@ func TestUserCreate(t *testing.T) {
 }
 
 func TestCredUpsert(t *testing.T) {
-	// Test just inserts:
-	for i := 0; i < 2; i++ {
-		inserted, err := adp.CredUpsert(testData.Creds[i])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !inserted {
-			t.Error("Should be inserted, but updated")
-		}
-	}
-
-	// Test duplicate:
-	_, err := adp.CredUpsert(testData.Creds[1])
-	if err != types.ErrDuplicate {
-		t.Error("Should return duplicate error but got", err)
-	}
-	_, err = adp.CredUpsert(testData.Creds[2])
-	if err != types.ErrDuplicate {
-		t.Error("Should return duplicate error but got", err)
-	}
-
-	// Test add new unvalidated credentials
-	inserted, err := adp.CredUpsert(testData.Creds[3])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !inserted {
-		t.Error("Should be inserted, but updated")
-	}
-	inserted, err = adp.CredUpsert(testData.Creds[3])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if inserted {
-		t.Error("Should be updated, but inserted")
-	}
-
-	// Just insert other creds (used in other tests)
-	for _, cred := range testData.Creds[4:] {
-		_, err = adp.CredUpsert(cred)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	testsuite.RunCredUpsert(t, adp, testData)
 }
 
 func TestAuthAddRecord(t *testing.T) {
-	for _, rec := range testData.Recs {
-		err := adp.AuthAddRecord(types.ParseUid(rec.UserId), rec.Scheme, rec.Unique,
-			rec.AuthLvl, rec.Secret, rec.Expires)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	//Test duplicate
-	err := adp.AuthAddRecord(types.ParseUid(testData.Users[0].Id), testData.Recs[0].Scheme,
-		testData.Recs[0].Unique, testData.Recs[0].AuthLvl, testData.Recs[0].Secret, testData.Recs[0].Expires)
-	if err != types.ErrDuplicate {
-		t.Fatal("Should be duplicate error but got", err)
-	}
+	testsuite.RunAuthAddRecord(t, adp, testData)
 }
 
 func TestTopicCreate(t *testing.T) {
-	err := adp.TopicCreate(testData.Topics[0])
-	if err != nil {
-		t.Error(err)
-	}
-	for _, tpc := range testData.Topics[3:] {
-		err = adp.TopicCreate(tpc)
-		if err != nil {
-			t.Error(err)
-		}
-	}
+	testsuite.RunTopicCreate(t, adp, testData)
 }
 
 func decodeUid(u string) int64 {
@@ -182,436 +117,84 @@ func TestTopicCreateP2P(t *testing.T) {
 }
 
 func TestTopicShare(t *testing.T) {
-	if err := adp.TopicShare(testData.Subs[0].Topic, testData.Subs); err != nil {
-		t.Fatal(err)
-	}
-
-	// Must save recvseqid and readseqid separately because TopicShare
-	// ignores them.
-	for _, sub := range testData.Subs {
-		adp.SubsUpdate(sub.Topic, types.ParseUid(sub.User), map[string]any{
-			"delid":     sub.DelId,
-			"recvseqid": sub.RecvSeqId,
-			"readseqid": sub.ReadSeqId,
-		})
-	}
-
-	// Update topic SeqId because it's not saved at creation time but used by the tests.
-	for _, tpc := range testData.Topics {
-		err := adp.TopicUpdate(tpc.Id, map[string]any{
-			"seqid": tpc.SeqId,
-			"delid": tpc.DelId,
-		})
-		if err != nil {
-			t.Error(err)
-		}
-	}
+	testsuite.RunTopicShare(t, adp, testData)
 }
 
 func TestMessageSave(t *testing.T) {
-	for _, msg := range testData.Msgs {
-		err := adp.MessageSave(msg)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Some messages are soft deleted, but it's ignored by adp.MessageSave
-	for _, msg := range testData.Msgs {
-		if len(msg.DeletedFor) > 0 {
-			for _, del := range msg.DeletedFor {
-				toDel := types.DelMessage{
-					Topic:       msg.Topic,
-					DeletedFor:  del.User,
-					DelId:       del.DelId,
-					SeqIdRanges: []types.Range{{Low: msg.SeqId}},
-				}
-				adp.MessageDeleteList(msg.Topic, &toDel)
-			}
-		}
-	}
+	testsuite.RunMessageSave(t, adp, testData)
 }
 
 func TestFileStartUpload(t *testing.T) {
-	for _, f := range testData.Files {
-		err := adp.FileStartUpload(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	testsuite.RunFileStartUpload(t, adp, testData)
 }
 
 // ================== Read tests ==================================
 func TestUserGet(t *testing.T) {
-	// Test not found
-	got, err := adp.UserGet(dummyUid1)
-	if err == nil && got != nil {
-		t.Error("user should be nil.")
-	}
-
-	got, err = adp.UserGet(types.ParseUserId("usr" + testData.Users[0].Id))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// User agent is not stored when creating a user. Make sure it's the same.
-	got.UserAgent = testData.Users[0].UserAgent
-	got.CreatedAt = testData.Users[0].CreatedAt
-	got.UpdatedAt = testData.Users[0].UpdatedAt
-
-	if !reflect.DeepEqual(got, testData.Users[0]) {
-		t.Error(mismatchErrorString("User", got, testData.Users[0]))
-	}
+	testsuite.RunUserGet(t, adp, testData)
 }
 
 func TestUserGetAll(t *testing.T) {
-	// Test not found (dummy UIDs).
-	got, err := adp.UserGetAll(dummyUid1, dummyUid2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) > 0 {
-		t.Error("result users should be zero length, got", len(got))
-	}
-
-	got, err = adp.UserGetAll(types.ParseUid(testData.Users[0].Id), types.ParseUid(testData.Users[1].Id))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatal(mismatchErrorString("resultUsers length", len(got), 2))
-	}
-	for i, usr := range got {
-		// User agent is not compared.
-		usr.UserAgent = testData.Users[i].UserAgent
-		usr.CreatedAt = testData.Users[i].CreatedAt
-		usr.UpdatedAt = testData.Users[i].UpdatedAt
-		if !reflect.DeepEqual(&usr, testData.Users[i]) {
-			t.Error(mismatchErrorString("User", &usr, testData.Users[i]))
-		}
-	}
+	testsuite.RunUserGetAll(t, adp, testData)
 }
 
 func TestUserGetByCred(t *testing.T) {
-	// Test not found
-	got, err := adp.UserGetByCred("foo", "bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != types.ZeroUid {
-		t.Error("result uid should be ZeroUid")
-	}
-
-	got, _ = adp.UserGetByCred(testData.Creds[0].Method, testData.Creds[0].Value)
-	if got != types.ParseUid(testData.Creds[0].User) {
-		t.Error(mismatchErrorString("Uid", got, types.ParseUid(testData.Creds[0].User)))
-	}
+	testsuite.RunUserGetByCred(t, adp, testData)
 }
 
 func TestCredGetActive(t *testing.T) {
-	got, err := adp.CredGetActive(types.ParseUid(testData.Users[2].Id), "tel")
-	if err != nil {
-		t.Error(err)
-	}
-	if !reflect.DeepEqual(got, testData.Creds[3]) {
-		t.Error(mismatchErrorString("Credential", got, testData.Creds[3]))
-	}
-
-	// Test not found
-	got, err = adp.CredGetActive(dummyUid1, "")
-	if err != nil {
-		t.Error(err)
-	}
-	if got != nil {
-		t.Error("result should be nil, but got", got)
-	}
+	testsuite.RunCredGetActive(t, adp, testData)
 }
 
 func TestCredGetAll(t *testing.T) {
-	got, err := adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 3 {
-		t.Error(mismatchErrorString("Credentials length", len(got), 3))
-	}
-
-	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "tel", false)
-	if len(got) != 2 {
-		t.Error(mismatchErrorString("Credentials length", len(got), 2))
-	}
-
-	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "", true)
-	if len(got) != 1 {
-		t.Error(mismatchErrorString("Credentials length", len(got), 1))
-	}
-
-	got, _ = adp.CredGetAll(types.ParseUid(testData.Users[2].Id), "tel", true)
-	if len(got) != 1 {
-		t.Error(mismatchErrorString("Credentials length", len(got), 1))
-	}
+	testsuite.RunCredGetAll(t, adp, testData)
 }
 
 func TestAuthGetUniqueRecord(t *testing.T) {
-	uid, authLvl, secret, expires, err := adp.AuthGetUniqueRecord("basic:alice")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if uid != types.ParseUid(testData.Recs[0].UserId) ||
-		authLvl != testData.Recs[0].AuthLvl ||
-		!reflect.DeepEqual(secret, testData.Recs[0].Secret) ||
-		expires != testData.Recs[0].Expires {
-
-		got := fmt.Sprintf("%v %v %v %v", uid, authLvl, secret, expires)
-		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].UserId, testData.Recs[0].AuthLvl, testData.Recs[0].Secret, testData.Recs[0].Expires)
-		t.Error(mismatchErrorString("Auth record", got, want))
-	}
-
-	// Test not found
-	uid, _, _, _, err = adp.AuthGetUniqueRecord("qwert:asdfg")
-	if err == nil && !uid.IsZero() {
-		t.Error("Auth record found but shouldn't. Uid:", uid.String())
-	}
+	testsuite.RunAuthGetUniqueRecord(t, adp, testData)
 }
 
 func TestAuthGetRecord(t *testing.T) {
-	recId, authLvl, secret, expires, err := adp.AuthGetRecord(types.ParseUid(testData.Recs[0].UserId), "basic")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if recId != testData.Recs[0].Unique ||
-		authLvl != testData.Recs[0].AuthLvl ||
-		!reflect.DeepEqual(secret, testData.Recs[0].Secret) ||
-		expires != testData.Recs[0].Expires {
-
-		got := fmt.Sprintf("%v %v %v %v", recId, authLvl, secret, expires)
-		want := fmt.Sprintf("%v %v %v %v", testData.Recs[0].Unique, testData.Recs[0].AuthLvl, testData.Recs[0].Secret, testData.Recs[0].Expires)
-		t.Error(mismatchErrorString("Auth record", got, want))
-	}
-
-	// Test not found
-	recId, _, _, _, err = adp.AuthGetRecord(types.Uid(123), "scheme")
-	if err != types.ErrNotFound {
-		t.Error("Auth record found but shouldn't. recId:", recId)
-	}
+	testsuite.RunAuthGetRecord(t, adp, testData)
 }
 
 func TestTopicGet(t *testing.T) {
-	got, err := adp.TopicGet(testData.Topics[0].Id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(got, testData.Topics[0]) {
-		t.Error(mismatchErrorString("Topic", got, testData.Topics[0]))
-	}
-	// Test not found
-	got, err = adp.TopicGet("asdfasdfasdf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != nil {
-		t.Error("Topic should be nil but got:", got)
-	}
+	testsuite.RunTopicGet(t, adp, testData)
 }
 
 func TestTopicsForUser(t *testing.T) {
-	qOpts := types.QueryOpt{
-		Topic: "p2p9AVDamaNCRbfKzGSh3mE0w",
-		Limit: 999,
-	}
-	gotSubs, err := adp.TopicsForUser(types.ParseUid(testData.Users[0].Id), false, &qOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 1 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
-	}
-
-	gotSubs, err = adp.TopicsForUser(types.ParseUid(testData.Users[1].Id), true, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 2 {
-		t.Error(mismatchErrorString("Subs length (2)", len(gotSubs), 2))
-	}
-
-	qOpts.Topic = ""
-	ims := testData.Now.Add(15 * time.Minute)
-	qOpts.IfModifiedSince = &ims
-	gotSubs, err = adp.TopicsForUser(types.ParseUid(testData.Users[0].Id), false, &qOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 1 {
-		t.Error(mismatchErrorString("Subs length (IMS)", len(gotSubs), 1))
-	}
-
-	ims = time.Now().Add(15 * time.Minute)
-	gotSubs, err = adp.TopicsForUser(types.ParseUid(testData.Users[0].Id), false, &qOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 0 {
-		t.Error(mismatchErrorString("Subs length (IMS 2)", len(gotSubs), 0))
-	}
+	testsuite.RunTopicsForUser(t, adp, testData)
 }
 
 func TestUsersForTopic(t *testing.T) {
-	qOpts := types.QueryOpt{
-		User:  types.ParseUserId("usr" + testData.Users[0].Id),
-		Limit: 999,
-	}
-	gotSubs, err := adp.UsersForTopic("grpgRXf0rU4uR4", false, &qOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 1 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
-	}
-
-	gotSubs, err = adp.UsersForTopic("grpgRXf0rU4uR4", true, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 2 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 2))
-	}
-
-	gotSubs, err = adp.UsersForTopic("p2p9AVDamaNCRbfKzGSh3mE0w", false, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 2 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 2))
-	}
+	testsuite.RunUsersForTopic(t, adp, testData)
 }
 
 func TestOwnTopics(t *testing.T) {
-	gotSubs, err := adp.OwnTopics(types.ParseUserId("usr" + testData.Users[0].Id))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(gotSubs) != 1 {
-		t.Fatalf("Got topic length %v instead of %v", len(gotSubs), 1)
-	}
-	if gotSubs[0] != testData.Topics[0].Id {
-		t.Errorf("Got topic %v instead of %v", gotSubs[0], testData.Topics[0].Id)
-	}
+	testsuite.RunOwnTopics(t, adp, testData)
 }
 
 func TestSubscriptionGet(t *testing.T) {
-	got, err := adp.SubscriptionGet(testData.Topics[0].Id, types.ParseUid(testData.Users[0].Id), false)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if diff := cmp.Diff(got, testData.Subs[0],
-		cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{})); diff != "" {
-		t.Error(mismatchErrorString("Subs", diff, ""))
-	}
-	// Test not found
-	got, err = adp.SubscriptionGet("dummytopic", dummyUid1, false)
-	if err != nil {
-		t.Error(err)
-	}
-	if got != nil {
-		t.Error("result sub should be nil.")
-	}
+	testsuite.RunSubscriptionGet(t, adp, testData)
 }
 
 func TestSubsForUser(t *testing.T) {
-	gotSubs, err := adp.SubsForUser(types.ParseUserId("usr" + testData.Users[0].Id))
-	if err != nil {
-		t.Error(err)
-	}
-	if len(gotSubs) != 2 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
-	}
-
-	// Test not found
-	gotSubs, err = adp.SubsForUser(types.ParseUserId("usr12345678"))
-	if err != nil {
-		t.Error(err)
-	}
-	if len(gotSubs) != 0 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 0))
-	}
+	testsuite.RunSubsForUser(t, adp, testData)
 }
 
 func TestSubsForTopic(t *testing.T) {
-	qOpts := types.QueryOpt{
-		User:  types.ParseUserId("usr" + testData.Users[0].Id),
-		Limit: 999,
-	}
-	gotSubs, err := adp.SubsForTopic(testData.Topics[0].Id, false, &qOpts)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(gotSubs) != 1 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 1))
-	}
-	// Test not found
-	gotSubs, err = adp.SubsForTopic("dummytopicid", false, nil)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(gotSubs) != 0 {
-		t.Error(mismatchErrorString("Subs length", len(gotSubs), 0))
-	}
+	testsuite.RunSubsForTopic(t, adp, testData)
 }
 
 func TestFind(t *testing.T) {
-	reqTags := [][]string{{"alice", "bob", "carol", "travel", "qwer", "asdf", "zxcv"}}
-	got, err := adp.Find("usr"+testData.Users[2].Id, "", reqTags, nil, true)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(got) != 3 {
-		t.Error(mismatchErrorString("result length", len(got), 3))
-	}
+	testsuite.RunFind(t, adp, testData)
 }
 
 func TestMessageGetAll(t *testing.T) {
-	opts := types.QueryOpt{
-		Since:  1,
-		Before: 2,
-		Limit:  999,
-	}
-
-	gotMsgs, err := adp.MessageGetAll(testData.Topics[0].Id, types.ParseUid(testData.Users[0].Id), false, &opts)
-	if err != nil {
-		t.Fatalf("Error getting messages with opts: %v", err)
-	}
-	if len(gotMsgs) != 1 {
-		t.Error(mismatchErrorString("Messages length opts", len(gotMsgs), 1))
-	}
-
-	gotMsgs, err = adp.MessageGetAll(testData.Topics[0].Id, types.ParseUid(testData.Users[0].Id), false, nil)
-	if err != nil {
-		t.Fatalf("Error getting messages without opts: %v", err)
-	}
-
-	if len(gotMsgs) != 2 {
-		t.Error(mismatchErrorString("Messages length no opts", len(gotMsgs), 2))
-		t.Fatalf("Got messages %+v", gotMsgs)
-	}
-
-	gotMsgs, _ = adp.MessageGetAll(testData.Topics[0].Id, types.ZeroUid, false, nil)
-	if len(gotMsgs) != 3 {
-		t.Error(mismatchErrorString("Messages length zero uid", len(gotMsgs), 3))
-	}
+	testsuite.RunMessageGetAll(t, adp, testData)
 }
 
 func TestFileGet(t *testing.T) {
-	// General test done during TestFileFinishUpload().
-
-	// Test not found
-	got, err := adp.FileGet("dummyfileid")
-	if err != nil {
-		if got != nil {
-			t.Error("File found but shouldn't:", got)
-		}
-	}
+	testsuite.RunFileGet(t, adp)
 }
 
 // ================== Update tests ================================
@@ -647,7 +230,7 @@ func TestUserUpdateTags(t *testing.T) {
 	addTags := testData.Tags[0]
 	removeTags := testData.Tags[1]
 	resetTags := testData.Tags[2]
-	uid := types.ParseUserId("usr" + testData.Users[0].Id)
+	uid := types.ParseUid(testData.Users[0].Id)
 
 	got, err := adp.UserUpdateTags(uid, addTags, nil, nil)
 	if err != nil {
@@ -942,16 +525,7 @@ func TestDeviceUpsert(t *testing.T) {
 }
 
 func TestFileFinishUpload(t *testing.T) {
-	got, err := adp.FileFinishUpload(testData.Files[0], true, 22222)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != types.UploadCompleted {
-		t.Error(mismatchErrorString("Status", got.Status, types.UploadCompleted))
-	}
-	if got.Size != 22222 {
-		t.Error(mismatchErrorString("Size", got.Size, 22222))
-	}
+	testsuite.RunFileFinishUpload(t, adp, testData)
 }
 
 func TestMessageAttachments(t *testing.T) {
@@ -974,22 +548,7 @@ func TestMessageAttachments(t *testing.T) {
 
 // ================== Other tests =================================
 func TestDeviceGetAll(t *testing.T) {
-	uid0 := types.ParseUserId("usr" + testData.Users[0].Id)
-	uid1 := types.ParseUserId("usr" + testData.Users[1].Id)
-	uid2 := types.ParseUserId("usr" + testData.Users[2].Id)
-	gotDevs, count, err := adp.DeviceGetAll(uid0, uid1, uid2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 2 {
-		t.Fatal(mismatchErrorString("count", count, 2))
-	}
-	if !reflect.DeepEqual(gotDevs[uid1][0], *testData.Devs[0]) {
-		t.Error(mismatchErrorString("Device", gotDevs[uid1][0], *testData.Devs[0]))
-	}
-	if !reflect.DeepEqual(gotDevs[uid2][0], *testData.Devs[1]) {
-		t.Error(mismatchErrorString("Device", gotDevs[uid2][0], *testData.Devs[1]))
-	}
+	testsuite.RunDeviceGetAll(t, adp, testData)
 }
 
 func TestDeviceDelete(t *testing.T) {
@@ -1021,62 +580,19 @@ func TestDeviceDelete(t *testing.T) {
 
 // ================== Persistent Cache tests ======================
 func TestPCacheUpsert(t *testing.T) {
-	err := adp.PCacheUpsert("test_key", "test_value", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Test duplicate with failOnDuplicate = true
-	err = adp.PCacheUpsert("test_key2", "test_value2", true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = adp.PCacheUpsert("test_key2", "new_value", true)
-	if err != types.ErrDuplicate {
-		t.Error("Expected duplicate error")
-	}
+	testsuite.RunPCacheUpsert(t, adp)
 }
 
 func TestPCacheGet(t *testing.T) {
-	value, err := adp.PCacheGet("test_key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value != "test_value" {
-		t.Error(mismatchErrorString("Cache value", value, "test_value"))
-	}
-
-	// Test not found
-	_, err = adp.PCacheGet("nonexistent")
-	if err != types.ErrNotFound {
-		t.Error("Expected not found error")
-	}
+	testsuite.RunPCacheGet(t, adp)
 }
 
 func TestPCacheDelete(t *testing.T) {
-	err := adp.PCacheDelete("test_key")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify deleted
-	_, err = adp.PCacheGet("test_key")
-	if err != types.ErrNotFound {
-		t.Error("Key should be deleted")
-	}
+	testsuite.RunPCacheDelete(t, adp)
 }
 
 func TestPCacheExpire(t *testing.T) {
-	// Insert some test keys with prefix
-	adp.PCacheUpsert("prefix_key1", "value1", false)
-	adp.PCacheUpsert("prefix_key2", "value2", false)
-
-	// Expire keys older than now (should delete all test keys)
-	err := adp.PCacheExpire("prefix_", time.Now().Add(1*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testsuite.RunPCacheExpire(t, adp)
 }
 
 // ================== Delete tests ================================
@@ -1112,19 +628,7 @@ func TestAuthDelScheme(t *testing.T) {
 }
 
 func TestAuthDelAllRecords(t *testing.T) {
-	delCount, err := adp.AuthDelAllRecords(types.ParseUserId("usr" + testData.Recs[0].UserId))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if delCount != 1 {
-		t.Error(mismatchErrorString("delCount", delCount, 1))
-	}
-
-	// With dummy user
-	delCount, _ = adp.AuthDelAllRecords(dummyUid1)
-	if delCount != 0 {
-		t.Error(mismatchErrorString("delCount", delCount, 0))
-	}
+	testsuite.RunAuthDelAllRecords(t, adp, testData)
 }
 
 func TestSubsDelForUser(t *testing.T) {
@@ -1228,13 +732,7 @@ func TestTopicDelete(t *testing.T) {
 }
 
 func TestFileDeleteUnused(t *testing.T) {
-	locs, err := adp.FileDeleteUnused(time.Now().Add(1*time.Minute), 999)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(locs) != 2 {
-		t.Error(mismatchErrorString("Locations length", len(locs), 2))
-	}
+	testsuite.RunFileDeleteUnused(t, adp)
 }
 
 func TestUserDelete(t *testing.T) {
@@ -1269,248 +767,15 @@ func TestUserDelete(t *testing.T) {
 // ================== Other tests =================================
 
 func TestUserUnreadCount(t *testing.T) {
-	uids := []types.Uid{
-		types.ParseUserId("usr" + testData.Users[1].Id),
-		types.ParseUserId("usr" + testData.Users[2].Id),
-	}
-	expected := map[types.Uid]int{uids[0]: 0, uids[1]: 166}
-	counts, err := adp.UserUnreadCount(uids...)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(counts) != 2 {
-		t.Error(mismatchErrorString("UnreadCount length", len(counts), 2))
-	}
-
-	for uid, unread := range counts {
-		if expected[uid] != unread {
-			t.Error(mismatchErrorString("UnreadCount", unread, expected[uid]))
-		}
-	}
-
-	// Test not found (even if the account is not found, the call must return one record).
-	counts, err = adp.UserUnreadCount(dummyUid1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(counts) != 1 {
-		t.Error(mismatchErrorString("UnreadCount length (dummy)", len(counts), 1))
-	}
-	if counts[dummyUid1] != 0 {
-		t.Error(mismatchErrorString("Non-zero UnreadCount (dummy)", counts[dummyUid1], 0))
-	}
+	testsuite.RunUserUnreadCount(t, adp, testData)
 }
 
 func TestMessageGetDeleted(t *testing.T) {
-	qOpts := types.QueryOpt{
-		Since:  1,
-		Before: 10,
-		Limit:  999,
-	}
-	got, err := adp.MessageGetDeleted(testData.Topics[1].Id, types.ParseUid(testData.Users[2].Id), &qOpts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 {
-		t.Error(mismatchErrorString("result length", len(got), 1))
-	}
+	testsuite.RunMessageGetDeleted(t, adp, testData)
 }
 
 func TestReactionsCRUD(t *testing.T) {
-	// Use topic[1] which still has messages at this point in the test suite.
-	topic := testData.Topics[1].Id
-
-	seq := testData.Reacts[0].SeqId
-
-	u00 := types.ParseUid(testData.Reacts[0].User)
-	u10 := types.ParseUid(testData.Reacts[1].User)
-
-	// No reactions added yet: should return nil map and no error.
-	got, err := adp.ReactionGetAll(topic, u00, false, nil)
-	if err == nil || len(got) != 0 {
-		t.Error("Expected no reactions for nil opts")
-	}
-
-	// Save two identical reactions from two users
-	r1 := testData.Reacts[0]
-	if err := adp.ReactionSave(r1); err != nil {
-		t.Fatal(err)
-	}
-
-	r2 := testData.Reacts[1]
-	if err := adp.ReactionSave(r2); err != nil {
-		t.Fatal(err)
-	}
-
-	opts := &types.QueryOpt{IdRanges: []types.Range{{Low: seq}}}
-	reacts, err := adp.ReactionGetAll(topic, u00, false, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(reacts) == 0 {
-		t.Fatal("No reactions returned")
-	}
-	found := false
-	for _, arr := range reacts {
-		for _, r := range arr {
-			if r.Content == "👍" {
-				found = true
-				if r.Cnt != 2 {
-					t.Error("Expected cnt 2 got", r.Cnt)
-				}
-				if len(r.Users) != 2 {
-					t.Error("Expected 2 users, got", r.Users)
-				}
-			}
-		}
-	}
-
-	if !found {
-		t.Error("expected 👍 reaction")
-	}
-
-	// asChan mode: counts and current user's marking
-	reactsChan, err := adp.ReactionGetAll(topic, u00, true, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rarr := reactsChan[seq]
-	if len(rarr) == 0 {
-		t.Fatal("No reactions in asChan")
-	}
-	var gotCnt int
-	var gotMarked bool
-	for _, r := range rarr {
-		if r.Content == "👍" {
-			gotCnt = r.Cnt
-			if len(r.Users) == 1 && r.Users[0] == u00.UserId() {
-				gotMarked = true
-			}
-		}
-	}
-	if gotCnt != 2 {
-		t.Error("asChan cnt expected 2 got", gotCnt)
-	}
-	if !gotMarked {
-		t.Error("current user's reaction not marked")
-	}
-
-	// Update reaction by changing u1 reaction to ❤️
-	r1b := testData.Reacts[2]
-	if err := adp.ReactionSave(r1b); err != nil {
-		t.Fatal(err)
-	}
-	reacts, err = adp.ReactionGetAll(topic, u00, false, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Expect ❤️ cnt 1 and 👍 cnt 1
-	foundPlus := false
-	foundHeart := false
-	for _, arr := range reacts {
-		for _, r := range arr {
-			switch r.Content {
-			case "👍":
-				if r.Cnt != 1 {
-					t.Error("Expected 👍 cnt 1 got", r.Cnt)
-				}
-				foundPlus = true
-			case "❤️":
-				if r.Cnt != 1 {
-					t.Error("Expected ❤️ cnt 1 got", r.Cnt)
-				}
-				foundHeart = true
-			}
-		}
-	}
-	if !foundPlus || !foundHeart {
-		t.Error("expected both 👍 and ❤️ reactions")
-	}
-
-	// Delete u2 reaction
-	if err := adp.ReactionDelete(topic, seq, u00); err != nil {
-		t.Fatal(err)
-	}
-
-	reacts, err = adp.ReactionGetAll(topic, u00, false, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(reacts) != 1 {
-		t.Error("Expected reaction to one message only after delete, got", len(reacts))
-	}
-
-	// After delete only ❤️ remains
-	for _, arr := range reacts {
-		if len(arr) != 1 {
-			t.Error("Expected only one reaction type after delete, got", len(arr))
-		} else if arr[0].Content != "❤️" {
-			t.Error("expected only ❤️ reaction")
-		}
-	}
-
-	// IfModifiedSince filter
-	// create old reaction and new reaction on another seq
-	seq2 := testData.Reacts[3].SeqId
-	old := testData.Reacts[3]
-	newr := testData.Reacts[3]
-	if err := adp.ReactionSave(old); err != nil {
-		t.Fatal(err)
-	}
-	if err := adp.ReactionSave(newr); err != nil {
-		t.Fatal(err)
-	}
-
-	ims := time.Now().Add(-30 * time.Minute)
-	opts2 := &types.QueryOpt{IdRanges: []types.Range{{Low: seq2}}, IfModifiedSince: &ims}
-	reacts, err = adp.ReactionGetAll(topic, u10, false, opts2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// expect only "new"
-	for _, arr := range reacts {
-		for _, r := range arr {
-			if r.Content == "old" {
-				t.Error("old reaction should be filtered out by IfModifiedSince")
-			}
-		}
-	}
-
-	// Check that LIMIT applies to number of messages (seqids), not number of reaction rows
-	// Create reactions for two different seqids
-	rA1 := testData.Reacts[5]
-	rA2 := testData.Reacts[6]
-	rB1 := testData.Reacts[7]
-	if err := adp.ReactionSave(rA1); err != nil {
-		t.Fatal(err)
-	}
-	if err := adp.ReactionSave(rA2); err != nil {
-		t.Fatal(err)
-	}
-	if err := adp.ReactionSave(rB1); err != nil {
-		t.Fatal(err)
-	}
-
-	optsLimit := &types.QueryOpt{IdRanges: []types.Range{{Low: testData.Reacts[5].SeqId}, {Low: testData.Reacts[7].SeqId}}, Limit: 1}
-	reactsLimit, err := adp.ReactionGetAll(topic, u00, false, optsLimit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Expect only one seqid returned (the highest seqid due to ORDER BY seqid DESC in adapter)
-	if len(reactsLimit) != 1 {
-		t.Fatalf("expected 1 seqid due to limit, got %d", len(reactsLimit))
-	}
-	for k := range reactsLimit {
-		if k != testData.Reacts[7].SeqId {
-			t.Fatalf("expected seqid %d (highest), got %d", testData.Reacts[7].SeqId, k)
-		}
-	}
-
-	// Invalid QueryOpt (non-nil but no ranges/since/before) => error
-	_, err = adp.ReactionGetAll(topic, u00, false, &types.QueryOpt{})
-	if err == nil {
-		t.Error("expected error for invalid query options")
-	}
+	testsuite.RunReactionsCRUD(t, adp, testData)
 }
 
 // ================================================================
