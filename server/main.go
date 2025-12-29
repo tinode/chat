@@ -158,6 +158,9 @@ var globals struct {
 	// Validators required for each auth level.
 	authValidators map[auth.Level][]string
 
+	// Allowed reactions map for quick lookup of allowed emoji by serverside policy.
+	allowedReactions map[string]bool
+
 	// Salt used for signing API key.
 	apiKeySalt []byte
 	// Tag namespaces (prefixes) which are immutable to the client.
@@ -329,6 +332,9 @@ type configType struct {
 	AccountGC *accountGcConfig            `json:"acc_gc_config"`
 	Media     *mediaConfig                `json:"media"`
 	WebRTC    json.RawMessage             `json:"webrtc"`
+
+	// AllowedReactions restricts reaction content that clients may use. If empty, defaults to top 24 emojis.
+	AllowedReactions []string `json:"allowed_reactions,omitempty"`
 }
 
 func main() {
@@ -574,6 +580,19 @@ func main() {
 	if globals.maxMessageSize <= 0 {
 		globals.maxMessageSize = defaultMaxMessageSize
 	}
+
+	// Allowed reactions configuration
+	globals.allowedReactions = make(map[string]bool)
+	if len(config.AllowedReactions) > 0 {
+		for _, r := range config.AllowedReactions {
+			if isReactionAllowed(r) {
+				globals.allowedReactions[r] = true
+			} else {
+				logs.Warn.Println("Ignored invalid reaction emoji:", r)
+			}
+		}
+	}
+
 	// Maximum number of group topic subscribers
 	globals.maxSubscriberCount = config.MaxSubscriberCount
 	if globals.maxSubscriberCount <= 1 {

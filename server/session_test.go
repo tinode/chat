@@ -1175,3 +1175,26 @@ func TestDispatchNoMessage(t *testing.T) {
 		t.Errorf("Response code: expected 400, got %d", resp.Ctrl.Code)
 	}
 }
+
+func TestIsReactionAllowedFunction(t *testing.T) {
+	// No restriction set -> allow anything
+	globals.allowedReactions = nil
+	if !isReactionAllowed("any") {
+		t.Error("expected anystring to be allowed when no restriction set")
+	}
+
+	// Restrict to only 👍
+	globals.allowedReactions = map[string]bool{"👍": true}
+	if !isReactionAllowed("👍") {
+		t.Error("expected 👍 to be allowed when configured")
+	}
+	if isReactionAllowed("❤️") {
+		t.Error("expected ❤️ to be disallowed when only 👍 is configured")
+	}
+	// nullValue always allowed
+	if !isReactionAllowed(nullValue) {
+		t.Error("expected nullValue to be allowed always")
+	}
+	// restore
+	globals.allowedReactions = nil
+}

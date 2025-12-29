@@ -219,6 +219,19 @@ func (s *Session) countSub() int {
 	return len(s.subs)
 }
 
+// isReactionAllowed returns true if the reaction is permitted by server configuration.
+// A null value (deletion) is always allowed. If globals.allowedReactions is empty, no restriction applies.
+func isReactionAllowed(reaction string) bool {
+	if reaction == nullValue {
+		return true
+	}
+	if len(globals.allowedReactions) == 0 {
+		return false
+	}
+	_, ok := globals.allowedReactions[reaction]
+	return ok
+}
+
 // Inform topics that the session is being terminated.
 // No need to check for s.multi because it's not called for PROXY sessions.
 func (s *Session) unsubAll() {

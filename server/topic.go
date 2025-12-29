@@ -1259,8 +1259,8 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 			Emo string `json:"emo"`
 		}
 		err := json.Unmarshal(msg.Note.Payload, &payload)
-		if err != nil || !isValidReaction(payload.Emo) {
-			// Silently drop invalid reaction.
+		if err != nil || !isReactionAllowed(payload.Emo) {
+			// Silently drop invalid or disallowed reaction.
 			return
 		}
 		if payload.Emo == nullValue {
