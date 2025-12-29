@@ -220,7 +220,7 @@ func (s *Session) countSub() int {
 }
 
 // isReactionAllowed returns true if the reaction is permitted by server configuration.
-// A null value (deletion) is always allowed. If globals.allowedReactions is empty, no restriction applies.
+// A null value (deletion) is always allowed. If globals.allowedReactions is empty, reactions are not allowed.
 func isReactionAllowed(reaction string) bool {
 	if reaction == nullValue {
 		return true
