@@ -13,10 +13,10 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/push/fcm"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/pushtype"
 
 	fcmv1 "google.golang.org/api/fcm/v1"
 )
@@ -58,19 +58,6 @@ type subUnsubReq struct {
 	Unsub    bool     `json:"unsub"`
 }
 
-type tnpgResponse struct {
-	// Push message response only.
-	MessageID string `json:"msg_id,omitempty"`
-	// Server response HTTP code.
-	Code int `json:"code,omitempty"`
-	// FCM response code. Both push and sub/unsub response.
-	ErrorCode     string `json:"errcode,omitempty"`
-	ExtendedError string `json:"exerr,omitempty"`
-	ErrorMessage  string `json:"errmsg,omitempty"`
-	// Channel sub/unsub response only.
-	Index int `json:"index,omitempty"`
-}
-
 type batchResponse struct {
 	// Number of successfully sent messages.
 	SuccessCount int `json:"sent_count"`
@@ -80,25 +67,12 @@ type batchResponse struct {
 	FatalCode    string `json:"errcode,omitempty"`
 	FatalMessage string `json:"errmsg,omitempty"`
 	// Individual reponses in the same order as messages. Could be nil if the entire batch failed.
-	Responses []*tnpgResponse `json:"resp,omitempty"`
+	Responses []*pushtype.TNPGResponse `json:"resp,omitempty"`
 
 	// Local values
 	httpCode   int
 	httpStatus string
 }
-
-// Error codes copied from https://github.com/firebase/firebase-admin-go/blob/master/messaging/messaging.go
-const (
-	internalError                  = "internal-error"
-	invalidAPNSCredentials         = "invalid-apns-credentials"
-	invalidArgument                = "invalid-argument"
-	messageRateExceeded            = "message-rate-exceeded"
-	mismatchedCredential           = "mismatched-credential"
-	registrationTokenNotRegistered = "registration-token-not-registered"
-	serverUnavailable              = "server-unavailable"
-	tooManyTopics                  = "too-many-topics"
-	unknownError                   = "unknown-error"
-)
 
 // Init initializes the handler
 func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
@@ -280,11 +254,11 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 	for i, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
-		case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
+		case pushtype.ErrorQuotaExceeded, pushtype.ErrorUnavailable, pushtype.ErrorInternal, pushtype.ErrorUnspecified:
 			// Transient errors. Stop sending this batch.
 			logs.Warn.Println("tnpg transient failure:", resp.ErrorMessage)
 			return
-		case common.ErrorInvalidArgument:
+		case pushtype.ErrorInvalidArgument:
 			// Usually an invalid token.
 			logs.Warn.Println("tnpg invalid argument:", resp.ExtendedError, resp.ErrorMessage)
 			if strings.Contains(resp.ExtendedError, "message.token") {
@@ -292,11 +266,11 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 					logs.Warn.Println("tnpg failed to delete invalid token:", err)
 				}
 			}
-		case common.ErrorSenderIDMismatch, common.ErrorThirdPartyAuth:
+		case pushtype.ErrorSenderIDMismatch, pushtype.ErrorThirdPartyAuth:
 			// Config errors
 			logs.Warn.Println("tnpg invalid config:", resp.ExtendedError, resp.ErrorMessage)
 			return
-		case common.ErrorUnregistered:
+		case pushtype.ErrorUnregistered:
 			// Token is no longer valid.
 			logs.Info.Println("tnpg invalid token:", resp.ErrorMessage, resp.ExtendedError, resp.MessageID)
 			if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {

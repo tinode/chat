@@ -8,13 +8,14 @@ import (
 
 	fcmv1 "google.golang.org/api/fcm/v1"
 
+	"maps"
+
 	"github.com/tinode/chat/server/drafty"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	"maps"
+	"github.com/tinode/pushtype"
 )
 
 const (
@@ -38,7 +39,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
 	// Must use "xfrom" because "from" is a reserved word. Google did not bother to document it anywhere.
 	data["xfrom"] = pl.From
-	if pl.What == push.ActMsg {
+	if pl.What == pushtype.ActMsg {
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		if pl.ContentType != "" {
 			data["mime"] = pl.ContentType
@@ -77,10 +78,10 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if pl.What == push.ActSub {
+	} else if pl.What == pushtype.ActSub {
 		data["modeWant"] = pl.ModeWant.String()
 		data["modeGiven"] = pl.ModeGiven.String()
-	} else if pl.What == push.ActRead {
+	} else if pl.What == pushtype.ActRead {
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		data["silent"] = "true"
 	} else {
@@ -244,9 +245,9 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		timeToLive = strconv.Itoa(config.TimeToLive) + "s"
 	}
 
-	if what == push.ActRead {
+	if what == pushtype.ActRead {
 		return &fcmv1.AndroidConfig{
-			Priority:     string(common.AndroidPriorityNormal),
+			Priority:     string(pushtype.AndroidPriorityNormal),
 			Notification: nil,
 			Ttl:          timeToLive,
 		}
@@ -258,7 +259,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	}
 
 	// Sending priority.
-	priority := string(common.AndroidPriorityHigh)
+	priority := string(pushtype.AndroidPriorityHigh)
 	ac := &fcmv1.AndroidConfig{
 		Priority: priority,
 		Ttl:      timeToLive,
@@ -277,9 +278,9 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 	}
 
 	// Client-side display priority.
-	priority = string(common.AndroidNotificationPriorityHigh)
+	priority = string(pushtype.AndroidNotificationPriorityHigh)
 	if videoCall {
-		priority = string(common.AndroidNotificationPriorityMax)
+		priority = string(pushtype.AndroidNotificationPriorityMax)
 	}
 
 	ac.Notification = &fcmv1.AndroidNotification{
@@ -287,7 +288,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 		// show just one notification per topic.
 		Tag:                  topic,
 		NotificationPriority: priority,
-		Visibility:           string(common.AndroidVisibilityPrivate),
+		Visibility:           string(pushtype.AndroidVisibilityPrivate),
 		TitleLocKey:          config.Android.GetStringField(what, "TitleLocKey"),
 		Title:                config.Android.GetStringField(what, "Title"),
 		BodyLocKey:           config.Android.GetStringField(what, "BodyLocKey"),
@@ -301,7 +302,7 @@ func androidNotificationConfig(what, topic string, data map[string]string, confi
 }
 
 func apnsShouldPresentAlert(what, callStatus, isSilent string, config *configType) bool {
-	return config.Apns != nil && config.Apns.Enabled && what != push.ActRead && callStatus == "" && isSilent == ""
+	return config.Apns != nil && config.Apns.Enabled && what != pushtype.ActRead && callStatus == "" && isSilent == ""
 }
 
 func apnsNotificationConfig(what, topic string, data map[string]string, unread int, config *configType) *fcmv1.ApnsConfig {
@@ -311,26 +312,26 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		expires = time.Now().UTC().Add(time.Duration(config.TimeToLive) * time.Second)
 	}
 	bundleId := config.ApnsBundleID
-	pushType := common.ApnsPushTypeAlert
+	pushType := pushtype.ApnsPushTypeAlert
 	priority := 10
-	interruptionLevel := common.InterruptionLevelTimeSensitive
+	interruptionLevel := pushtype.InterruptionLevelTimeSensitive
 	if callStatus == "started" {
 		// Send VOIP push only when a new call is started, otherwise send normal alert.
-		interruptionLevel = common.InterruptionLevelCritical
+		interruptionLevel = pushtype.InterruptionLevelCritical
 		// FIXME: PushKit notifications do not work with the current FCM adapter.
 		// Using normal pushes as a poor-man's replacement for VOIP pushes.
 		// Uncomment the following two lines when FCM fixes its problem or when we switch to
 		// a different adapter.
-		// pushType = common.ApnsPushTypeVoip
+		// pushType = pushtype.ApnsPushTypeVoip
 		// bundleId += ".voip"
 		expires = time.Now().UTC().Add(time.Duration(voipTimeToLive) * time.Second)
-	} else if what == push.ActRead {
+	} else if what == pushtype.ActRead {
 		priority = 5
-		interruptionLevel = common.InterruptionLevelPassive
-		pushType = common.ApnsPushTypeBackground
+		interruptionLevel = pushtype.InterruptionLevelPassive
+		pushType = pushtype.ApnsPushTypeBackground
 	}
 
-	apsPayload := common.Aps{
+	apsPayload := pushtype.Aps{
 		Badge:             unread,
 		ContentAvailable:  1,
 		MutableContent:    1,
@@ -346,7 +347,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 			body = data["content"]
 		}
 
-		apsPayload.Alert = &common.ApsAlert{
+		apsPayload.Alert = &pushtype.ApsAlert{
 			Action:          config.Apns.GetStringField(what, "Action"),
 			ActionLocKey:    config.Apns.GetStringField(what, "ActionLocKey"),
 			Body:            body,
@@ -365,11 +366,11 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		return nil
 	}
 	headers := map[string]string{
-		common.HeaderApnsExpiration: strconv.FormatInt(expires.Unix(), 10),
-		common.HeaderApnsPriority:   strconv.Itoa(priority),
-		common.HeaderApnsTopic:      bundleId,
-		common.HeaderApnsCollapseID: topic,
-		common.HeaderApnsPushType:   string(pushType),
+		pushtype.HeaderApnsExpiration: strconv.FormatInt(expires.Unix(), 10),
+		pushtype.HeaderApnsPriority:   strconv.Itoa(priority),
+		pushtype.HeaderApnsTopic:      bundleId,
+		pushtype.HeaderApnsCollapseID: topic,
+		pushtype.HeaderApnsPushType:   string(pushType),
 	}
 
 	ac := &fcmv1.ApnsConfig{

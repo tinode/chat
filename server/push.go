@@ -12,6 +12,7 @@ import (
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/pushtype"
 )
 
 // Subscribe or unsubscribe user to/from FCM topic (channel).
@@ -33,7 +34,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData, msgMarkedAsR
 	receipt := push.Receipt{
 		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
-			What:        push.ActMsg,
+			What:        pushtype.ActMsg,
 			Silent:      false,
 			Topic:       t.name,
 			From:        data.From,
@@ -96,7 +97,7 @@ func (t *Topic) preparePushForSubReceipt(fromUid types.Uid, now time.Time) *push
 	receipt := &push.Receipt{
 		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
-			What:      push.ActSub,
+			What:      pushtype.ActSub,
 			Silent:    false,
 			Topic:     topic,
 			From:      fromUid.UserId(),
@@ -148,7 +149,7 @@ func pushForChanDelete(topicName string, now time.Time) *push.Receipt {
 	// Initialize the push receipt.
 	return &push.Receipt{
 		Payload: push.Payload{
-			What:      push.ActSub,
+			What:      pushtype.ActSub,
 			Silent:    true,
 			Topic:     topicName,
 			Timestamp: now,
@@ -172,7 +173,7 @@ func (t *Topic) pushForReadRcpt(uid types.Uid, seq int, now time.Time) *push.Rec
 	receipt := &push.Receipt{
 		To: make(map[types.Uid]push.Recipient, 1),
 		Payload: push.Payload{
-			What:      push.ActRead,
+			What:      pushtype.ActRead,
 			Silent:    true,
 			Topic:     topic,
 			From:      uid.UserId(),

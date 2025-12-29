@@ -17,9 +17,9 @@ import (
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/pushtype"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -50,15 +50,15 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled         bool            `json:"enabled"`
-	DryRun          bool            `json:"dry_run"`
-	Credentials     json.RawMessage `json:"credentials"`
-	CredentialsFile string          `json:"credentials_file"`
-	TimeToLive      int             `json:"time_to_live,omitempty"`
-	ApnsBundleID    string          `json:"apns_bundle_id,omitempty"`
-	Android         *common.Config  `json:"android,omitempty"`
-	Apns            *common.Config  `json:"apns,omitempty"`
-	Webpush         *common.Config  `json:"webpush,omitempty"`
+	Enabled         bool             `json:"enabled"`
+	DryRun          bool             `json:"dry_run"`
+	Credentials     json.RawMessage  `json:"credentials"`
+	CredentialsFile string           `json:"credentials_file"`
+	TimeToLive      int              `json:"time_to_live,omitempty"`
+	ApnsBundleID    string           `json:"apns_bundle_id,omitempty"`
+	Android         *pushtype.Config `json:"android,omitempty"`
+	Apns            *pushtype.Config `json:"apns,omitempty"`
+	Webpush         *pushtype.Config `json:"webpush,omitempty"`
 }
 
 // Init initializes the push handler
@@ -139,21 +139,21 @@ func sendFcmV1(rcpt *push.Receipt, config *configType) {
 		}
 		_, err := handler.v1.Projects.Messages.Send("projects/"+handler.projectID, req).Do()
 		if err != nil {
-			gerr, decodingErrs := common.DecodeGoogleApiError(err)
+			gerr, decodingErrs := pushtype.DecodeGoogleApiError(err)
 			for _, err := range decodingErrs {
 				logs.Info.Println("fcm googleapi.Error decoding:", err)
 			}
 			switch strings.ToUpper(gerr.FcmErrCode) {
 			case "": // no error
-			case common.ErrorQuotaExceeded, common.ErrorUnavailable, common.ErrorInternal, common.ErrorUnspecified:
+			case pushtype.ErrorQuotaExceeded, pushtype.ErrorUnavailable, pushtype.ErrorInternal, pushtype.ErrorUnspecified:
 				// Transient errors. Stop sending this batch.
 				logs.Warn.Println("fcm transient failure:", gerr.FcmErrCode, gerr.ErrMessage)
 				return
-			case common.ErrorSenderIDMismatch, common.ErrorInvalidArgument, common.ErrorThirdPartyAuth:
+			case pushtype.ErrorSenderIDMismatch, pushtype.ErrorInvalidArgument, pushtype.ErrorThirdPartyAuth:
 				// Config errors. Stop.
 				logs.Warn.Println("fcm invalid config:", gerr.FcmErrCode, gerr.ErrMessage)
 				return
-			case common.ErrorUnregistered:
+			case pushtype.ErrorUnregistered:
 				// Token is no longer valid. Delete token from DB and continue sending.
 				logs.Warn.Println("fcm invalid token:", gerr.FcmErrCode, gerr.ErrMessage)
 				if err := store.Devices.Delete(uids[i], messages[i].Token); err != nil {
