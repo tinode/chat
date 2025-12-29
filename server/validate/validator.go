@@ -58,6 +58,7 @@ type Validator interface {
 	TempAuthScheme() (string, error)
 }
 
+// ValidateHostURL validates and normalizes host_url from settings.
 func ValidateHostURL(origUrl string) (string, error) {
 	hostUrl, err := url.Parse(origUrl)
 	if err != nil {
@@ -78,6 +79,9 @@ func ValidateHostURL(origUrl string) (string, error) {
 	return hostUrl.String(), nil
 }
 
+// ExecuteTemplate executes the given template with provided parameters.
+// If parts is nil, executes the main template body.
+// Otherwise, executes each named part and returns a map of part name to generated content.
 func ExecuteTemplate(template *template.Template, parts []string, params map[string]any) (map[string]string, error) {
 	content := map[string]string{}
 	buffer := new(bytes.Buffer)
@@ -102,6 +106,9 @@ func ExecuteTemplate(template *template.Template, parts []string, params map[str
 	return content, nil
 }
 
+// ResolveTemplatePath resolves the given template path.
+// If the path is absolute, returns it as is.
+// If the path is relative, resolves it relative to the current working directory.
 func ResolveTemplatePath(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
@@ -115,6 +122,7 @@ func ResolveTemplatePath(path string) (string, error) {
 	return filepath.Clean(filepath.Join(curwd, path)), nil
 }
 
+// ReadTemplateFile reads and parses a template file given a path template and language.
 func ReadTemplateFile(pathTempl *template.Template, lang string) (*template.Template, string, error) {
 	buffer := bytes.Buffer{}
 	err := pathTempl.Execute(&buffer, map[string]any{"Language": lang})
