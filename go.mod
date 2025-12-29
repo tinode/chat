@@ -7,7 +7,6 @@ require (
 	github.com/aws/aws-sdk-go v1.55.7
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang/mock v1.6.0
-	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgconn v1.14.3
