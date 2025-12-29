@@ -311,12 +311,12 @@ func initMessages(users []*types.User, topics []*types.Topic) []*types.Message {
 	return msgs
 }
 
-func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction {
-	reactions := make([]*types.Reaction, 0, 4)
+func initReactions(now time.Time, msgs []*types.Message, users []*types.User) []*types.Reaction {
+	reactions := make([]*types.Reaction, 0, 8)
 
 	// 0
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now().Add(-30 * time.Minute),
+		CreatedAt: now.Add(-30 * time.Minute),
 		Topic:     msgs[3].Topic,
 		SeqId:     msgs[3].SeqId,
 		User:      users[0].Id,
@@ -324,7 +324,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 1
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now().Add(-20 * time.Minute),
+		CreatedAt: now.Add(-20 * time.Minute),
 		Topic:     msgs[3].Topic,
 		SeqId:     msgs[3].SeqId,
 		User:      users[1].Id,
@@ -332,7 +332,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 2
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		Topic:     msgs[3].Topic,
 		SeqId:     msgs[3].SeqId,
 		User:      users[1].Id,
@@ -340,7 +340,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 3
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now().Add(-2 * time.Hour),
+		CreatedAt: now.Add(-2 * time.Hour),
 		Topic:     msgs[4].Topic,
 		SeqId:     msgs[4].SeqId,
 		User:      users[0].Id,
@@ -348,7 +348,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 4
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		Topic:     msgs[4].Topic,
 		SeqId:     msgs[4].SeqId,
 		User:      users[1].Id,
@@ -356,7 +356,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 5
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		Topic:     msgs[4].Topic,
 		SeqId:     msgs[4].SeqId,
 		User:      users[0].Id,
@@ -364,7 +364,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 6
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		Topic:     msgs[4].Topic,
 		SeqId:     msgs[4].SeqId,
 		User:      users[1].Id,
@@ -372,7 +372,7 @@ func initReactions(msgs []*types.Message, users []*types.User) []*types.Reaction
 	})
 	// 7
 	reactions = append(reactions, &types.Reaction{
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		Topic:     msgs[4].Topic,
 		SeqId:     msgs[5].SeqId,
 		User:      users[0].Id,
@@ -452,7 +452,7 @@ func InitTestData() *TestData {
 		Topics: topics,
 		Subs:   initSubs(now, users, topics),
 		Msgs:   messages,
-		Reacts: initReactions(messages, users),
+		Reacts: initReactions(now, messages, users),
 		Devs:   initDevices(now),
 		Files:  initFileDefs(now, users),
 		Tags:   initTags(),

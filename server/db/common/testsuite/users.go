@@ -156,8 +156,20 @@ func RunCredGetActive(t *testing.T, adp adapter.Adapter, td *test_data.TestData)
 	if err != nil {
 		t.Error(err)
 	}
-	if !reflect.DeepEqual(got, td.Creds[3]) {
-		t.Errorf("Credential mismatch: got %+v want %+v", got, td.Creds[3])
+	if got == nil {
+		t.Error("result should not be nil")
+	} else {
+		// Compare timestamps using time.Equal because some backends may encode
+		// timezone/location names differently (e.g. "+00:00" vs "UTC").
+		if !got.CreatedAt.Equal(td.Creds[3].CreatedAt) || !got.UpdatedAt.Equal(td.Creds[3].UpdatedAt) {
+			t.Errorf("Credential time mismatch: got %+v want %+v", got, td.Creds[3])
+		}
+		// Normalize times to expected values and then compare remaining fields.
+		got.CreatedAt = td.Creds[3].CreatedAt
+		got.UpdatedAt = td.Creds[3].UpdatedAt
+		if !reflect.DeepEqual(got, td.Creds[3]) {
+			t.Errorf("Credential mismatch: got %+v want %+v", got, td.Creds[3])
+		}
 	}
 
 	// Test not found

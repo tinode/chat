@@ -68,10 +68,20 @@ func RunDeviceGetAll(t *testing.T, adp adapter.Adapter, td *test_data.TestData) 
 	if count != 2 {
 		t.Fatalf("count mismatch: got %v want %v", count, 2)
 	}
-	if !reflect.DeepEqual(gotDevs[uid1][0], *td.Devs[0]) {
+	if !gotDevs[uid1][0].LastSeen.Equal(td.Devs[0].LastSeen) {
+		t.Errorf("Device LastSeen mismatch for %v: got %+v want %+v", uid1, gotDevs[uid1][0].LastSeen, td.Devs[0].LastSeen)
+	}
+	dev0 := gotDevs[uid1][0]
+	dev0.LastSeen = td.Devs[0].LastSeen
+	if !reflect.DeepEqual(dev0, *td.Devs[0]) {
 		t.Errorf("Device mismatch: got %+v want %+v", gotDevs[uid1][0], *td.Devs[0])
 	}
-	if !reflect.DeepEqual(gotDevs[uid2][0], *td.Devs[1]) {
+	if !gotDevs[uid2][0].LastSeen.Equal(td.Devs[1].LastSeen) {
+		t.Errorf("Device LastSeen mismatch for %v: got %+v want %+v", uid2, gotDevs[uid2][0].LastSeen, td.Devs[1].LastSeen)
+	}
+	dev1 := gotDevs[uid2][0]
+	dev1.LastSeen = td.Devs[1].LastSeen
+	if !reflect.DeepEqual(dev1, *td.Devs[1]) {
 		t.Errorf("Device mismatch: got %+v want %+v", gotDevs[uid2][0], *td.Devs[1])
 	}
 }
