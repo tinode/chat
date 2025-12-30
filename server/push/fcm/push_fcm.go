@@ -5,20 +5,19 @@
 package fcm
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-	"os"
 
 	fcmv1 "google.golang.org/api/fcm/v1"
+
+	"os"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/pushtype"
+	"github.com/tinode/pushtype/iid"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -183,13 +182,18 @@ func processSubscription(req *push.ChannelReq) {
 
 	// Use IID batch endpoints to subscribe/unsubscribe tokens to topics.
 	if channel != "" && len(devices) > 0 {
-		br, err := iidBatchManage(channel, devices, !req.Unsub)
+		client, cerr := iid.NewFromCreds(context.Background(), handler.creds)
+		if cerr != nil {
+			logs.Warn.Println("fcm: sub/unsub failed", req.Unsub, cerr)
+			return
+		}
+		parsed, err := client.BatchManage(channel, devices, !req.Unsub)
 		if err != nil {
 			logs.Warn.Println("fcm: sub/unsub failed", req.Unsub, err)
 			return
 		}
 		// Inspect per-item results and log failures
-		for i, r := range br {
+		for i, r := range parsed {
 			if errStr, ok := r["error"].(string); ok && errStr != "" {
 				logs.Warn.Println("fcm sub/unsub error", errStr, req.Uid, devices[i])
 			}
@@ -199,12 +203,17 @@ func processSubscription(req *push.ChannelReq) {
 
 	if device != "" && len(channels) > 0 {
 		for _, ch := range channels {
-			br, err := iidBatchManage(ch, []string{device}, !req.Unsub)
+			client, cerr := iid.NewFromCreds(context.Background(), handler.creds)
+			if cerr != nil {
+				logs.Warn.Println("fcm: sub/unsub failed", req.Unsub, cerr)
+				return
+			}
+			parsed, err := client.BatchManage(ch, []string{device}, !req.Unsub)
 			if err != nil {
 				logs.Warn.Println("fcm: sub/unsub failed", req.Unsub, err)
 				return
 			}
-			for i, r := range br {
+			for i, r := range parsed {
 				if errStr, ok := r["error"].(string); ok && errStr != "" {
 					logs.Warn.Println("fcm sub/unsub error", errStr, req.Uid, device)
 				}
@@ -217,60 +226,6 @@ func processSubscription(req *push.ChannelReq) {
 	// Invalid request: either multiple channels & multiple devices (not supported) or no channels and no devices.
 	logs.Err.Println("fcm: user", req.Uid.UserId(), "invalid combination of sub/unsub channels/devices",
 		len(devices), len(channels))
-}
-
-// iidBaseURL is the base URL for Instance ID APIs. Tests may override this to a mock server.
-var iidBaseURL = "https://iid.googleapis.com/iid/v1"
-
-// iidBatchManage performs add/remove of registration tokens to/from a topic using Instance ID batch endpoints.
-func iidBatchManage(topic string, tokens []string, add bool) ([]map[string]any, error) {
-	if len(tokens) == 0 {
-		return []map[string]any{}, nil
-	}
-	if handler.creds == nil {
-		return nil, errors.New("missing credentials for IID calls")
-	}
-	// Create OAuth2 client from service account JSON with firebase.messaging scope.
-	// For tests we can skip OAuth token exchange by setting PUSHGW_TEST_NO_OAUTH=1.
-	var client *http.Client
-	if os.Getenv("PUSHGW_TEST_NO_OAUTH") == "1" {
-		client = &http.Client{}
-	} else {
-		conf, err := google.JWTConfigFromJSON(handler.creds, "https://www.googleapis.com/auth/firebase.messaging")
-		if err != nil {
-			return nil, err
-		}
-		client = conf.Client(context.Background())
-	}
-	var url string
-	if add {
-		url = iidBaseURL + ":batchAdd"
-	} else {
-		url = iidBaseURL + ":batchRemove"
-	}
-	body := map[string]any{"to": "/topics/" + topic, "registration_tokens": tokens}
-	b, _ := json.Marshal(body)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	// Per docs, include this header so server knows we're using access token auth.
-	req.Header.Set("access_token_auth", "true")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-
-	var parsed struct {
-		Results []map[string]any `json:"results"`
-	}
-	_ = json.Unmarshal(respBody, &parsed)
-
-	return parsed.Results, nil
 }
 
 // IsReady checks if the push handler has been initialized.
