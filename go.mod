@@ -74,7 +74,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/tinode/pushtype v0.0.0-20251229173608-d2363554988f
+	github.com/tinode/pushtype v0.0.0-20251230081240-c447b2b50640
 	github.com/twilio/twilio-go v1.29.0
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
