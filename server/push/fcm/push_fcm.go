@@ -31,9 +31,6 @@ const (
 	// Size of the input channel buffer.
 	bufferSize = 1024
 
-	// The number of push messages sent in one batch. FCM constant.
-	pushBatchSize = 100
-
 	// The number of sub/unsub requests sent in one batch. FCM constant.
 	subBatchSize = 1000
 )

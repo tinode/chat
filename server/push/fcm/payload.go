@@ -39,7 +39,8 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
 	// Must use "xfrom" because "from" is a reserved word. Google did not bother to document it anywhere.
 	data["xfrom"] = pl.From
-	if pl.What == pushtype.ActMsg {
+	switch pl.What {
+	case pushtype.ActMsg:
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		if pl.ContentType != "" {
 			data["mime"] = pl.ContentType
@@ -78,13 +79,13 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if pl.What == pushtype.ActSub {
+	case pushtype.ActSub:
 		data["modeWant"] = pl.ModeWant.String()
 		data["modeGiven"] = pl.ModeGiven.String()
-	} else if pl.What == pushtype.ActRead {
+	case pushtype.ActRead:
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		data["silent"] = "true"
-	} else {
+	default:
 		return nil, errors.New("unknown push type")
 	}
 	return data, nil
