@@ -58,22 +58,6 @@ type subUnsubReq struct {
 	Unsub    bool     `json:"unsub"`
 }
 
-type batchResponse struct {
-	// Number of successfully sent messages.
-	SuccessCount int `json:"sent_count"`
-	// Number of failures.
-	FailureCount int `json:"fail_count"`
-	// Error code and message if the entire batch failed.
-	FatalCode    string `json:"errcode,omitempty"`
-	FatalMessage string `json:"errmsg,omitempty"`
-	// Individual reponses in the same order as messages. Could be nil if the entire batch failed.
-	Responses []*pushtype.TNPGResponse `json:"resp,omitempty"`
-
-	// Local values
-	httpCode   int
-	httpStatus string
-}
-
 // Init initializes the handler
 func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	var config configType
@@ -128,7 +112,7 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	return true, nil
 }
 
-func postMessage(endpoint string, body any, config *configType) (*batchResponse, error) {
+func postMessage(endpoint string, body any, config *configType) (*pushtype.BatchResponse, error) {
 	buf := new(bytes.Buffer)
 	gzw := gzip.NewWriter(buf)
 	err := json.NewEncoder(gzw).Encode(body)
@@ -151,7 +135,7 @@ func postMessage(endpoint string, body any, config *configType) (*batchResponse,
 		return nil, err
 	}
 
-	var batch batchResponse
+	var batch pushtype.BatchResponse
 	var reader io.ReadCloser
 	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
 		reader, err = gzip.NewReader(resp.Body)
@@ -172,8 +156,8 @@ func postMessage(endpoint string, body any, config *configType) (*batchResponse,
 		logs.Warn.Println("tnpg failed to decode respons:", err)
 	}
 
-	batch.httpCode = resp.StatusCode
-	batch.httpStatus = resp.Status
+	batch.HttpCode = resp.StatusCode
+	batch.HttpStatus = resp.Status
 
 	return &batch, nil
 }
@@ -193,8 +177,8 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 			logs.Warn.Println("tnpg push request failed:", err)
 			break
 		}
-		if resp.httpCode >= 300 {
-			logs.Warn.Println("tnpg push rejected:", resp.httpStatus)
+		if resp.HttpCode >= http.StatusMultipleChoices {
+			logs.Warn.Println("tnpg push rejected:", resp.HttpStatus)
 			break
 		}
 		if resp.FatalCode != "" {
@@ -234,8 +218,8 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 		logs.Warn.Println("tnpg channel sub request failed:", err)
 		return
 	}
-	if resp.httpCode >= 300 {
-		logs.Warn.Println("tnpg channel sub rejected:", resp.httpStatus)
+	if resp.HttpCode >= http.StatusMultipleChoices {
+		logs.Warn.Println("tnpg channel sub rejected:", resp.HttpStatus)
 		return
 	}
 	if resp.FatalCode != "" {
@@ -246,7 +230,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
-func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []types.Uid) {
+func handlePushResponse(batch *pushtype.BatchResponse, messages []*fcmv1.Message, uids []types.Uid) {
 	if batch.FailureCount <= 0 {
 		return
 	}
@@ -282,7 +266,7 @@ func handlePushResponse(batch *batchResponse, messages []*fcmv1.Message, uids []
 	}
 }
 
-func handleSubResponse(batch *batchResponse, req *push.ChannelReq, devices, channels []string) {
+func handleSubResponse(batch *pushtype.BatchResponse, req *push.ChannelReq, devices, channels []string) {
 	if batch.FailureCount <= 0 {
 		return
 	}
