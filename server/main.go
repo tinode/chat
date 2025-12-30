@@ -8,7 +8,7 @@
 
 package main
 
-//go:generate protoc --go_out=../pbx --go_opt=paths=source_relative --go-grpc_out=../pbx --go-grpc_opt=paths=source_relative ../pbx/model.proto
+//go:generate protoc -I.. --go_out=../pbx --go_opt=paths=source_relative --go-grpc_out=../pbx --go-grpc_opt=paths=source_relative ../pbx/model.proto
 
 import (
 	"encoding/json"
