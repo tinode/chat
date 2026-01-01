@@ -2513,7 +2513,9 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 		// Store users only when not asChan; for asChan we'll mark current user's reaction separately
 		if !asChan {
 			// rec.User is stored as raw id (no 'usr' prefix); convert to 'usr' format
-			ar.Users = append(ar.Users, t.ParseUid(rec.User).UserId())
+			if rec.User != "" {
+				ar.Users = append(ar.Users, t.ParseUid(rec.User).UserId())
+			}
 		}
 	}
 	if err := cursor.Err(); err != nil {

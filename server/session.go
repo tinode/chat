@@ -775,6 +775,10 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"reqCred":            globals.validatorClientConfig,
 			"msgDelAge":          globals.msgDeleteAge.Seconds(),
 		}
+		if len(globals.allowedReactions) > 0 {
+			params["reactions"] = globals.reactions
+			params["maxReactions"] = globals.maxReactions
+		}
 		if len(globals.iceServers) > 0 {
 			params["iceServers"] = globals.iceServers
 		}

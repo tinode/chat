@@ -3245,7 +3245,10 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 				Users:   make([]string, 0, len(ids)),
 			}
 			for _, id := range ids {
-				r.Users = append(r.Users, store.EncodeUid(id).UserId())
+				if id != 0 {
+					// TODO: consider rejecting anonymous reactions.
+					r.Users = append(r.Users, store.EncodeUid(id).UserId())
+				}
 			}
 			reactions[seqId] = append(reactions[seqId], r)
 		}

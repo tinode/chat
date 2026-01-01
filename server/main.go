@@ -109,6 +109,9 @@ const (
 
 	// Default timeout to drop an unanswered call, seconds.
 	defaultCallEstablishmentTimeout = 30
+
+	// Default maximum number of reaction types per message.
+	defaultMaxReactions = 4
 )
 
 // Build version number defined by the compiler:
@@ -157,9 +160,6 @@ var globals struct {
 	validatorClientConfig map[string][]string
 	// Validators required for each auth level.
 	authValidators map[auth.Level][]string
-
-	// Allowed reactions map for quick lookup of allowed emoji by serverside policy.
-	allowedReactions map[string]bool
 
 	// Salt used for signing API key.
 	apiKeySalt []byte
@@ -217,6 +217,13 @@ var globals struct {
 
 	// Maximum age of messages which can be deleted with 'D' permission.
 	msgDeleteAge time.Duration
+
+	// Allowed reactions map for quick lookup of allowed emoji by serverside policy.
+	allowedReactions map[string]bool
+	// The same reactions as a priority-sorted list.
+	reactions []string
+	// Maximum number of reaction types per message.
+	maxReactions int
 }
 
 // Credential validator config.
@@ -321,6 +328,12 @@ type configType struct {
 	// Does not affect topic owners: owners can delete any message.
 	MsgDeleteAge int `json:"msg_delete_age"`
 
+	// AllowedReactions restricts reaction content that clients may use.
+	AllowedReactions []string `json:"allowed_reactions,omitempty"`
+	// Maximum number of reaction types per message, i.e. the number of different emojis that
+	// can be used in reactions to a single message. At least 1, not more than 8.
+	MaxReactions int `json:"max_reactions,omitempty"`
+
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
 	Plugin    json.RawMessage             `json:"plugins"`
@@ -332,9 +345,6 @@ type configType struct {
 	AccountGC *accountGcConfig            `json:"acc_gc_config"`
 	Media     *mediaConfig                `json:"media"`
 	WebRTC    json.RawMessage             `json:"webrtc"`
-
-	// AllowedReactions restricts reaction content that clients may use. If empty, defaults to top 24 emojis.
-	AllowedReactions []string `json:"allowed_reactions,omitempty"`
 }
 
 func main() {
@@ -581,14 +591,29 @@ func main() {
 		globals.maxMessageSize = defaultMaxMessageSize
 	}
 
-	// Allowed reactions configuration
+	// Emoji reactions configuration.
+	var reactions []string
 	globals.allowedReactions = make(map[string]bool)
 	if len(config.AllowedReactions) > 0 {
 		for _, r := range config.AllowedReactions {
-			if isReactionAllowed(r) {
+			if isValidReaction(r) {
+				if _, exists := globals.allowedReactions[r]; exists {
+					logs.Warn.Println("Ignored duplicate reaction emoji:", r)
+					continue
+				}
 				globals.allowedReactions[r] = true
+				reactions = append(reactions, r)
 			} else {
 				logs.Warn.Println("Ignored invalid reaction emoji:", r)
+			}
+		}
+
+		if len(reactions) > 0 {
+			globals.reactions = reactions
+			logs.Info.Println("Number of allowed reactions:", len(globals.reactions))
+			globals.maxReactions = config.MaxReactions
+			if globals.maxReactions <= 0 || globals.maxReactions > defaultMaxReactions*2 {
+				globals.maxReactions = defaultMaxReactions
 			}
 		}
 	}

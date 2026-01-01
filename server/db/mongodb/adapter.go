@@ -2832,7 +2832,9 @@ func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts
 			}
 			for _, id := range doc.Users {
 				// Convert stored raw id (base64) to 'usr' prefixed user id string.
-				r.Users = append(r.Users, t.ParseUid(id).UserId())
+				if id != "" {
+					r.Users = append(r.Users, t.ParseUid(id).UserId())
+				}
 			}
 			reactions[doc.SeqId] = append(reactions[doc.SeqId], r)
 		}

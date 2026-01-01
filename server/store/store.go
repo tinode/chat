@@ -803,7 +803,7 @@ func (messagesMapper) SaveReaction(topic string, seqId int, user types.Uid, cont
 	return adp.ReactionSave(&types.Reaction{
 		Topic:     topic,
 		SeqId:     seqId,
-		User:      user.UserId(),
+		User:      user.String(),
 		Content:   content,
 		CreatedAt: types.TimeNow(),
 	})
