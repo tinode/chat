@@ -89,6 +89,7 @@ When you register a new account you are asked for an email address to send valid
   * Granular access control with permissions for various actions.
   * User search/discovery.
   * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, videos, file attachments.
+  * Message reactions 👍.
   * Forms and templated responses suitable for chatbots.
   * Verified/staff/untrusted account markers.
   * Leave notes to self, bookmark (save) messages.
