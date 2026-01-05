@@ -481,7 +481,8 @@ message ServerPres {
 		REACT = 14;
 	}
 	What what = 3;
-	string user_agent = 4;
+	// Optional value associated with the presence update. For 'ua' this may hold user agent string.
+	string val = 4;
 	int32 seq_id = 5;
 	int32 del_id = 6;
 	repeated SeqRange del_seq = 7;
