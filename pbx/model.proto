@@ -154,6 +154,13 @@ message MsgReactions {
 	repeated MsgOneReaction data = 2;
 }
 
+message ClientReact {
+	// Message sequence ID
+	int32 seq_id = 1;
+	// Reaction content (emoji etc.)
+	string value = 2;
+}
+
 message SetQuery {
 	// Topic metadata, new topic & new subscriptions only
 	SetDesc desc = 1;
@@ -165,6 +172,8 @@ message SetQuery {
 	ClientCred cred = 4;
 	// Auxiliary data.
 	map<string, bytes> aux = 5;
+	// Add or remove a reaction to a message (client).
+	ClientReact react = 6;
 }
 
 // Client handshake
@@ -292,8 +301,6 @@ enum InfoNote {
 	RECV = 2;
 	KP = 3;
 	CALL = 4;
-	// Reaction notification
-	REACT = 5;
 }
 
 enum CallEvent {
