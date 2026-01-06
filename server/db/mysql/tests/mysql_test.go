@@ -43,9 +43,6 @@ var adp adapter.Adapter
 var db *sqlx.DB
 var testData *test_data.TestData
 
-var dummyUid1 = types.Uid(12345)
-var dummyUid2 = types.Uid(54321)
-
 func TestCreateDb(t *testing.T) {
 	if err := adp.CreateDb(config.Reset); err != nil {
 		t.Fatal(err)

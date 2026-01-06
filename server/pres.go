@@ -11,10 +11,10 @@ import (
 
 // presParams defines parameters for creating a presence notification.
 type presParams struct {
-	userAgent string
-	seqID     int
-	delID     int
-	delSeq    []MsgRange
+	value  string
+	seqID  int
+	delID  int
+	delSeq []MsgRange
 
 	// Uid who performed the action
 	actor string
@@ -268,7 +268,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 				Topic:     notifyOn,
 				What:      what,
 				Src:       t.name,
-				UserAgent: ua,
+				Val:       ua,
 				WantReply: wantReply,
 			},
 			RcptTo: topic,
@@ -313,6 +313,9 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 // Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
+// Case X: Topic public/private changed, "upd", who
+// Case Y: Topic deleted, "gone", who
+// Case Z: Topic tags changed, "tags", who
 func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *presFilters, skipSid string) {
 	// If affected user is the same as the user making the change, clear 'who'
 	actor := params.actor
@@ -618,7 +621,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, mode types.AccessMode,
 				Acs:       params.packAcs(),
 				AcsActor:  actor,
 				AcsTarget: target,
-				UserAgent: params.userAgent,
+				Val:       params.value,
 				WantReply: strings.HasPrefix(what, "?unkn"),
 				SkipTopic: skipTopic,
 			},

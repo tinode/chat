@@ -85,6 +85,14 @@ type MsgCredClient struct {
 	Params map[string]any `json:"params,omitempty"`
 }
 
+// MsgReactClient is a client reaction to a message.
+type MsgReactClient struct {
+	// Message ID
+	SeqId int `json:"seq,omitempty"`
+	// Reaction content (emoji etc.).
+	Value string `json:"val,omitempty"`
+}
+
 // MsgSetQuery is an update to topic or user metadata: description, subscriptions, tags, credentials.
 type MsgSetQuery struct {
 	// Topic/user description, new object & new subscriptions only
@@ -97,6 +105,8 @@ type MsgSetQuery struct {
 	Cred *MsgCredClient `json:"cred,omitempty"`
 	// Update auxiliary data
 	Aux map[string]any
+	// Add reaction to message
+	React *MsgReactClient `json:"react,omitempty"`
 }
 
 // MsgRange is either an individual ID (HiId=0) or a randge of IDs, low end inclusive (closed),
@@ -684,15 +694,23 @@ func (src *MsgServerData) describe() string {
 
 // MsgServerPres is presence notification {pres} (authoritative update).
 type MsgServerPres struct {
-	Topic     string     `json:"topic"`
-	Src       string     `json:"src,omitempty"`
-	What      string     `json:"what"`
-	UserAgent string     `json:"ua,omitempty"`
-	SeqId     int        `json:"seq,omitempty"`
-	DelId     int        `json:"clear,omitempty"`
-	DelSeq    []MsgRange `json:"delseq,omitempty"`
-	AcsTarget string     `json:"tgt,omitempty"`
-	AcsActor  string     `json:"act,omitempty"`
+	// Topic to send presence notification to.
+	Topic string `json:"topic"`
+	// Source topic of the presence notification.
+	Src string `json:"src,omitempty"`
+	// What is being reported: "on", "off", "ua" (user agent change), "gone" (account deleted), etc.
+	What string `json:"what"`
+	// Seq ID of the message being affected, if applicable.
+	SeqId int `json:"seq,omitempty"`
+	// Delete ID and ranges of deleted messages, if applicable.
+	DelId  int        `json:"clear,omitempty"`
+	DelSeq []MsgRange `json:"delseq,omitempty"`
+	// Target user or topic of the access mode change.
+	AcsTarget string `json:"tgt,omitempty"`
+	// Actor user ID who performed the access mode change.
+	AcsActor string `json:"act,omitempty"`
+	// New value associated with this presence notification.
+	Val string `json:"val,omitempty"`
 	// Acs or a delta Acs. Need to marshal it to json under a name different than 'acs'
 	// to allow different handling on the client
 	Acs *MsgAccessMode `json:"dacs,omitempty"`
@@ -736,8 +754,8 @@ func (src *MsgServerPres) describe() string {
 	if src.What != "" {
 		s += " what=" + src.What
 	}
-	if src.UserAgent != "" {
-		s += " ua=" + src.UserAgent
+	if src.Val != "" {
+		s += " val=" + src.Val
 	}
 	if src.SeqId != 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)

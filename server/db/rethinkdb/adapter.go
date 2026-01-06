@@ -2288,9 +2288,8 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-// MessageGetAll retrieves all messages available to the given user.
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
-
+// messageGetQuery returns a cursor for messages matching the given projection and query options.
+func (a *adapter) messageGetQuery(projection string, topic string, forUser t.Uid, opts *t.QueryOpt) (*rdb.Cursor, error) {
 	var limit = a.maxMessageResults
 	var lower, upper any
 
@@ -2330,7 +2329,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 		query = q1
 	}
 
-	cursor, err := query.
+	query = query.
 		// Ordering by index must come before filtering
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
 		// Skip hard-deleted messages
@@ -2341,8 +2340,28 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 				func(df rdb.Term) any {
 					return df.Field("User").Eq(requester)
 				}))
-		}).Limit(limit).Run(a.conn)
+		}).Limit(limit)
 
+	// Apply projection if provided (comma separated, like "SeqId,Content").
+	if strings.TrimSpace(projection) != "" {
+		parts := strings.Split(projection, ",")
+		fields := make([]any, len(parts))
+		for i := range parts {
+			fields[i] = strings.TrimSpace(parts[i])
+		}
+		query = query.Pluck(fields...)
+	}
+
+	cursor, err := query.Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	return cursor, nil
+}
+
+// MessageGetAll retrieves all messages available to the given user.
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
+	cursor, err := a.messageGetQuery("SeqId,CreatedAt,UpdatedAt,DeletedAt,DelId,SeqId,Topic,From,Head,Content", topic, forUser, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -2424,58 +2443,22 @@ func (a *adapter) ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *
 // reactionsForSet loads reactions for messages identified by seqIds in the given topic.
 // Returns a map of seqId to list of aggregate reactions.
 func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt, seqIds []int) (map[int][]t.OneTypeReaction, error) {
-	if opts == nil && len(seqIds) == 0 {
-		return nil, errors.New("missing query options")
-	}
-
 	if len(seqIds) == 0 {
-		var term = rdb.DB(a.dbName).Table("messages")
-		if len(opts.IdRanges) > 0 {
-			// Build explicit keys for Topic_SeqId index.
-			keys := make([]any, 0)
-			for _, r := range opts.IdRanges {
-				if r.Hi == 0 {
-					keys = append(keys, []any{topic, r.Low})
-				} else {
-					for i := r.Low; i < r.Hi; i++ {
-						keys = append(keys, []any{topic, i})
-					}
-				}
-			}
-			term = term.GetAllByIndex("Topic_SeqId", keys...)
-		} else if opts.Since > 0 || opts.Before > 1 {
-			var lower, upper any
-			lower = rdb.MinVal
-			if opts.Since > 0 {
-				lower = opts.Since
-			}
-			upper = rdb.MaxVal
-			if opts.Before > 1 {
-				upper = opts.Before
-			}
-			term = term.Between([]any{topic, lower}, []any{topic, upper},
-				rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "open"})
-		} else {
-			return nil, errors.New("invalid query options")
+		if opts == nil || (len(opts.IdRanges) == 0 && (opts.Since <= 0 && opts.Before <= 1)) {
+			return nil, t.ErrMalformed
 		}
 
-		// Apply IfModifiedSince filter to reaction creation time if present
-		if opts.IfModifiedSince != nil {
-			term = term.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
-
-		var limit = a.maxResults
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-
-		cursor, err := term.OrderBy(rdb.Desc("SeqId")).Limit(limit).Field("SeqId").Run(a.conn)
+		// No explicit list of seqIds provided. Use shared helper to fetch seqids according to options.
+		cursor, err := a.messageGetQuery("SeqId", topic, forUser, opts)
 		if err != nil {
 			return nil, err
 		}
 		defer cursor.Close()
-
-		if err = cursor.All(&seqIds); err != nil {
+		var doc struct{ SeqId int }
+		for cursor.Next(&doc) {
+			seqIds = append(seqIds, doc.SeqId)
+		}
+		if err := cursor.Err(); err != nil {
 			return nil, err
 		}
 	}

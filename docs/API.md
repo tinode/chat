@@ -29,7 +29,7 @@
     - [Peer to Peer Topics](#peer-to-peer-topics)
     - [Group Topics](#group-topics)
     - [sys Topic](#sys-topic)
-  - [Using Server-Issued Message IDs](#using-server-issued-message-ids)
+  - [Chat Messages](#chat-messages)
   - [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
   - [Trusted, Public, Private, Auxiliary Fields](#trusted-public-private-auxiliary-fields)
     - [Trusted](#trusted)
@@ -46,7 +46,7 @@
     - [Stdout](#stdout)
   - [Video Calls](#video-calls)
   - [Link Previews](#link-previews)
-  - [Messages](#messages)
+  - [Client-Server Protocol](#client-server-protocol)
     - [Client to Server Messages](#client-to-server-messages)
       - [{hi}](#hi)
       - [{acc}](#acc)
@@ -313,6 +313,7 @@ Topic properties independent of the user making the query:
 * `seq`: integer server-issued sequential ID of the latest `{data}` message sent through the topic
 * `trusted`: an application-defined object issued by the system administrators. Anyone can read it but only administrators can change it.
 * `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data, only topic `owner` can change it.
+* `aux`: an application-defined key-value pairs or topic configiration parameters. Anyone with read access to topic can read the value, only topic administrators can change them.
 
 User-dependent topic properties:
 * `acs`: object describing given user's current access permissions; see [Access control](#access-control) for details
@@ -440,14 +441,23 @@ A `channel` topic is different from the non-channel group topic in the following
  * Messages received by readers on channels have no `From` field. Normal subscribers will receive messages with `From` containing ID of the sender.
  * Default permissions for a channel and non-channel group topics are different: channel group topic grants no permissions at all.
  * A subscriber joining or leaving the topic (regular or channel-enabled) generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
+ * Reactions in channels are stripped of personal information.
 
 ### `sys` Topic
 
 The `sys` topic serves as an always available channel of communication with the system administrators. A normal non-root user cannot subscribe to `sys` but can publish to it without subscription. Existing clients use this channel to report abuse by sending a Drafty-formatted `{pub}` message with the report as JSON attachment. A root user can subscribe to `sys` topic. Once subscribed, the root user will receive messages sent to `sys` topic by other users.
 
-## Using Server-Issued Message IDs
+## Chat Messages
 
-Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
+Clients send chat messages as `{pub}` packets to a specific topic. Tinode server receives them, checks permissions, then forwards them to attached topic subscribers as `{data}` packet (protocol message) as well as notifies un-attached subscribers on their `me` topic and sends appropriate push notifications.
+
+Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}`. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate message history by using message IDs, such as: "get messages with ID smaller than 123", "... greater than 456", "... in the following ranges: 3-10, 73-85".
+
+Messages may have reactions. A reaction can technically be any (short) string, but normally it's either an emoji grapheme cluster or a vote in a poll. Reactions are sent by clients by issuing `{note}` messages, fetched from the server as part of `{data}`, can be fetched separately from `{data}` by issuing `{get what="meta"}`.
+
+A message may have multiple reactions. An individual reaction stored and transmitted as the type (emoji grapheme cluster) and a list of user IDs who reacted with this emoji.
+
+Channel readers can get only cumulative reaction count with personal information stripped except for the current user who receives info on his own reactions.
 
 ## User Agent and Presence Notifications
 
@@ -499,8 +509,9 @@ private: {
   arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
   accepted: "JRWS", // string, 'given' mode accepted by the user.
-  tpins: ["grpmiKBkQVXnm3P", "usrIU_LOVwRNsc"] // array of topic IDs to pin to the top of
-              // the contacts list; 'me' topic only.
+  tpins: [ // array of topic IDs to pin to the top of the contacts list; 'me' topic only.
+    "grpmiKBkQVXnm3P", "usrIU_LOVwRNsc"
+  ]
 }
 ```
 
@@ -512,7 +523,14 @@ The format of the `aux` field is a set of key-value pairs. The `aux` is writable
 
 ```js
 aux: {
-  pins: [1001, 23456] // array of integer message IDs to pin to the top of the message list.
+  pins: [1001, 23456], // array of integer message IDs to pin to the top of the message list.
+  react: {  // topic-specific settings for reactions in group topics;
+            // if unset then server-defaults will be used.
+    vals: [ // list of strings allowed to be used as topic reaction types.
+      "👍", "❤️", "🔥", "🤣"
+    ],
+    max: 3  // maximum number of different reaction types per message.
+  }
 }
 ```
 
@@ -649,9 +667,9 @@ The first several kilobytes of the document at the given URL is fetched by issui
 
 The link preview service requires authentication. It's exactly the same as authentication for [Out of Band Large Files](#out-of-band-handling-of-large-files).
 
-## Messages
+## Client-Server Protocol
 
-A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
+Clents and server communicate by exchanging messages. A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
 
 All client to server messages may have an optional `id` field. It's set by the client as means to receive an acknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. The `id` is returned unchanged by the server when it replies to the client message.
 
@@ -958,7 +976,7 @@ Query topic for metadata, such as description or a list of subscribers, or query
 get: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, name of topic to request data from
-  what: "sub desc data del cred", // string, space-separated list of parameters to query;
+  what: "sub desc data del cred aux react", // string, space-separated list of parameters to query;
                         // unknown values are ignored; required
 
   // Optional parameters for {get what="desc"}
@@ -1011,7 +1029,7 @@ Limited information is available without [attaching](#sub) to topic first.
 
 See [Trusted, Public, and Private Fields](#trusted-public-and-private-fields) for `trusted`, `private`, and `public` format considerations.
 
-* `{get what="sub"}`
+* `what="sub"`
 
 Get a list of subscribers. Server responds with a `{meta}` message containing a list of subscribers. See `{meta}` for details.
 For `me` topic the request returns a list of user's subscriptions. If `ims` is specified and data has not been updated,
@@ -1019,28 +1037,31 @@ responds with a `{ctrl}` "not modified" message.
 
 Only user's own subscription is returned without [attaching](#sub) to topic first.
 
-* `{get what="tags"}`
+* `what="tags"`
 
 Query indexed tags. Server responds with a `{meta}` message containing an array of string tags. See `{meta}` and `fnd` topic for details.
 Supported only for `me` and group topics.
 
-* `{get what="data"}`
+* `what="data"`
 
 Query message history. Server sends `{data}` messages matching parameters provided in the `data` field of the query.
 The `id` field of the data messages is not provided as it's common for data messages. When all `{data}` messages are transmitted, a `{ctrl}` message is sent.
 
-* `{get what="del"}`
+* `what="del"`
 
 Query message deletion history. Server responds with a `{meta}` message containing a list of deleted message ranges.
 
-* `{get what="cred"}`
+* `what="cred"`
 
 Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported for `me` topic only.
 
-* `{get what="aux"}`
+* `what="aux"`
 
 Query auxiliary topic data. Server responds with a `{meta}` message containing an object with auxiliary key-value pairs.
 
+* `what="react"`
+
+Query message reactions. Server responds with a `{meta}` message containing an array of objects each containing message IDs (`seq`) and reaction info.
 
 #### `{set}`
 

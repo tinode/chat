@@ -88,7 +88,7 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 			Topic:        pres.Topic,
 			Src:          pres.Src,
 			What:         what,
-			UserAgent:    pres.UserAgent,
+			Val:          pres.Val,
 			SeqId:        int32(pres.SeqId),
 			DelId:        int32(pres.DelId),
 			DelSeq:       pbDelQuerySerialize(pres.DelSeq),
@@ -210,7 +210,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Topic:     pres.GetTopic(),
 			Src:       pres.GetSrc(),
 			What:      what,
-			UserAgent: pres.GetUserAgent(),
+			Val:       pres.GetVal(),
 			SeqId:     int(pres.GetSeqId()),
 			DelId:     int(pres.GetDelId()),
 			DelSeq:    pbDelQueryDeserialize(pres.GetDelSeq()),
@@ -816,6 +816,10 @@ func pbSetQuerySerialize(in *MsgSetQuery) *pbx.SetQuery {
 
 	out.Cred = pbClientCredSerialize(in.Cred)
 
+	if in.React != nil {
+		out.React = &pbx.ClientReact{SeqId: int32(in.React.SeqId), Value: in.React.Value}
+	}
+
 	return out
 }
 
@@ -861,6 +865,13 @@ func pbSetQueryDeserialize(in *pbx.SetQuery) *MsgSetQuery {
 		msg.Cred = pbClientCredDeserialize(cred)
 	}
 
+	if r := in.GetReact(); r != nil {
+		if msg == nil {
+			msg = &MsgSetQuery{}
+		}
+		msg.React = &MsgReactClient{SeqId: int(r.GetSeqId()), Value: r.GetValue()}
+	}
+
 	return msg
 }
 
@@ -875,8 +886,6 @@ func pbInfoNoteWhatSerialize(what string) pbx.InfoNote {
 		out = pbx.InfoNote_RECV
 	case "call":
 		out = pbx.InfoNote_CALL
-	case "react":
-		out = pbx.InfoNote_REACT
 	default:
 		logs.Info.Println("unknown info-note.what", what)
 	}
@@ -894,8 +903,6 @@ func pbInfoNoteWhatDeserialize(what pbx.InfoNote) string {
 		out = "recv"
 	case pbx.InfoNote_CALL:
 		out = "call"
-	case pbx.InfoNote_REACT:
-		out = "react"
 	default:
 	}
 	return out

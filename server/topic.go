@@ -9,8 +9,8 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -442,6 +442,11 @@ func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan boo
 	if msg.MetaWhat&constMsgMetaAux != 0 {
 		if err := t.replySetAux(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Aux failed: %v", t.name, err)
+		}
+	}
+	if msg.MetaWhat&constMsgMetaReact != 0 {
+		if err := t.replySetReact(msg.sess, asUid, asChan, msg); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Set.React failed: %v", t.name, err)
 		}
 	}
 }
@@ -912,10 +917,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 	if t.cat == types.TopicCatP2P {
 		uid2 := t.p2pOtherUser(asUid)
 		pud2 := t.perUser[uid2]
-		mode2 := pud2.modeGiven & pud2.modeWant
-		if pud2.deleted {
-			mode2 = types.ModeInvalid
-		}
+		mode2 := t.p2pOtherUserMode(uid2)
 
 		// Inform the other user that the topic was just created.
 		if sreg.Sub.Created {
@@ -1179,14 +1181,17 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		if !mode.IsWriter() || t.isReadOnly() {
 			return
 		}
-	case "read", "recv", "react":
-		// Filter out "read/recv/react" from users with no 'R' permission (or people without a subscription).
+	case "read", "recv":
+		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
 		if !mode.IsReader() {
 			return
 		}
 	case "call":
 		// Handle calls separately.
 		t.handleCallEvent(msg)
+		return
+	default:
+		// Unknown note type: silently drop.
 		return
 	}
 
@@ -1254,28 +1259,8 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		}
 	}
 
-	if msg.Note.What == "react" {
-		var payload struct {
-			Emo string `json:"emo"`
-		}
-		err := json.Unmarshal(msg.Note.Payload, &payload)
-		if err != nil || !isReactionAllowed(payload.Emo) {
-			// Silently drop invalid or disallowed reaction.
-			return
-		}
-		if payload.Emo == nullValue {
-			err = store.Messages.DeleteReaction(t.name, msg.Note.SeqId, asUid)
-		} else {
-			err = store.Messages.SaveReaction(t.name, msg.Note.SeqId, asUid, payload.Emo)
-		}
-		if err != nil {
-			logs.Warn.Printf("topic[%s]: failed to update reaction: %v", t.name, err)
-			return
-		}
-	} else if asChan {
+	if asChan {
 		// No need to forward kp, read, recv {note} to other subscribers in channels.
-		// FIXME: Forwarding "react" could be inefficient in large channels. Some sort of batching
-		// should be implemented later.
 		return
 	}
 
@@ -1284,7 +1269,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		t.perUser[asUid] = pud
 	}
 
-	// Read/recv/kp/react: notify users offline in the topic on their 'me'.
+	// Read/recv/kp: notify users offline in the topic on their 'me'.
 	t.infoSubsOffline(asUid, msg.Note.What, seq, msg.Note.Payload, msg.sess.sid)
 
 	info := &ServerComMessage{
@@ -3105,7 +3090,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 
 	if tags != nil {
 		t.tags = tags
-		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+		t.presSubsOnline("cred", "", nilPresParams, nilPresFilters, "")
 	}
 
 	sess.queueOut(decodeStoreErrorExplicitTs(err, set.Id, t.original(asUid), now, msg.Timestamp, nil))
@@ -3168,50 +3153,6 @@ func (t *Topic) replySetAux(sess *Session, asUid types.Uid, msg *ClientComMessag
 	return nil
 }
 
-// replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
-// a session as {meta}
-// response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
-	now := types.TimeNow()
-	toriginal := t.original(asUid)
-
-	id := msg.Id
-	incomingReqTs := msg.Timestamp
-
-	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformedReply(msg, now))
-		return errors.New("invalid MsgGetOpts query")
-	}
-
-	// Check if the user has permission to read the topic data and the request is valid.
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
-		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
-		if err != nil {
-			sess.queueOut(ErrUnknownReply(msg, now))
-			return err
-		}
-
-		if len(ranges) > 0 {
-			sess.queueOut(&ServerComMessage{
-				Meta: &MsgServerMeta{
-					Id:    id,
-					Topic: toriginal,
-					Del: &MsgDelValues{
-						DelId:  delID,
-						DelSeq: rangeDeserialize(ranges),
-					},
-					Timestamp: &now,
-				},
-			})
-			return nil
-		}
-	}
-
-	sess.queueOut(NoContentParams(id, toriginal, now, incomingReqTs, map[string]string{"what": "del"}))
-
-	return nil
-}
-
 // replyGetReact handles get.react requests by returning aggregated reactions for messages
 // identified by the requested ranges / since / before parameters. Response is sent as a
 // {meta} message with Meta.Reactions filled.
@@ -3269,6 +3210,96 @@ func (t *Topic) replyGetReact(sess *Session, asUid types.Uid, req *MsgGetOpts, m
 	}
 
 	sess.queueOut(NoContentParams(id, toriginal, now, incomingReqTs, map[string]string{"what": "react"}))
+	return nil
+}
+
+func (t *Topic) replySetReact(sess *Session, asUid types.Uid, asChan bool, msg *ClientComMessage) error {
+	now := types.TimeNow()
+	react := msg.Set.React
+
+	var err error
+	if react.Value == nullValue {
+		err = store.Messages.DeleteReaction(t.name, react.SeqId, asUid)
+	} else if !isReactionAllowed(react.Value) {
+		// Check against the global list of allowed reactions.
+		err = types.ErrMalformed
+	} else {
+		if t.aux != nil {
+			// Check against topic-specific allowed reactions.
+			if config, ok := t.aux["react"].(map[string]any); ok {
+				if vals, ok := config["vals"].([]string); ok {
+					if ok := slices.Contains(vals, react.Value); !ok {
+						err = types.ErrMalformed
+					}
+				} else {
+					// No allowed values defined.
+					err = types.ErrUnsupported
+				}
+			}
+		}
+		err = store.Messages.SaveReaction(t.name, react.SeqId, asUid, react.Value)
+	}
+	if err != nil {
+		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Set.Id, t.original(asUid), now, msg.Timestamp, nil))
+		return err
+	}
+	t.presSubsOnline("react", "", nilPresParams, nilPresFilters, sess.sid)
+	if t.cat == types.TopicCatP2P {
+		// Notify the other party in a p2p topic about the reaction update.
+		// No need to notify group topic subscribers or channel readers: not important enough.
+		params := presParams{
+			value: react.Value,
+			seqID: react.SeqId,
+			actor: asUid.UserId(),
+		}
+		uid2 := t.p2pOtherUser(asUid)
+		t.presSingleUserOffline(uid2, t.p2pOtherUserMode(uid2), "react", &params, "", true)
+	}
+	sess.queueOut(NoErrReply(msg, now))
+	return nil
+}
+
+// replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
+// a session as {meta}
+// response goes to a single session rather than all sessions in a topic
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
+	now := types.TimeNow()
+	toriginal := t.original(asUid)
+
+	id := msg.Id
+	incomingReqTs := msg.Timestamp
+
+	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformedReply(msg, now))
+		return errors.New("invalid MsgGetOpts query")
+	}
+
+	// Check if the user has permission to read the topic data and the request is valid.
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
+		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
+		if err != nil {
+			sess.queueOut(ErrUnknownReply(msg, now))
+			return err
+		}
+
+		if len(ranges) > 0 {
+			sess.queueOut(&ServerComMessage{
+				Meta: &MsgServerMeta{
+					Id:    id,
+					Topic: toriginal,
+					Del: &MsgDelValues{
+						DelId:  delID,
+						DelSeq: rangeDeserialize(ranges),
+					},
+					Timestamp: &now,
+				},
+			})
+			return nil
+		}
+	}
+
+	sess.queueOut(NoContentParams(id, toriginal, now, incomingReqTs, map[string]string{"what": "del"}))
+
 	return nil
 }
 
@@ -3898,6 +3929,16 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	// Even when one user is deleted, the subscription must be restored
 	// before p2pOtherUser is called.
 	panic("Not a valid P2P topic")
+}
+
+// Get access mode of the user in a P2P topic.
+func (t *Topic) p2pOtherUserMode(uid2 types.Uid) types.AccessMode {
+	pud2 := t.perUser[uid2]
+	mode2 := pud2.modeGiven & pud2.modeWant
+	if pud2.deleted {
+		mode2 = types.ModeInvalid
+	}
+	return mode2
 }
 
 // Get per-session value of fnd.Public

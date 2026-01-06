@@ -2526,8 +2526,8 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-// MessageGetAll returns messages matching the query.
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
+// messageGetQuery returns a cursor for messages matching the query projection and options.
+func (a *adapter) messageGetQuery(projection string, topic string, forUser t.Uid, opts *t.QueryOpt) (*mdb.Cursor, error) {
 	var limit = a.maxMessageResults
 	var lower, upper int
 	requester := forUser.String()
@@ -2549,6 +2549,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 		"delid":           b.M{"$exists": false},
 		"deletedfor.user": b.M{"$ne": requester},
 	}
+
+	// Build seqid filter
 	seqIdFilter := b.M{}
 	if upper == 0 {
 		seqIdFilter = b.M{"$gte": lower}
@@ -2559,25 +2561,69 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 	if opts != nil && opts.IfModifiedSince != nil {
 		filter["$or"] = []b.M{
 			{"seqid": seqIdFilter},
-			{"updatedat": b.M{"$gt": opts.IfModifiedSince}},
+			{"updatedat": b.M{"$gt": *opts.IfModifiedSince}},
 		}
 	} else {
 		filter["seqid"] = seqIdFilter
 	}
 
-	findOpts := mdbopts.Find().SetSort(b.D{{"topic", -1}, {"seqid", -1}})
-	findOpts.SetLimit(int64(limit))
+	// If IdRanges provided, override seqid filter and build $or ranges.
+	if opts != nil && len(opts.IdRanges) > 0 {
+		var ors []b.M
+		for _, r := range opts.IdRanges {
+			if r.Hi == 0 {
+				ors = append(ors, b.M{"seqid": r.Low})
+			} else {
+				ors = append(ors, b.M{"seqid": b.M{"$gte": r.Low, "$lt": r.Hi}})
+			}
+		}
+		if len(ors) > 0 {
+			filter["$or"] = ors
+			// If IfModifiedSince exists, keep it as an additional $or entry.
+			if opts.IfModifiedSince != nil {
+				filter["$or"] = append(filter["$or"].(b.A), b.M{"updatedat": b.M{"$gt": *opts.IfModifiedSince}})
+			}
+		}
+	}
+
+	// Parse projection string into bson projection map
+	proj := bson.M{}
+	if projection != "" {
+		parts := strings.Split(projection, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				proj[p] = 1
+			}
+		}
+	}
+
+	findOpts := mdbopts.Find().SetSort(bson.D{{Key: "seqid", Value: -1}}).SetLimit(int64(limit))
+	if len(proj) > 0 {
+		findOpts.SetProjection(proj)
+	}
 
 	cur, err := a.db.Collection("messages").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(a.ctx)
+	return cur, nil
+}
+
+// MessageGetAll returns messages matching the query.
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
+	cursor, err := a.messageGetQuery(
+		"createdat,updatedat,deletedat,delid,seqid,topic,from,head,content",
+		topic, forUser, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(a.ctx)
 
 	var msgs []t.Message
-	for cur.Next(a.ctx) {
+	for cursor.Next(a.ctx) {
 		var msg t.Message
-		if err = cur.Decode(&msg); err != nil {
+		if err = cursor.Decode(&msg); err != nil {
 			return nil, err
 		}
 		if !asChan {
@@ -2652,59 +2698,18 @@ func (a *adapter) ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *
 // reactionsForSet loads reactions for messages identified by seqIds in the given topic.
 // Returns a map of seqId to list of aggregate reactions.
 func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt, seqIds []int) (map[int][]t.OneTypeReaction, error) {
-	if opts == nil && len(seqIds) == 0 {
-		return nil, errors.New("missing query options")
-	}
-
 	// If seqIds not provided, build seq filter from opts and select seqIds from messages.
 	if len(seqIds) == 0 {
-		// Build filter for messages
-		filter := bson.M{"topic": topic}
-		if len(opts.IdRanges) > 0 {
-			// Build $or for ranges
-			var ors []bson.M
-			for _, r := range opts.IdRanges {
-				if r.Hi == 0 {
-					ors = append(ors, bson.M{"seqid": r.Low})
-				} else {
-					// treat Hi as exclusive like SQL BETWEEN ... (Before is exclusive in other places)
-					ors = append(ors, bson.M{"seqid": bson.M{"$gte": r.Low, "$lt": r.Hi}})
-				}
-			}
-			if len(ors) > 0 {
-				filter["$or"] = ors
-			}
-		} else if opts.Before > 1 || opts.Since > 0 {
-			if opts.Since > 0 && opts.Before > 1 {
-				filter["seqid"] = bson.M{"$gte": opts.Since, "$lt": opts.Before}
-			} else if opts.Since > 0 {
-				filter["seqid"] = bson.M{"$gte": opts.Since}
-			} else {
-				filter["seqid"] = bson.M{"$lt": opts.Before}
-			}
-		} else {
-			return nil, errors.New("invalid query options")
+		if opts == nil || (len(opts.IdRanges) == 0 && (opts.Since <= 0 && opts.Before <= 1)) {
+			return nil, t.ErrMalformed
 		}
 
-		// IfModifiedSince applies to message.updatedat (same as MySQL implementation).
-		if opts.IfModifiedSince != nil {
-			filter["updatedat"] = bson.M{"$gt": *opts.IfModifiedSince}
-		}
-
-		limit := int64(a.maxResults)
-		if opts.Limit > 0 && opts.Limit < int(limit) {
-			limit = int64(opts.Limit)
-		}
-
-		// Query messages collection for seqids
-		msgColl := a.db.Collection("messages")
-		findOpts := options.Find().SetSort(bson.D{{Key: "seqid", Value: -1}}).SetLimit(limit).SetProjection(bson.M{"seqid": 1})
-		cursor, err := msgColl.Find(a.ctx, filter, findOpts)
+		// No explicit list of seqIds provided. Use shared helper to fetch seqids according to options.
+		cursor, err := a.messageGetQuery("seqid", topic, forUser, opts)
 		if err != nil {
 			return nil, err
 		}
 		defer cursor.Close(a.ctx)
-
 		for cursor.Next(a.ctx) {
 			var doc struct {
 				SeqId int `bson:"seqid"`

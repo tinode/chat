@@ -1265,22 +1265,6 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	return tx.Commit(ctx)
 }
 
-func tempFetchTags(ctx context.Context, tx pgx.Tx, decoded_uid int64) ([]string, error) {
-	var allTags []string
-	rows, err := tx.Query(ctx, "SELECT tag FROM usertags WHERE userid=$1", decoded_uid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tag string
-		rows.Scan(&tag)
-		allTags = append(allTags, tag)
-	}
-	return allTags, nil
-}
-
 // UserUpdateTags adds or resets user's tags
 func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error) {
 	ctx, cancel := a.getContextForTx()
@@ -2655,27 +2639,33 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
+func (a *adapter) messageGetQuery(projection, topic string, forUser t.Uid, opts *t.QueryOpt) (pgx.Rows, error) {
 	var limit = a.maxMessageResults
 
 	args := []any{store.DecodeUid(forUser), topic}
-	seqIdConstraint := ""
+	constraints := ""
 	if opts != nil {
 		if len(opts.IdRanges) > 0 {
 			constr, newargs := common.RangesToSql(opts.IdRanges)
-			seqIdConstraint += " AND m.seqid " + constr
+			constraints += " AND m.seqid " + constr
 			args = append(args, newargs...)
-		} else {
+		} else if opts.Since > 0 || opts.Before > 1 {
 			if opts.Since > 0 && opts.Before > 1 {
 				args = append(args, opts.Since, opts.Before-1)
-				seqIdConstraint += " AND m.seqid BETWEEN ? AND ?"
+				constraints += " AND m.seqid BETWEEN ? AND ?"
 			} else if opts.Since > 0 {
 				args = append(args, opts.Since)
-				seqIdConstraint += " AND m.seqid >= ?"
+				constraints += " AND m.seqid >= ?"
 			} else if opts.Before > 1 {
 				args = append(args, opts.Before)
-				seqIdConstraint += " AND m.seqid < ?"
+				constraints += " AND m.seqid < ?"
 			}
+		}
+
+		// IfModifiedSince applies as an additional filter on messages' updated time.
+		if opts.IfModifiedSince != nil {
+			constraints += " AND m.updatedat > ?"
+			args = append(args, *opts.IfModifiedSince)
 		}
 
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -2690,16 +2680,33 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *
 		defer cancel()
 	}
 
-	query, args := expandQuery(`SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m."from",m.head,m.content`+
-		" FROM messages AS m LEFT JOIN dellog AS d"+
-		" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
-		" WHERE m.delid=0 AND m.topic=? "+seqIdConstraint+" AND d.deletedfor IS NULL"+
-		" ORDER BY m.seqid DESC LIMIT ?", args...)
-	rows, err := a.db.Query(ctx, query, args...)
+	query, args := expandQuery(
+		"SELECT "+projection+
+			" FROM messages AS m LEFT JOIN dellog AS d"+
+			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
+			" WHERE m.delid=0 AND m.topic=?"+constraints+" AND d.deletedfor IS NULL"+
+			" ORDER BY m.seqid DESC LIMIT ?",
+		args...)
+	return a.db.Query(ctx, query, args...)
+}
+
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt) ([]t.Message, error) {
+	rows, err := a.messageGetQuery(
+		"m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.\"from\",m.head,m.content",
+		topic, forUser, opts)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+
+	var limit = a.maxMessageResults
+	if opts != nil {
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+		// Ignored for MessageGetAll -- handled within messageGetQuery
+		opts.IfModifiedSince = nil
+	}
 
 	msgs := make([]t.Message, 0, limit)
 	seqIds := make([]int, 0, limit)
@@ -3020,70 +3027,35 @@ func (a *adapter) ReactionGetAll(topic string, forUser t.Uid, asChan bool, opt *
 // reactionsForSet loads reactions for messages identified by seqIds in the given topic.
 // Returns a map of seqId to list of aggregate reactions.
 func (a *adapter) reactionsForSet(topic string, forUser t.Uid, asChan bool, opts *t.QueryOpt, seqIds []int) (map[int][]t.OneTypeReaction, error) {
+	if len(seqIds) == 0 {
+		if opts == nil || (len(opts.IdRanges) == 0 && (opts.Since <= 0 && opts.Before <= 1)) {
+			return nil, t.ErrMalformed
+		}
+	}
+
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
-	}
-
-	// Build sequence constraints from opts: either IdRanges OR Since+Before.
-	if opts == nil && len(seqIds) == 0 {
-		return nil, errors.New("missing query options")
 	}
 
 	var seqConstraint string
 	var query string
 	var seqArgs []any
 	if len(seqIds) == 0 {
-		// No explicit list of seqIds provided.
-		// Build sequence constraints from opts: either IdRanges OR Since+Before.
-		if len(opts.IdRanges) > 0 {
-			constr, newargs := common.RangesToSql(opts.IdRanges)
-			seqConstraint = " AND seqid " + constr
-			seqArgs = append(seqArgs, newargs...)
-		} else if opts.Before > 1 || opts.Since > 0 {
-			if opts.Since > 0 && opts.Before > 1 {
-				// Use BETWEEN when both bounds specified. Before is exclusive.
-				seqConstraint = " AND seqid BETWEEN ? AND ?"
-				seqArgs = append(seqArgs, opts.Since, opts.Before-1)
-			} else if opts.Since > 0 {
-				seqConstraint = " AND seqid >= ?"
-				seqArgs = append(seqArgs, opts.Since)
-			} else {
-				// only Before set
-				seqConstraint = " AND seqid < ?"
-				seqArgs = append(seqArgs, opts.Before)
-			}
-		} else {
-			return nil, errors.New("invalid query options")
-		}
-
-		// IfModifiedSince applies as an additional filter on messages' updated time.
-		if opts.IfModifiedSince != nil {
-			seqConstraint += " AND updatedat > ?"
-			seqArgs = append(seqArgs, *opts.IfModifiedSince)
-		}
-
-		var limit = a.maxResults
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-
-		// First, select seqids (messages) and restrict the main query to them so LIMIT applies to messages, not reactions.
-		q, qargs := expandQuery("SELECT seqid FROM messages WHERE topic=?"+seqConstraint+" ORDER BY seqid DESC LIMIT ?",
-			topic, seqArgs, limit)
-		rowsIds, err := a.db.Query(ctx, q, qargs...)
+		// No explicit list of seqIds provided. Use shared helper to fetch seqids according to options.
+		rowIds, err := a.messageGetQuery("seqid", topic, forUser, opts)
 		if err != nil {
 			return nil, err
 		}
-		defer rowsIds.Close()
-		for rowsIds.Next() {
+		defer rowIds.Close()
+		for rowIds.Next() {
 			var seq int
-			if err := rowsIds.Scan(&seq); err != nil {
+			if err := rowIds.Scan(&seq); err != nil {
 				return nil, err
 			}
 			seqIds = append(seqIds, seq)
 		}
-		if err = rowsIds.Err(); err != nil {
+		if err = rowIds.Err(); err != nil {
 			return nil, err
 		}
 	}
