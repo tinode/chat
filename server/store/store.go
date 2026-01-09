@@ -2,6 +2,7 @@
 package store
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,9 @@ var mediaHandler media.Handler
 // Unique ID generator
 var uGen types.UidGenerator
 
+// Message encryption service for content at rest
+var messageEncryptionService *MessageEncryptionService
+
 type configType struct {
 	// 16-byte key for XTEA. Used to initialize types.UidGenerator.
 	UidKey []byte `json:"uid_key"`
@@ -33,6 +37,13 @@ type configType struct {
 	UseAdapter string `json:"use_adapter"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
+	// Message encryption at rest configuration
+	EncryptAtRest *EncryptAtRestConfig `json:"encrypt_at_rest,omitempty"`
+}
+
+// EncryptAtRestConfig represents message encryption at rest configuration
+type EncryptAtRestConfig struct {
+	Key string `json:"key"`
 }
 
 func openAdapter(workerId int, jsonconf json.RawMessage) error {
@@ -72,6 +83,11 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 		return errors.New("store: failed to init snowflake: " + err.Error())
 	}
 
+	// Initialize message encryption service
+	if err := initMessageEncryption(config.EncryptAtRest); err != nil {
+		return errors.New("store: failed to init message encryption: " + err.Error())
+	}
+
 	if err := adp.SetMaxResults(config.MaxResults); err != nil {
 		return err
 	}
@@ -83,6 +99,30 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 
 	return adp.Open(adapterConfig)
 }
+
+// initMessageEncryption initializes the message encryption service
+func initMessageEncryption(encConfig *EncryptAtRestConfig) error {
+	if encConfig == nil || encConfig.Key == "" {
+		messageEncryptionService = nil
+		return nil
+	}
+
+	// Decode base64 key
+	key, err := base64.StdEncoding.DecodeString(encConfig.Key)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 encryption key: %w", err)
+	}
+
+	// Create message encryption service
+	es, err := NewMessageEncryptionService(key)
+	if err != nil {
+		return fmt.Errorf("failed to create message encryption service: %w", err)
+	}
+
+	messageEncryptionService = es
+	return nil
+}
+
 
 // PersistentStorageInterface defines methods used for interation with persistent storage.
 type PersistentStorageInterface interface {
@@ -113,8 +153,8 @@ type storeObj struct{}
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 //
-//		name - name of the adapter rquested in the config file
-//	  jsonconf - configuration string
+//	workerId - worker ID for snowflake initialization
+//	jsonconf - configuration string
 func (storeObj) Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
@@ -682,6 +722,18 @@ var Messages MessagesPersistenceInterface
 func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
+
+	// Encrypt message content if encryption is enabled
+	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
+		encryptedContent, err := messageEncryptionService.EncryptContent(msg.Content)
+		if err != nil {
+			logs.Warn.Printf("topic[%s]: failed to encrypt message content (seq: %d) - err: %+v", msg.Topic, msg.SeqId, err)
+			// Continue without encryption rather than failing
+		} else {
+			msg.Content = encryptedContent
+		}
+	}
+
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
@@ -769,7 +821,24 @@ func (messagesMapper) DeleteList(topic string, delID int, forUser types.Uid, msg
 
 // GetAll returns multiple messages.
 func (messagesMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
-	return adp.MessageGetAll(topic, forUser, opt)
+	messages, err := adp.MessageGetAll(topic, forUser, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt message content if encryption is enabled
+	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
+		for i := range messages {
+			if decryptedContent, err := messageEncryptionService.DecryptContent(messages[i].Content); err != nil {
+				logs.Warn.Printf("topic[%s]: failed to decrypt message content (seq: %d) - err: %+v", topic, messages[i].SeqId, err)
+				// Keep encrypted content if decryption fails
+			} else {
+				messages[i].Content = decryptedContent
+			}
+		}
+	}
+
+	return messages, nil
 }
 
 // GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
