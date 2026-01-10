@@ -2,7 +2,6 @@
 package store
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,12 +37,12 @@ type configType struct {
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 	// Message encryption at rest configuration
-	EncryptAtRest *EncryptAtRestConfig `json:"encrypt_at_rest,omitempty"`
+	EncryptAtRest *EncryptAtRestConfig `json:"encrypt_at_rest"`
 }
 
 // EncryptAtRestConfig represents message encryption at rest configuration
 type EncryptAtRestConfig struct {
-	Key string `json:"key"`
+	Key []byte `json:"key"`
 }
 
 func openAdapter(workerId int, jsonconf json.RawMessage) error {
@@ -102,27 +101,18 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 
 // initMessageEncryption initializes the message encryption service
 func initMessageEncryption(encConfig *EncryptAtRestConfig) error {
-	if encConfig == nil || encConfig.Key == "" {
-		messageEncryptionService = nil
+	if encConfig == nil || len(encConfig.Key) == 0 {
 		return nil
 	}
 
-	// Decode base64 key
-	key, err := base64.StdEncoding.DecodeString(encConfig.Key)
+	es, err := NewMessageEncryptionService(encConfig.Key)
 	if err != nil {
-		return fmt.Errorf("failed to decode base64 encryption key: %w", err)
-	}
-
-	// Create message encryption service
-	es, err := NewMessageEncryptionService(key)
-	if err != nil {
-		return fmt.Errorf("failed to create message encryption service: %w", err)
+		return err
 	}
 
 	messageEncryptionService = es
 	return nil
 }
-
 
 // PersistentStorageInterface defines methods used for interation with persistent storage.
 type PersistentStorageInterface interface {
@@ -724,7 +714,7 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 	msg.SetUid(Store.GetUid())
 
 	// Encrypt message content if encryption is enabled
-	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
+	if messageEncryptionService.IsEnabled() {
 		encryptedContent, err := messageEncryptionService.EncryptContent(msg.Content)
 		if err != nil {
 			logs.Warn.Printf("topic[%s]: failed to encrypt message content (seq: %d) - err: %+v", msg.Topic, msg.SeqId, err)
@@ -827,11 +817,15 @@ func (messagesMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOp
 	}
 
 	// Decrypt message content if encryption is enabled
-	if messageEncryptionService != nil && messageEncryptionService.IsEnabled() {
+	if messageEncryptionService.IsEnabled() {
 		for i := range messages {
 			if decryptedContent, err := messageEncryptionService.DecryptContent(messages[i].Content); err != nil {
 				logs.Warn.Printf("topic[%s]: failed to decrypt message content (seq: %d) - err: %+v", topic, messages[i].SeqId, err)
-				// Keep encrypted content if decryption fails
+				// Replace with error placeholder instead of returning garbled encrypted content
+				messages[i].Content = map[string]any{
+					"error": "decryption_failed",
+					"txt":   "[Message content could not be decrypted]",
+				}
 			} else {
 				messages[i].Content = decryptedContent
 			}

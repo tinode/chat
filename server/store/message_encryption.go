@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,9 +18,8 @@ type MessageEncryptionService struct {
 
 // EncryptedContent represents encrypted message content with metadata
 type EncryptedContent struct {
-	Data      []byte `json:"data"`      // Encrypted data (automatically base64 encoded/decoded)
-	Nonce     []byte `json:"nonce"`     // Nonce (automatically base64 encoded/decoded)
-	Encrypted bool   `json:"encrypted"` // Flag to identify encrypted content
+	Data  []byte `json:"data"`  // Encrypted data (automatically base64 encoded/decoded)
+	Nonce []byte `json:"nonce"` // Nonce (automatically base64 encoded/decoded)
 }
 
 // NewMessageEncryptionService creates a new message encryption service
@@ -28,14 +28,9 @@ func NewMessageEncryptionService(key []byte) (*MessageEncryptionService, error) 
 		return nil, nil // No encryption if no key provided
 	}
 
-	// Validate key size - AES supports 16, 24, or 32 bytes
-	if len(key) != 16 && len(key) != 24 && len(key) != 32 {
-		return nil, fmt.Errorf("encryption key must be 16, 24, or 32 bytes, got %d", len(key))
-	}
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+		return nil, err
 	}
 
 	aead, err := cipher.NewGCM(block)
@@ -81,13 +76,10 @@ func (es *MessageEncryptionService) EncryptContent(content any) (any, error) {
 	encrypted := es.aead.Seal(nil, nonce, contentBytes, nil)
 
 	// Create encrypted content structure
-	encryptedContent := &EncryptedContent{
-		Data:      encrypted,
-		Nonce:     nonce,
-		Encrypted: true,
-	}
-
-	return encryptedContent, nil
+	return &EncryptedContent{
+		Data:  encrypted,
+		Nonce: nonce,
+	}, nil
 }
 
 // DecryptContent decrypts message content
@@ -96,42 +88,63 @@ func (es *MessageEncryptionService) DecryptContent(content any) (any, error) {
 		return content, nil
 	}
 
-	// Check if content is encrypted
-	encryptedContent, ok := content.(*EncryptedContent)
+	// Content from database comes as map[string]any
+	contentMap, ok := content.(map[string]any)
 	if !ok {
-		// Try to unmarshal from JSON if it's a string
-		if contentStr, ok := content.(string); ok {
-			var ec EncryptedContent
-			if err := json.Unmarshal([]byte(contentStr), &ec); err == nil && ec.Encrypted {
-				encryptedContent = &ec
-			} else {
-				// Not encrypted, return as-is
-				return content, nil
-			}
-		} else {
-			// Not encrypted, return as-is
-			return content, nil
-		}
-	}
-
-	if !encryptedContent.Encrypted {
+		// Not in expected format, assume not encrypted
 		return content, nil
 	}
 
-	// Decrypt the content (Data and Nonce are already []byte, no need to decode)
-	decryptedBytes, err := es.aead.Open(nil, encryptedContent.Nonce, encryptedContent.Data, nil)
+	// Detect encrypted content by presence of data and nonce fields
+	ec, err := encryptedContentFromMap(contentMap)
+	if err != nil {
+		// Not valid encrypted content, return as-is
+		return content, nil
+	}
+
+	// Decrypt the content
+	decryptedBytes, err := es.aead.Open(nil, ec.Nonce, ec.Data, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt content: %w", err)
 	}
 
-	// Try to unmarshal back to original type
+	// Unmarshal back to original type
 	var decryptedContent any
 	if err := json.Unmarshal(decryptedBytes, &decryptedContent); err != nil {
-		// If unmarshaling fails, return the raw bytes as string
 		return string(decryptedBytes), nil
 	}
 
 	return decryptedContent, nil
+}
+
+// encryptedContentFromMap converts a map[string]any to EncryptedContent
+// This handles the case where content is read from the database and unmarshaled as a map
+func encryptedContentFromMap(m map[string]any) (*EncryptedContent, error) {
+	ec := &EncryptedContent{}
+
+	// Get and decode the data field (base64 encoded string from JSON)
+	if dataStr, ok := m["data"].(string); ok {
+		data, err := base64.StdEncoding.DecodeString(dataStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode data: %w", err)
+		}
+		ec.Data = data
+	} else {
+		return nil, fmt.Errorf("missing or invalid 'data' field")
+	}
+
+	// Get and decode the nonce field (base64 encoded string from JSON)
+	if nonceStr, ok := m["nonce"].(string); ok {
+		nonce, err := base64.StdEncoding.DecodeString(nonceStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode nonce: %w", err)
+		}
+		ec.Nonce = nonce
+	} else {
+		return nil, fmt.Errorf("missing or invalid 'nonce' field")
+	}
+
+	return ec, nil
 }
 
 // GetKey returns a copy of the encryption key (for testing purposes)
@@ -147,9 +160,4 @@ func (es *MessageEncryptionService) GetKey() []byte {
 // GetMessageEncryptionService returns the current message encryption service instance
 func GetMessageEncryptionService() *MessageEncryptionService {
 	return messageEncryptionService
-}
-
-// IsMessageEncryptionEnabled returns whether message encryption is currently enabled
-func IsMessageEncryptionEnabled() bool {
-	return messageEncryptionService != nil && messageEncryptionService.IsEnabled()
 }

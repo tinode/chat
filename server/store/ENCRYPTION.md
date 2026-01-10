@@ -69,51 +69,59 @@ openssl rand -base64 32
 ### Key Storage
 
 Store your encryption key securely:
+
 - Never commit encryption keys to version control
 - Use environment variables or secure key management systems
 - Consider using hardware security modules (HSMs) for production environments
 
 ## Migration
 
-### From Unencrypted to Encrypted
+### New Deployments
 
-To encrypt existing unencrypted messages, use the migration tool:
+For new deployments, simply configure the `encrypt_at_rest` key before starting the server. All new messages will be encrypted automatically.
 
-```bash
-# First, do a dry run to see what would be encrypted
-go run server/tools/encrypt_messages.go \
-  --config tinode.conf \
-  --key_string "your-base64-encoded-key" \
-  --topic "your-topic-name" \
-  --dry_run
+### Existing Deployments
 
-# Then run the actual encryption
-go run server/tools/encrypt_messages.go \
-  --config tinode.conf \
-  --key_string "your-base64-encoded-key" \
-  --topic "your-topic-name"
-```
+**Important:** Enabling encryption on an existing deployment with unencrypted messages requires careful planning.
 
-**Note:** The migration tool uses the adapter directly to bypass auto-encryption/decryption and handles all supported AES key sizes.
+#### Mixed Content Handling
 
-### From Encrypted to Unencrypted
+The decryption logic automatically handles mixed content:
 
-To decrypt encrypted messages (use with caution):
+- **Encrypted messages**: Will be decrypted using the configured key
+- **Unencrypted messages**: Will be returned as-is (no modification needed)
 
-```bash
-go run server/tools/encrypt_messages.go \
-  --config tinode.conf \
-  --key_string "your-base64-encoded-key" \
-  --topic "your-topic-name" \
-  --reverse
-```
+This means you can safely enable encryption on an existing deployment:
+
+1. Configure the `encrypt_at_rest` key in `tinode.conf`
+2. Restart the server
+3. New messages will be encrypted; old messages remain readable
+
+#### Full Migration (Optional)
+
+If you require all messages to be encrypted (for compliance or security reasons), you will need to write a custom migration script that:
+
+1. Reads messages directly from the database
+2. Encrypts the `content` field using the same AES-GCM algorithm
+3. Updates the messages in the database
+
+**Note:** A built-in migration tool is planned for a future release.
+
+### Key Rotation
+
+Key rotation is not currently supported. If you need to change the encryption key:
+
+1. Decrypt all messages using the old key (requires custom script)
+2. Update the configuration with the new key
+3. Re-encrypt all messages with the new key
+
+**Note:** Key rotation support is planned for a future release.
 
 ## Security Considerations
 
 ### What is Encrypted
 
 - **Message content**: The actual text/content of messages
-- **Metadata**: Message headers, timestamps, sender info, etc. remain unencrypted
 
 ### What is NOT Encrypted
 
@@ -145,8 +153,7 @@ Encrypted content is stored as a JSON object with automatic base64 encoding:
 ```json
 {
   "data": "base64-encoded-encrypted-data",
-  "nonce": "base64-encoded-nonce", 
-  "encrypted": true
+  "nonce": "base64-encoded-nonce"
 }
 ```
 
@@ -160,36 +167,6 @@ The `data` and `nonce` fields are automatically base64 encoded/decoded during JS
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **"encryption key must be 16, 24, or 32 bytes"**
-   - Ensure your key is exactly 16, 24, or 32 bytes when decoded from base64
-   - Use the keygen tool to generate valid keys
-
-2. **"failed to decode base64 encryption key"**
-   - Verify your key is properly base64-encoded
-   - Ensure there are no extra spaces or newlines in the key
-
-3. **"failed to create AES cipher"**
-   - This usually indicates a system-level issue with crypto libraries
-
-### Logs
-
-Encryption-related errors and warnings are logged with the prefix:
-- `topic[topic-name]: failed to encrypt message content (seq: X) - err: ...`
-- `topic[topic-name]: failed to decrypt message content (seq: X) - err: ...`
-
-## Future Enhancements
-
-- File attachment encryption
-- Key rotation support
-- Hardware security module (HSM) integration
-- Per-topic encryption settings
-- End-to-end encryption support
-
-## API Changes
-
-No changes to the client API are required. Messages are automatically encrypted/decrypted transparently.
 
 ## Testing
 

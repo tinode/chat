@@ -38,17 +38,7 @@ HMAC salt: TC0Jzr8f28kAspXrb4UYccJUJ63b7CSA16n1qMxxGpw=
 **Generate Message Encryption at Rest Key:**
 
 ```sh
-# Generate 32-byte key (AES-256)
 ./keygen -encrypt_at_rest
-
-# Generate 16-byte key (AES-128)
-./keygen -encrypt_at_rest -keysize 16
-
-# Generate 24-byte key (AES-192)
-./keygen -encrypt_at_rest -keysize 24
-
-# Save key to file using shell redirection
-./keygen -encrypt_at_rest > encrypt_at_rest.key
 ```
 
 Sample output:
