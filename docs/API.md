@@ -453,7 +453,7 @@ Clients send chat messages as `{pub}` packets to a specific topic. Tinode server
 
 Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}`. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate message history by using message IDs, such as: "get messages with ID smaller than 123", "... greater than 456", "... in the following ranges: 3-10, 73-85".
 
-Messages may have reactions. A reaction can technically be any (short) string, but normally it's either an emoji grapheme cluster or a vote in a poll. Reactions are sent by clients by issuing `{note}` messages, fetched from the server as part of `{data}`, can be fetched separately from `{data}` by issuing `{get what="meta"}`.
+Messages may have reactions. A reaction can technically be any (short) string, but normally it's either an emoji grapheme cluster or a vote in a poll. Reactions are sent by clients by issuing `{set what="react"}` messages, fetched from the server as part of `{data}`, can be fetched separately from `{data}` by issuing `{get what="meta"}`.
 
 A message may have multiple reactions. An individual reaction stored and transmitted as the type (emoji grapheme cluster) and a list of user IDs who reacted with this emoji.
 
@@ -1104,6 +1104,11 @@ set: {
   },
 
   aux: { ... } // application-defined key-value pairs
+
+  react: {
+    seq: 123, // sequence ID of the message being reacted to.
+    val: "👍", // reaction value.
+  }
 }
 ```
 
@@ -1168,21 +1173,25 @@ note: {
   unread: 10, // integer, client-reported total count of unread messages, optional.
   event: "ringing", // string, subaction; surrently used only by video/audio calls,
                     // when what="call".
-  payload: {  // object, required payload for 'call', 'data', 'react'.
+  payload: {  // object, required payload for 'call', 'data', 'pm'.
     ...
   }
 }
 ```
 
 The following actions types `what` are currently defined:
- * call: a video call status update.
- * data: a generic packet of structured data, usually a form response.
- * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
- * kpa: audio message is in the process of recording.
- * kpv: video message is in the process of recording.
- * react: reaction to a message, such as an emoji reaction or a poll answer.
- * read: a `{data}` message is seen (read) by the user. It implies `recv` as well.
- * recv: a `{data}` message is received by the client software but may not yet seen by user.
+ * `call`: a video call status update.
+ * `data`: a generic packet of structured data, usually a form response.
+ * `kp`: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
+ * `kpa`: audio message is in the process of recording.
+ * `kpv`: video message is in the process of recording.
+ * `kpu`: an attachment is being uploaded.
+ * `kpui`: an image is being uploaded.
+ * `kpuv`: a video is being uploaded.
+ * `read`: a `{data}` message is seen (read) by the user. It implies `recv` as well.
+ * `recv`: a `{data}` message is received by the client software but may not yet seen by user.
+ * `pm`: partial message update for progressively generated messages, such as chats with generative AI.
+ * `stp`: request to stop progressive message updates.
 
 The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The per-user `unread` count is maintained by the server: it's incremented when new `{data}` messages are sent to user and reset to the values reported by the `{note unread=...}` message. The `unread` value is never decremented by the server. The value is included in push notifications to be shown on a badge on iOS:
 <p align="center">
@@ -1190,12 +1199,12 @@ The `read` and `recv` notifications may optionally include `unread` value which 
 </p>
 
 The following call events `what="call"` are currently defined:
-* ringing: call is being established.
-* accept: calling party has accepted the call.
-* offer: WebRTC SDP & ICE data exchange events.
-* answer: same as above.
-* ice-candidate: save as above.
-* hang-up: call finished by either party or by the server.
+* `ringing`: call is being established.
+* `accept`: calling party has accepted the call.
+* `offer`: WebRTC SDP & ICE data exchange events.
+* `answer`: same as above.
+* `ice-candidate`: save as above.
+* `hang-up`: call finished by either party or by the server.
 
 ### Server to Client Messages
 
