@@ -311,6 +311,7 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 // Case L.1: Admin altered GIVEN, "acs" to affected user
 // Case L.3: Admin altered GIVEN (and maybe got assigned default WANT), "acs" to admins
 // Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
+// Case R: Reaction to a message, added or removed.
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
 // Case X: Topic public/private changed, "upd", who
@@ -339,6 +340,7 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *pre
 			SeqId:       params.seqID,
 			DelId:       params.delID,
 			DelSeq:      params.delSeq,
+			Val:         params.value,
 			FilterIn:    int(filter.filterIn),
 			FilterOut:   int(filter.filterOut),
 			SingleUser:  filter.singleUser,

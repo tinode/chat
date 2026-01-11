@@ -3243,17 +3243,17 @@ func (t *Topic) replySetReact(sess *Session, asUid types.Uid, asChan bool, msg *
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Set.Id, t.original(asUid), now, msg.Timestamp, nil))
 		return err
 	}
-	t.presSubsOnline("react", "", nilPresParams, nilPresFilters, sess.sid)
+	params := &presParams{
+		value: react.Value,
+		seqID: react.SeqId,
+		actor: asUid.UserId(),
+	}
+	t.presSubsOnline("react", "", params, nilPresFilters, sess.sid)
 	if t.cat == types.TopicCatP2P {
 		// Notify the other party in a p2p topic about the reaction update.
 		// No need to notify group topic subscribers or channel readers: not important enough.
-		params := presParams{
-			value: react.Value,
-			seqID: react.SeqId,
-			actor: asUid.UserId(),
-		}
 		uid2 := t.p2pOtherUser(asUid)
-		t.presSingleUserOffline(uid2, t.p2pOtherUserMode(uid2), "react", &params, "", true)
+		t.presSingleUserOffline(uid2, t.p2pOtherUserMode(uid2), "react", params, "", true)
 	}
 	sess.queueOut(NoErrReply(msg, now))
 	return nil
