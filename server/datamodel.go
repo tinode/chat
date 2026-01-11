@@ -499,8 +499,10 @@ type MsgTopicDesc struct {
 	SeqId     int `json:"seq,omitempty"`
 	ReadSeqId int `json:"read,omitempty"`
 	RecvSeqId int `json:"recv,omitempty"`
-	// Id of the last delete operation as seen by the requesting user
-	DelId   int `json:"clear,omitempty"`
+	// ID of the last delete operation as seen by the requesting user
+	DelId int `json:"clear,omitempty"`
+	// Most recent reaction ID
+	MrrId   int `json:"mrrid,omitempty"`
 	SubCnt  int `json:"subcnt,omitempty"`
 	Public  any `json:"public,omitempty"`
 	Trusted any `json:"trusted,omitempty"`
@@ -528,6 +530,9 @@ func (src *MsgTopicDesc) describe() string {
 	}
 	if src.DelId != 0 {
 		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.MrrId != 0 {
+		s += " mrrid=" + strconv.Itoa(src.MrrId)
 	}
 	if src.SubCnt != 0 {
 		s += " subcnt=" + strconv.Itoa(src.SubCnt)
@@ -584,8 +589,10 @@ type MsgTopicSub struct {
 	TouchedAt *time.Time `json:"touched,omitempty"`
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
-	// Id of the latest Delete operation
+	// ID of the latest Delete operation
 	DelId int `json:"clear,omitempty"`
+	// Most recent reaction ID
+	MrrId int `json:"mrrid,omitempty"`
 	// Number of subscribers, group topics only.
 	SubCnt int `json:"subcnt,omitempty"`
 	// P2P topics in 'me' {get subs} response:
@@ -608,6 +615,9 @@ func (src *MsgTopicSub) describe() string {
 	}
 	if src.DelId != 0 {
 		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.MrrId != 0 {
+		s += " mrrid=" + strconv.Itoa(src.MrrId)
 	}
 	if src.SubCnt != 0 {
 		s += " subcnt=" + strconv.Itoa(src.SubCnt)

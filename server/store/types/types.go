@@ -923,6 +923,8 @@ type Subscription struct {
 	trusted any
 	// deserialized SeqID from user or topic
 	seqId int
+	// deserialized most recent reaction ID
+	mrrId int
 	// Deserialized TouchedAt from topic
 	touchedAt time.Time
 	// Timestamp & user agent of when the user was last online.
@@ -1001,6 +1003,16 @@ func (s *Subscription) GetSeqId() int {
 // SetSeqId sets seqId field.
 func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
+}
+
+// GetMrrId returns most recent reaction ID.
+func (s *Subscription) GetMrrId() int {
+	return s.mrrId
+}
+
+// SetMrrId sets most recent reaction ID.
+func (s *Subscription) SetMrrId(id int) {
+	s.mrrId = id
 }
 
 // GetSubCnt returns subCnt (subscriber count).
@@ -1125,9 +1137,10 @@ type Topic struct {
 
 	// Server-issued sequential ID
 	SeqId int
-	// If messages were deleted, sequential id of the last operation to delete them
+	// If messages were deleted, sequential ID of the last operation to delete them
 	DelId int
-
+	// Most recent reaction ID
+	MrrId int
 	// Count of topic subscribers.
 	SubCnt int
 
