@@ -88,7 +88,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 		}
 
 		if err != nil {
-			if errors.Is(err, http.ErrServerClosed) {
+			if globals.shuttingDown || errors.Is(err, http.ErrServerClosed) {
 				logs.Info.Println("HTTP server: stopped")
 			} else {
 				logs.Err.Println("HTTP server: failed", err)
@@ -186,6 +186,9 @@ func serveLivez(wrt http.ResponseWriter, req *http.Request) {
 }
 
 func readinessError() error {
+	if store.Store == nil || !store.Store.IsOpen() {
+		return errors.New("store: connection is not open")
+	}
 	if err := store.Store.CheckHealth(); err != nil {
 		return err
 	}

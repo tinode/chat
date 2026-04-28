@@ -9,8 +9,8 @@
 #     EndpointSlice the discovery informer watches.
 #   - POD_NAME via downward API — Tinode's clusterInit reads it to derive
 #     the cluster identity and the snowflake worker ID (`ordinal + 1`).
-#   - K8s entrypoint — derives TINODE_WORKER_ID from the POD_NAME ordinal,
-#     then execs the stock Tinode entrypoint. No initContainer required.
+#   - K8s entrypoint — validates POD_NAME and lets clusterInit derive the
+#     snowflake worker ID from the StatefulSet ordinal.
 #   - readinessProbe hits port 6060 — peers drop this pod from their rings
 #     as soon as the probe fails, so a graceful shutdown can rely on
 #     `preStop` delaying SIGTERM long enough for informers to propagate.
@@ -71,10 +71,8 @@ spec:
                   fieldPath: metadata.name
             - name: EXT_CONFIG
               value: /opt/tinode/tinode.conf
-            # Explicit override path. Leave unset to let Tinode derive the
-            # worker ID from the POD_NAME ordinal.
-            # - name: TINODE_WORKER_ID
-            #   value: "1"
+            # TINODE_WORKER_ID is not supported in kubernetes mode; worker ID
+            # is derived from POD_NAME's StatefulSet ordinal.
           command: ["/opt/tinode/entrypoint-k8s.sh"]
           volumeMounts:
             - name: config

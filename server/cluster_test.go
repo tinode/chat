@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/rpc"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -75,6 +76,39 @@ func TestAddClusterNode_IgnoresSelf(t *testing.T) {
 	c.nodesLock.RUnlock()
 	if found {
 		t.Error("self should not be inserted into c.nodes")
+	}
+}
+
+func TestTopicOwnerReturnsOwnerAndRemoteFromSameSnapshot(t *testing.T) {
+	c, cleanup := freshCluster(t, "self")
+	defer cleanup()
+
+	c.nodesLock.Lock()
+	c.nodes["peer1"] = &ClusterNode{name: "peer1", address: unroutableAddr}
+	c.ring = buildRing([]string{"self", "peer1"})
+	c.nodesLock.Unlock()
+
+	var topic string
+	for i := 0; i < 1000; i++ {
+		candidate := "topic-owner-test-" + strconv.Itoa(i)
+		c.nodesLock.RLock()
+		expectedOwner := c.ring.Get(candidate)
+		c.nodesLock.RUnlock()
+		if expectedOwner == "peer1" {
+			topic = candidate
+			break
+		}
+	}
+	if topic == "" {
+		t.Fatal("failed to find a topic owned by peer1")
+	}
+
+	owner, remote := c.topicOwner(topic)
+	if owner != "peer1" {
+		t.Errorf("topicOwner owner = %q, want peer1", owner)
+	}
+	if !remote {
+		t.Error("topicOwner remote = false, want true for peer-owned topic")
 	}
 }
 

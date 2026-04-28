@@ -15,7 +15,7 @@ background and the list of currently-unresolved operational challenges.
 | `00-rbac.yaml` | ServiceAccount + Role + RoleBinding. Grants the pod `get/list/watch` on `endpointslices.discovery.k8s.io` in its own namespace. |
 | `10-service.yaml` | Headless Service (`clusterIP: None`) exposing ports 6060 (WS), 16060 (gRPC), and 12001 (cluster RPC). |
 | `20-configmap.yaml` | Tinode `tinode.conf` with `cluster_config.discovery.mode = kubernetes`. |
-| `30-statefulset.yaml` | StatefulSet with 3 replicas, `podManagementPolicy: OrderedReady`, downward-API `POD_NAME`, and an entrypoint wrapper that derives `TINODE_WORKER_ID` from the pod ordinal. |
+| `30-statefulset.yaml` | StatefulSet with 3 replicas, `podManagementPolicy: OrderedReady`, downward-API `POD_NAME`, and an entrypoint wrapper for Kubernetes startup. |
 
 ## Quick start
 
@@ -80,19 +80,15 @@ Prometheus metrics exposed on the HTTP port:
 | `ClusterLeader` | Pinned to 0. Leader election is disabled in K8s mode. Alert rules based on this gauge should be removed. |
 | `ClusterDiscoveryMode` | `0` = static, `1` = kubernetes. |
 
-## Worker-ID escape hatch
+## Worker ID
 
-If the ordinal-from-pod-name derivation does not suit your deployment, set
-`TINODE_WORKER_ID` explicitly via the downward API or a fixed env var:
+`TINODE_WORKER_ID` is not supported in Kubernetes discovery mode. Tinode
+derives the snowflake worker ID from the StatefulSet pod name:
+`tinode-0 -> 1`, `tinode-1 -> 2`, and so on.
 
-```yaml
-- name: TINODE_WORKER_ID
-  value: "17"
-```
-
-The explicit value must be an integer in `1..1023`. `clusterInit` will
-`log.Fatal` otherwise. Whoever sets this env var owns the uniqueness
-invariant — the server does not cross-check against other pods.
+Use one StatefulSet per database and keep the default StatefulSet ordinal
+model. If the ordinal-derived worker ID does not fit your deployment, this
+Kubernetes mode needs code changes before it is safe to use.
 
 ## Known limitations
 

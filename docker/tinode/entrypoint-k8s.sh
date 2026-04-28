@@ -5,11 +5,7 @@ if [ -z "$POD_NAME" ] ; then
 	exit 1
 fi
 
-if [ -z "$TINODE_WORKER_ID" ] ; then
-	export TINODE_WORKER_ID=$(( ${POD_NAME##*-} + 1 ))
-fi
-
-echo "tinode: POD_NAME=$POD_NAME TINODE_WORKER_ID=$TINODE_WORKER_ID"
+echo "tinode: POD_NAME=$POD_NAME"
 
 # If EXT_CONFIG is set, use it as a config file.
 if [ ! -z "$EXT_CONFIG" ] ; then

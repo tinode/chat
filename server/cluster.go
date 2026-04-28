@@ -837,7 +837,22 @@ func (c *Cluster) isRemoteTopic(topic string) bool {
 		// Cluster not initialized, all topics are local
 		return false
 	}
-	return c.ringOwner(topic) != c.thisNodeName
+	_, remote := c.topicOwner(topic)
+	return remote
+}
+
+// topicOwner returns the cluster node that owns the topic and whether that
+// owner is remote, using a single ring snapshot.
+func (c *Cluster) topicOwner(topic string) (string, bool) {
+	if c == nil {
+		// Cluster not initialized, all topics are local.
+		return "", false
+	}
+	c.nodesLock.RLock()
+	owner := c.ring.Get(topic)
+	remote := owner != c.thisNodeName
+	c.nodesLock.RUnlock()
+	return owner, remote
 }
 
 // genLocalTopicName is just like genTopicName(), but the generated name belongs to the current cluster node.
