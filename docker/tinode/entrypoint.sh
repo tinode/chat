@@ -115,14 +115,39 @@ fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
 init_stdout=./init-db-stdout.txt
-./init-db \
-	--reset=${RESET_DB} \
-	--upgrade=${UPGRADE_DB} \
-	--config=${CONFIG} \
-	--data=${SAMPLE_DATA} \
-	--no_init=${NO_DB_INIT} \
-	1>${init_stdout}
+if [ ! -e ./init-db ] ; then
+	echo "./init-db is missing from $(pwd)"
+	exit 1
+fi
+
+if [ ! -x ./init-db ] ; then
+	ls -l ./init-db
+	echo "./init-db exists but is not executable"
+	exit 1
+fi
+
+init_args=("--config=${CONFIG}")
+
+if [ ! -z "$SAMPLE_DATA" ] ; then
+	init_args+=("--data=${SAMPLE_DATA}")
+fi
+
+if [ "$RESET_DB" = "true" ] ; then
+	init_args+=("--reset")
+fi
+
+if [ "$UPGRADE_DB" = "true" ] ; then
+	init_args+=("--upgrade")
+fi
+
+if [ "$NO_DB_INIT" = "true" ] ; then
+	init_args+=("--no_init")
+fi
+
+./init-db "${init_args[@]}" 1>${init_stdout}
 if [ $? -ne 0 ]; then
+	ls -l ./init-db
+	echo "./init-db failed with arguments: ${init_args[*]}"
 	echo "./init-db failed. Quitting."
 	exit 1
 fi
@@ -142,5 +167,5 @@ fi
 
 args=("--config=${CONFIG}" "--static_data=$STATIC_DIR" "--cluster_self=$CLUSTER_SELF" "--pprof_url=$PPROF_URL")
 
-# Run the tinode server.
-./tinode "${args[@]}" 2>> /var/log/tinode.log
+# Run the tinode server and keep stderr visible in container logs.
+exec ./tinode "${args[@]}" 2>&1

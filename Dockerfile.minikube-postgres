@@ -1,6 +1,7 @@
 FROM golang:1.26 AS build
 
 WORKDIR /src/chat
+ENV CGO_ENABLED=0
 
 # Build context for this Dockerfile must be the parent directory that contains
 # both `chat/` and `webapp/`, for example:
@@ -8,6 +9,7 @@ WORKDIR /src/chat
 # when run from /Users/<user>/personal
 COPY chat ./ 
 
+# Build static binaries so they run correctly in the Alpine runtime image.
 RUN go build -tags postgres -o /out/tinode ./server
 RUN go build -tags postgres -o /out/init-db ./tinode-db
 
@@ -21,6 +23,7 @@ COPY --from=build /out/tinode ./tinode
 COPY --from=build /out/init-db ./init-db
 COPY chat/tinode-db/credentials.sh ./credentials.sh
 COPY chat/tinode-db/data.json ./data.json
+COPY chat/tinode-db/*.jpg ./
 COPY chat/docker/tinode/entrypoint.sh ./entrypoint.sh
 COPY chat/docker/tinode/config.template ./config.template
 COPY webapp ./static

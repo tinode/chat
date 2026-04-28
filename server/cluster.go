@@ -1065,13 +1065,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		nodeNames = append(nodeNames, ep.Name)
 
 		if ep.Name == thisName {
-			if mode == "kubernetes" {
-				// Bind on all interfaces using the advertised port. Peers
-				// reach us via the pod IP that Kubernetes published in the
-				// EndpointSlice, so ep.Addr's host portion is the pod IP
-				// (not useful for binding); we want the port only.
-				globals.cluster.listenOn = ":" + portOnlyFromAddr(ep.Addr)
-			} else {
+			if mode != "kubernetes" {
 				globals.cluster.listenOn = ep.Addr
 			}
 			// Don't create a cluster member for this local instance
@@ -1087,17 +1081,9 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	}
 
 	if mode == "kubernetes" {
-		// K8s mode derives quorum / membership from the API server, so the
-		// static min-3 guard does not apply. A lone pod is fine — it will
-		// serve local traffic and pick up peers as the StatefulSet scales.
-		if globals.cluster.listenOn == "" {
-			// We are in the snapshot's label set but our own entry has not
-			// appeared yet (fresh pod race). Fall back to the cluster port
-			// derived from the pod ordinal. Peers will dial us once our own
-			// endpoint becomes Ready and the reconciler picks it up.
-			globals.cluster.listenOn = ":" + strconv.Itoa(clusterBaseListenPort+k8sWorkerId(thisName)-1)
-			logs.Warn.Printf("Cluster: own pod not yet in EndpointSlice snapshot; binding on %s", globals.cluster.listenOn)
-		}
+		// K8s mode derives peer membership from the API server, but every pod
+		// binds the same cluster container port in its own network namespace.
+		globals.cluster.listenOn = k8sDefaultListenAddr()
 	} else {
 		if len(globals.cluster.nodes) == 0 {
 			// Cluster needs at least two nodes.
@@ -1179,6 +1165,10 @@ func k8sWorkerId(podName string) int {
 		logs.Err.Fatalf("Cluster: pod ordinal %d yields worker ID ≥ 1024 (snowflake 10-bit limit)", ord)
 	}
 	return workerId
+}
+
+func k8sDefaultListenAddr() string {
+	return ":" + strconv.Itoa(clusterBaseListenPort)
 }
 
 func parseWorkerID(podName string) (int, bool) {

@@ -40,7 +40,7 @@ data:
       },
 
       "auth_config": {
-        "logical_names": ["basic:login-basic"],
+        "logical_names": [],
         "basic": {
           "add_to_tags": true,
           "min_login_length": 4,
@@ -52,6 +52,7 @@ data:
           "key": "wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc="
         }
       },
+      "push": [],
 
       "store_config": {
         "use_adapter": "mysql",

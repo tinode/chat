@@ -28,6 +28,7 @@ eval "$(minikube docker-env)"
 From the parent directory that contains both `chat/` and `webapp/`:
 
 ```bash
+eval "$(minikube docker-env)"
 docker build \
   -f chat/Dockerfile.minikube-postgres \
   -t tinode/tinode:k8s-postgres-local \
@@ -39,6 +40,17 @@ The image contains:
 - the current branch's `tinode` server built with `-tags postgres`
 - `init-db` built from `tinode-db`
 - the bundled webapp assets under `/opt/tinode/static`
+
+If you previously built `tinode/tinode:k8s-postgres-local`, rebuild it after
+pulling the latest changes. The local image now forces static Go binaries so
+`init-db` and `tinode` run correctly in the Alpine-based container.
+
+If you are using the host Docker daemon instead of Minikube's daemon, load the
+image into Minikube explicitly:
+
+```bash
+minikube image load tinode/tinode:k8s-postgres-local
+```
 
 ## 3. Apply manifests
 
@@ -54,6 +66,19 @@ kubectl apply -f chat/docker/k8s/25-configmap.postgres.yaml
 kubectl apply -f chat/docker/k8s/35-statefulset.postgres-local.yaml
 kubectl rollout status statefulset/tinode
 ```
+
+If the StatefulSet was already created with the older image, refresh the pods
+after rebuilding:
+
+```bash
+kubectl rollout restart statefulset/tinode
+kubectl rollout status statefulset/tinode
+```
+
+The local-testing StatefulSet uses `imagePullPolicy: Never` so Kubernetes
+cannot silently pull or reuse a different image tag. If the image is missing on
+the Minikube node, the pod will stay in `ImagePullBackOff`, which is easier to
+debug than running an older local build by accident.
 
 ## 4. Verify cluster health
 

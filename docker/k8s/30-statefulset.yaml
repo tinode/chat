@@ -52,7 +52,7 @@ spec:
           # Replace with the image you built from docker/tinode/Dockerfile
           # (or your preferred registry/tag).
           image: tinode/tinode:k8s
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: ws
               containerPort: 6060

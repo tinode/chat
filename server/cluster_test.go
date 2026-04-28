@@ -335,6 +335,12 @@ func TestPortOnlyFromAddr(t *testing.T) {
 	}
 }
 
+func TestKubernetesDefaultListenAddrUsesServicePort(t *testing.T) {
+	if got := k8sDefaultListenAddr(); got != ":12001" {
+		t.Errorf("k8sDefaultListenAddr = %q, want :12001", got)
+	}
+}
+
 func TestAddRemoveClusterNode_Concurrent(t *testing.T) {
 	// Smoke test the RWMutex: many concurrent adds and removes of the same
 	// name should converge to an empty map with no data race (run with -race).

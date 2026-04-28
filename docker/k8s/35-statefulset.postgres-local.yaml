@@ -26,7 +26,7 @@ spec:
       containers:
         - name: tinode
           image: tinode/tinode:k8s-postgres-local
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - name: ws
               containerPort: 6060

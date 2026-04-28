@@ -18,7 +18,7 @@ spec:
       containers:
         - name: postgres
           image: postgres:16
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: postgres
               containerPort: 5432
@@ -28,8 +28,6 @@ spec:
               value: postgres
             - name: POSTGRES_PASSWORD
               value: postgres
-            - name: POSTGRES_DB
-              value: tinode
           readinessProbe:
             exec:
               command:
