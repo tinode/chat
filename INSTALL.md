@@ -199,11 +199,19 @@ A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
 Tinode supports Kubernetes-native peer discovery as an alternative to the static `cluster_config.nodes` list. When enabled, each pod watches `EndpointSlice` events on a headless Service to discover the live cluster roster — so scaling a StatefulSet or rolling-restarting pods reconverges the ring automatically, without editing configs or restarting the whole cluster.
 
-Reference manifests live under [`docker/k8s/`](./docker/k8s/). Briefly:
+Reference manifests live under [`docker/k8s/`](./docker/k8s/). The shared Kubernetes path now defaults to PostgreSQL via [`docker/k8s/20-configmap.yaml`](./docker/k8s/20-configmap.yaml), and the StatefulSet uses the Kubernetes-specific entrypoint at [`docker/tinode/entrypoint-k8s.sh`](./docker/tinode/entrypoint-k8s.sh) so logs stay on container stdout/stderr.
+
+Briefly:
 
 ```bash
 kubectl apply -f docker/k8s/
 kubectl rollout status statefulset/tinode
+```
+
+For local development on Minikube, build the workspace image with [`docker/tinode/Dockerfile.k8s`](./docker/tinode/Dockerfile.k8s) and follow [`docker/local-k8s/README.postgres-minikube.md`](./docker/local-k8s/README.postgres-minikube.md):
+
+```bash
+minikube image build -f chat/docker/tinode/Dockerfile.k8s -t tinode/tinode:k8s .
 ```
 
 Key constraints:
@@ -212,7 +220,7 @@ Key constraints:
 * Replica cap of 1023 (snowflake worker-ID field width).
 * The pod needs `get/list/watch` on `endpointslices.discovery.k8s.io` in its own namespace — see `docker/k8s/00-rbac.yaml` for the RBAC template.
 
-See [`docker/k8s/README.md`](./docker/k8s/README.md) for deployment details and [`K8S_SERVICE_DISCOVERY.md`](./K8S_SERVICE_DISCOVERY.md) at the repo root for the design rationale and unresolved operational challenges.
+See [`docker/k8s/README.md`](./docker/k8s/README.md) for deployment details, [`docker/local-k8s/README.postgres-minikube.md`](./docker/local-k8s/README.postgres-minikube.md) for the local Minikube flow, and [`K8S_SERVICE_DISCOVERY.md`](./K8S_SERVICE_DISCOVERY.md) at the repo root for the design rationale and unresolved operational challenges.
 
 ### Enabling Push Notifications
 

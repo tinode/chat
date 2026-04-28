@@ -22,6 +22,31 @@ metadata:
   labels:
     app.kubernetes.io/name: tinode
 data:
+  # Other adapter examples for `store_config`:
+  # mysql:
+  #   "use_adapter": "mysql"
+  #   "adapters": {
+  #     "mysql": {
+  #       "database": "tinode",
+  #       "dsn": "root@tcp(mysql:3306)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci"
+  #     }
+  #   }
+  # mongodb:
+  #   "use_adapter": "mongodb"
+  #   "adapters": {
+  #     "mongodb": {
+  #       "database": "tinode",
+  #       "addresses": "mongodb://mongodb:27017/tinode?replicaSet=rs0"
+  #     }
+  #   }
+  # rethinkdb:
+  #   "use_adapter": "rethinkdb"
+  #   "adapters": {
+  #     "rethinkdb": {
+  #       "database": "tinode",
+  #       "addresses": "rethinkdb:28015"
+  #     }
+  #   }
   tinode.conf: |
     {
       "listen": ":6060",
@@ -55,12 +80,11 @@ data:
       "push": [],
 
       "store_config": {
-        "use_adapter": "mysql",
+        "use_adapter": "postgres",
         "uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
         "adapters": {
-          "mysql": {
-            "database": "tinode",
-            "dsn": "root@tcp(mysql:3306)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci"
+          "postgres": {
+            "dsn": "postgresql://postgres:postgres@postgres:5432/tinode?sslmode=disable&connect_timeout=10"
           }
         }
       },

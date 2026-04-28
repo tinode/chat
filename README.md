@@ -20,6 +20,8 @@ An explicit NON-goal: we are not building yet another Slack replacement.
 
 See [general instructions](./INSTALL.md) or [docker-specific instructions](./docker/README.md).
 
+For Kubernetes deployments, use the shared manifests under [docker/k8s/](./docker/k8s/) and the local Minikube guide at [docker/local-k8s/README.postgres-minikube.md](./docker/local-k8s/README.postgres-minikube.md). The local k8s image is built from [docker/tinode/Dockerfile.k8s](./docker/tinode/Dockerfile.k8s).
+
 ## Getting support
 
 * Read [API documentation](docs/API.md) and [FAQ](docs/faq.md). Read configuration instructions contained in the [`tinode.conf`](./server/tinode.conf) file.

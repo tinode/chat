@@ -153,6 +153,7 @@ WORKDIR /opt/tinode
 # Copy config template to the container.
 COPY config.template .
 COPY entrypoint.sh .
+COPY entrypoint-k8s.sh .
 
 # Get the desired Tinode build.
 ADD https://github.com/tinode/chat/releases/download/v$BINVERS/tinode-$TARGET_DB.linux-amd64.tar.gz .
@@ -166,6 +167,7 @@ RUN mkdir /botdata
 
 # Make scripts runnable
 RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint-k8s.sh
 RUN chmod +x credentials.sh
 
 # Healthcheck: check if port 6060 is open

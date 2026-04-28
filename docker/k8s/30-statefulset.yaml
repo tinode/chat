@@ -9,9 +9,8 @@
 #     EndpointSlice the discovery informer watches.
 #   - POD_NAME via downward API — Tinode's clusterInit reads it to derive
 #     the cluster identity and the snowflake worker ID (`ordinal + 1`).
-#   - Entrypoint wrapper — extracts the numeric suffix from POD_NAME into
-#     TINODE_WORKER_ID, then execs the stock Tinode entrypoint. No
-#     initContainer required.
+#   - K8s entrypoint — derives TINODE_WORKER_ID from the POD_NAME ordinal,
+#     then execs the stock Tinode entrypoint. No initContainer required.
 #   - readinessProbe hits port 6060 — peers drop this pod from their rings
 #     as soon as the probe fails, so a graceful shutdown can rely on
 #     `preStop` delaying SIGTERM long enough for informers to propagate.
@@ -52,7 +51,7 @@ spec:
           # Replace with the image you built from docker/tinode/Dockerfile
           # (or your preferred registry/tag).
           image: tinode/tinode:k8s
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: ws
               containerPort: 6060
@@ -70,22 +69,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: EXT_CONFIG
+              value: /opt/tinode/tinode.conf
             # Explicit override path. Leave unset to let Tinode derive the
             # worker ID from the POD_NAME ordinal.
             # - name: TINODE_WORKER_ID
             #   value: "1"
-          # Entrypoint wrapper: derive TINODE_WORKER_ID from the pod-name
-          # ordinal, then hand off to the stock container entrypoint. The
-          # extra export is belt-and-braces: clusterInit also derives the
-          # worker ID from POD_NAME itself, but making it explicit here
-          # makes the value visible in `kubectl exec` for debugging.
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -e
-              export TINODE_WORKER_ID=$(( ${POD_NAME##*-} + 1 ))
-              echo "tinode: POD_NAME=$POD_NAME TINODE_WORKER_ID=$TINODE_WORKER_ID"
-              exec /opt/tinode/entrypoint.sh
+          command: ["/opt/tinode/entrypoint-k8s.sh"]
           volumeMounts:
             - name: config
               mountPath: /opt/tinode/tinode.conf
@@ -94,7 +84,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: http
+              port: ws
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
@@ -102,7 +92,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /livez
-              port: http
+              port: ws
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 3
