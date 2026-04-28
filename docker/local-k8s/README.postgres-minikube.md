@@ -20,7 +20,6 @@ released Tinode tarball.
 
 ```bash
 minikube start
-eval "$(minikube docker-env)"
 ```
 
 ## 2. Build the local Tinode image
@@ -28,8 +27,7 @@ eval "$(minikube docker-env)"
 From the parent directory that contains both `chat/` and `webapp/`:
 
 ```bash
-eval "$(minikube docker-env)"
-docker build \
+minikube image build \
   -f chat/Dockerfile.minikube-postgres \
   -t tinode/tinode:k8s-postgres-local \
   .
@@ -41,29 +39,18 @@ The image contains:
 - `init-db` built from `tinode-db`
 - the bundled webapp assets under `/opt/tinode/static`
 
-If you previously built `tinode/tinode:k8s-postgres-local`, rebuild it after
-pulling the latest changes. The local image now forces static Go binaries so
-`init-db` and `tinode` run correctly in the Alpine-based container.
-
-If you are using the host Docker daemon instead of Minikube's daemon, load the
-image into Minikube explicitly:
-
-```bash
-minikube image load tinode/tinode:k8s-postgres-local
-```
-
 ## 3. Apply manifests
 
 Apply in this order:
 
 ```bash
-kubectl apply -f chat/docker/k8s/15-postgres.yaml
+kubectl apply -f chat/docker/local-k8s/15-postgres.yaml
 kubectl rollout status deployment/postgres
 
 kubectl apply -f chat/docker/k8s/00-rbac.yaml
 kubectl apply -f chat/docker/k8s/10-service.yaml
-kubectl apply -f chat/docker/k8s/25-configmap.postgres.yaml
-kubectl apply -f chat/docker/k8s/35-statefulset.postgres-local.yaml
+kubectl apply -f chat/docker/local-k8s/25-configmap.postgres.yaml
+kubectl apply -f chat/docker/local-k8s/35-statefulset.postgres-local.yaml
 kubectl rollout status statefulset/tinode
 ```
 
