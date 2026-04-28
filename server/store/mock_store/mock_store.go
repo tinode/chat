@@ -54,6 +54,20 @@ func (mr *MockPersistentStorageInterfaceMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockPersistentStorageInterface)(nil).Close))
 }
 
+// CheckHealth mocks base method.
+func (m *MockPersistentStorageInterface) CheckHealth() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckHealth")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CheckHealth indicates an expected call of CheckHealth.
+func (mr *MockPersistentStorageInterfaceMockRecorder) CheckHealth() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckHealth", reflect.TypeOf((*MockPersistentStorageInterface)(nil).CheckHealth))
+}
+
 // DbStats mocks base method.
 func (m *MockPersistentStorageInterface) DbStats() func() any {
 	m.ctrl.T.Helper()

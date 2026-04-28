@@ -1,0 +1,79 @@
+# Tinode configuration for kubernetes-mode cluster discovery.
+#
+# The key points are:
+#   - `cluster_config.discovery.mode` is "kubernetes" (the only deviation from
+#     the stock tinode.conf needed to opt into k8s discovery).
+#   - `cluster_config.discovery.kubernetes.service` must match the Service
+#     name in 10-service.yaml.
+#   - `cluster_config.discovery.kubernetes.port_name` must match the named
+#     port on the headless Service that carries the 12001 cluster port.
+#   - `cluster_config.nodes` and `cluster_config.failover` are absent because
+#     they are ignored in kubernetes mode.
+#
+# Override DB connection strings, secrets, and any other site-specific
+# settings via additional env vars on the StatefulSet, or by mounting a
+# separate Secret alongside this ConfigMap.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tinode-config
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+data:
+  tinode.conf: |
+    {
+      "listen": ":6060",
+      "grpc_listen": ":16060",
+      "cache_control": 39600,
+      "api_key_salt": "T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=",
+      "max_message_size": 4194304,
+      "max_subscriber_count": 32,
+      "max_tag_count": 16,
+      "use_x_forwarded_for": true,
+      "expvar": "/stats/expvar/",
+      "server_status": "/stats/status/",
+
+      "tls": {
+        "enabled": false
+      },
+
+      "auth_config": {
+        "logical_names": ["basic:login-basic"],
+        "basic": {
+          "add_to_tags": true,
+          "min_login_length": 4,
+          "min_password_length": 6
+        },
+        "token": {
+          "expire_in": 1209600,
+          "serial_num": 1,
+          "key": "wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc="
+        }
+      },
+
+      "store_config": {
+        "use_adapter": "mysql",
+        "uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
+        "adapters": {
+          "mysql": {
+            "database": "tinode",
+            "dsn": "root@tcp(mysql:3306)/tinode?parseTime=true&collation=utf8mb4_0900_ai_ci"
+          }
+        }
+      },
+
+      "cluster_config": {
+        "self": "",
+        "discovery": {
+          "mode": "kubernetes",
+          "kubernetes": {
+            "namespace": "",
+            "service": "tinode-headless",
+            "port_name": "cluster",
+            "label_selector": ""
+          }
+        }
+      }
+    }

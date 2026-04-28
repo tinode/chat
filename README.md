@@ -108,7 +108,7 @@ When you register a new account you are asked for an email address to send valid
   * Plugins to extend functionality, for example, to support moderation or chatbots.
   * Scriptable [command-line tool](tn-cli/) for server administration.
 * Performance, reliability and development:
-  * Sharded clustering with failover.
+  * Sharded clustering with failover. Kubernetes-native peer discovery via StatefulSet + EndpointSlice watch (see [docker/k8s/](docker/k8s/)).
   * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3 (other storage systems can be supported with [media handlers](https://github.com/tinode/chat/blob/master/server/media/media.go#L21)).
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:

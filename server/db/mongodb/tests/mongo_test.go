@@ -1,3 +1,6 @@
+//go:build mongodb
+// +build mongodb
+
 // To test another db backend:
 // 1) Create GetAdapter function inside your db backend adapter package (like one inside mongodb adapter)
 // 2) Uncomment your db backend package ('backend' named package)

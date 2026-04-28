@@ -229,6 +229,14 @@ func (a *adapter) IsOpen() bool {
 	return a.conn != nil
 }
 
+// CheckHealth verifies that MongoDB is reachable right now.
+func (a *adapter) CheckHealth() error {
+	ctx, cancel := context.WithTimeout(context.Background(), common.HealthCheckTimeout)
+	defer cancel()
+
+	return a.conn.Ping(ctx, nil)
+}
+
 // GetDbVersion returns current database version.
 func (a *adapter) GetDbVersion() (int, error) {
 	if a.version > 0 {

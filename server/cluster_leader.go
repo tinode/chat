@@ -157,7 +157,7 @@ func (c *Cluster) sendHealthChecks() {
 			&ClusterHealth{
 				Leader:    c.thisNodeName,
 				Term:      c.fo.term,
-				Signature: c.ring.Signature(),
+				Signature: c.ringSignature(),
 				Nodes:     c.fo.activeNodes,
 			}, &unused)
 
@@ -310,10 +310,10 @@ func (c *Cluster) run() {
 			statsSet("ClusterLeader", 0)
 
 			missed = 0
-			if health.Signature != c.ring.Signature() {
+			if health.Signature != c.ringSignature() {
 				if rehashSkipped {
 					logs.Info.Println("cluster: rehashing at a request of",
-						health.Leader, health.Nodes, health.Signature, c.ring.Signature())
+						health.Leader, health.Nodes, health.Signature, c.ringSignature())
 					c.rehash(health.Nodes)
 					c.invalidateProxySubs("")
 					c.gcProxySessions(health.Nodes)

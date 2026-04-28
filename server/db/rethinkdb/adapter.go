@@ -156,6 +156,25 @@ func (a *adapter) IsOpen() bool {
 	return a.conn != nil
 }
 
+// CheckHealth verifies that RethinkDB accepts a lightweight query.
+func (a *adapter) CheckHealth() error {
+	done := make(chan error, 1)
+	go func() {
+		cursor, err := rdb.Expr(1).Run(a.conn)
+		if cursor != nil {
+			cursor.Close()
+		}
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(common.HealthCheckTimeout):
+		return errors.New("rethinkdb health check timed out")
+	}
+}
+
 // GetDbVersion returns current database version.
 func (a *adapter) GetDbVersion() (int, error) {
 	if a.version > 0 {

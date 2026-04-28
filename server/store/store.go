@@ -89,6 +89,7 @@ type PersistentStorageInterface interface {
 	Open(workerId int, jsonconf json.RawMessage) error
 	Close() error
 	IsOpen() bool
+	CheckHealth() error
 	GetAdapter() adapter.Adapter
 	GetAdapterName() string
 	GetAdapterVersion() int
@@ -139,6 +140,15 @@ func (storeObj) IsOpen() bool {
 	}
 
 	return false
+}
+
+// CheckHealth verifies that the underlying persistent store is reachable.
+func (storeObj) CheckHealth() error {
+	if adp == nil || !adp.IsOpen() {
+		return errors.New("store: connection is not open")
+	}
+
+	return adp.CheckHealth()
 }
 
 // GetAdapter returns the currently configured adapter.

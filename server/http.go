@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/logs"
+	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -87,7 +88,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 		}
 
 		if err != nil {
-			if globals.shuttingDown {
+			if errors.Is(err, http.ErrServerClosed) {
 				logs.Info.Println("HTTP server: stopped")
 			} else {
 				logs.Err.Println("HTTP server: failed", err)
@@ -165,6 +166,38 @@ func signalHandler() <-chan bool {
 	}()
 
 	return stop
+}
+
+func registerHealthHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/livez", serveLivez)
+	mux.HandleFunc("/readyz", serveReadyz)
+}
+
+func writeHealthResponse(wrt http.ResponseWriter, req *http.Request, status int, body string) {
+	wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	wrt.WriteHeader(status)
+	if req.Method != http.MethodHead {
+		_, _ = wrt.Write([]byte(body))
+	}
+}
+
+func serveLivez(wrt http.ResponseWriter, req *http.Request) {
+	writeHealthResponse(wrt, req, http.StatusOK, "ok\n")
+}
+
+func readinessError() error {
+	if err := store.Store.CheckHealth(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func serveReadyz(wrt http.ResponseWriter, req *http.Request) {
+	if err := readinessError(); err != nil {
+		writeHealthResponse(wrt, req, http.StatusServiceUnavailable, "not ready\n")
+		return
+	}
+	writeHealthResponse(wrt, req, http.StatusOK, "ok\n")
 }
 
 // The following code is used to intercept HTTP errors so they can be wrapped into json.

@@ -195,6 +195,21 @@ func (a *adapter) IsOpen() bool {
 	return a.db != nil
 }
 
+func (a *adapter) getHealthContext() (context.Context, context.CancelFunc) {
+	if a.sqlTimeout > 0 {
+		return context.WithTimeout(context.Background(), a.sqlTimeout)
+	}
+	return context.WithTimeout(context.Background(), common.HealthCheckTimeout)
+}
+
+// CheckHealth verifies that the MySQL connection pool can reach the database.
+func (a *adapter) CheckHealth() error {
+	ctx, cancel := a.getHealthContext()
+	defer cancel()
+
+	return a.db.PingContext(ctx)
+}
+
 // GetDbVersion returns current database version.
 func (a *adapter) GetDbVersion() (int, error) {
 	if a.version > 0 {
