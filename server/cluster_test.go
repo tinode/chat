@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/rpc"
 	"strconv"
 	"sync"
 	"testing"
@@ -141,10 +140,6 @@ func TestRemoveClusterNode_DeletesFromMapAndStopsGoroutines(t *testing.T) {
 		t.Fatal("addClusterNode returned nil")
 	}
 
-	// Hold refs to the runner channels so we can observe them close after removal.
-	rpcDone := node.rpcDone
-	p2mSender := node.p2mSender
-
 	c.removeClusterNode("peer1")
 
 	c.nodesLock.RLock()
@@ -154,14 +149,26 @@ func TestRemoveClusterNode_DeletesFromMapAndStopsGoroutines(t *testing.T) {
 		t.Error("peer1 still in c.nodes after removeClusterNode")
 	}
 
-	// asyncRpcLoop / p2mSenderLoop both exit when their channel is closed.
-	// Observing that the channels are closed proves the goroutines will drain
-	// and exit. A small wait tolerance handles goroutine scheduling.
-	if !rpcDoneClosed(rpcDone, 500*time.Millisecond) {
-		t.Error("rpcDone channel not closed within 500ms of removeClusterNode")
+	select {
+	case <-node.done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("removed peer done signal not closed within 500ms")
 	}
-	if !p2mSenderClosed(p2mSender, 500*time.Millisecond) {
-		t.Error("p2mSender channel not closed within 500ms of removeClusterNode")
+
+	node.lock.Lock()
+	connected := node.connected
+	node.lock.Unlock()
+	if connected {
+		t.Error("removed peer should be disconnected")
+	}
+
+	if err := node.proxyToMasterAsync(&ClusterReq{}); err == nil {
+		t.Error("proxyToMasterAsync on stopped peer returned nil error")
+	}
+
+	var unused bool
+	if call := node.callAsync("Cluster.TopicProxy", &ClusterResp{}, &unused, nil); call.Error == nil {
+		t.Error("callAsync on stopped peer returned nil error")
 	}
 }
 
@@ -264,14 +271,19 @@ func TestApplySnapshot_AddsAndRemovesPeers(t *testing.T) {
 	if count != 2 {
 		t.Errorf("len(c.nodes) = %d after second snapshot, want 2", count)
 	}
-	if !rpcDoneClosed(peer1.rpcDone, 500*time.Millisecond) {
-		t.Error("retired peer1 rpcDone channel not closed after applySnapshot")
+	select {
+	case <-peer1.done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("removed peer1 done signal not closed within 500ms")
 	}
-	if !p2mSenderClosed(peer1.p2mSender, 500*time.Millisecond) {
-		t.Error("retired peer1 p2mSender channel not closed after applySnapshot")
+	if err := peer1.proxyToMasterAsync(&ClusterReq{}); err == nil {
+		t.Error("proxyToMasterAsync on stopped peer1 returned nil error")
 	}
-
-	// Cleanup all remaining peers so the channels are closed.
+	var unused bool
+	if call := peer1.callAsync("Cluster.TopicProxy", &ClusterResp{}, &unused, nil); call.Error == nil {
+		t.Error("callAsync on stopped peer1 returned nil error")
+	}
+	// Cleanup all remaining peers.
 	c.removeClusterNode("peer2")
 	c.removeClusterNode("peer3")
 }
@@ -309,13 +321,18 @@ func TestApplySnapshot_ReaddsOnAddressChange(t *testing.T) {
 	if newAddr != "10.0.0.99:12001" {
 		t.Errorf("peer1 address = %q, want %q", newAddr, "10.0.0.99:12001")
 	}
-	if !rpcDoneClosed(originalPtr.rpcDone, 500*time.Millisecond) {
-		t.Error("replaced peer1 rpcDone channel not closed after applySnapshot")
+	select {
+	case <-originalPtr.done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("replaced peer1 done signal not closed within 500ms")
 	}
-	if !p2mSenderClosed(originalPtr.p2mSender, 500*time.Millisecond) {
-		t.Error("replaced peer1 p2mSender channel not closed after applySnapshot")
+	if err := originalPtr.proxyToMasterAsync(&ClusterReq{}); err == nil {
+		t.Error("proxyToMasterAsync on replaced peer1 returned nil error")
 	}
-
+	var unused bool
+	if call := originalPtr.callAsync("Cluster.TopicProxy", &ClusterResp{}, &unused, nil); call.Error == nil {
+		t.Error("callAsync on replaced peer1 returned nil error")
+	}
 	c.removeClusterNode("peer1")
 }
 
@@ -407,38 +424,4 @@ func TestAddRemoveClusterNode_Concurrent(t *testing.T) {
 	if count != 0 {
 		t.Errorf("len(c.nodes) = %d after concurrent churn, want 0", count)
 	}
-}
-
-// rpcDoneClosed polls the rpcDone channel for closure and returns true if a
-// receive yields !ok within timeout.
-func rpcDoneClosed(ch chan *rpc.Call, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				return true
-			}
-		default:
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
-}
-
-// p2mSenderClosed polls the p2mSender channel for closure and returns true if
-// a receive yields !ok within timeout.
-func p2mSenderClosed(ch chan *ClusterReq, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				return true
-			}
-		default:
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
 }

@@ -85,6 +85,8 @@ type ClusterNode struct {
 	connected bool
 	// True if a go routine is trying to reconnect the node
 	reconnecting bool
+	// True if the node is no longer part of the active peer set
+	retired bool
 	// TCP address in the form host:port
 	address string
 	// Name of the node
@@ -95,8 +97,9 @@ type ClusterNode struct {
 	// A number of times this node has failed in a row
 	failCount int
 
-	// Channel for shutting down the runner; buffered, 1.
-	done chan bool
+	// Channel for shutting down the runner. Closed by stopOnce.
+	done     chan bool
+	stopOnce sync.Once
 
 	// IDs of multiplexing sessions belonging to this node.
 	msess map[string]struct{}
@@ -110,20 +113,45 @@ type ClusterNode struct {
 }
 
 func (n *ClusterNode) asyncRpcLoop() {
-	for call := range n.rpcDone {
-		n.handleRpcResponse(call)
+	for {
+		select {
+		case <-n.done:
+			return
+		case call, ok := <-n.rpcDone:
+			if !ok {
+				return
+			}
+			n.handleRpcResponse(call)
+		}
 	}
 }
 
 func (n *ClusterNode) p2mSenderLoop() {
-	for req := range n.p2mSender {
-		if req == nil {
-			// Stop
-			return
-		}
+	for {
+		select {
+		case <-n.done:
+			for {
+				select {
+				case req, ok := <-n.p2mSender:
+					if !ok || req == nil {
+						return
+					}
+					if err := n.proxyToMaster(req); err != nil {
+						logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+					}
+				default:
+					return
+				}
+			}
+		case req, ok := <-n.p2mSender:
+			if !ok || req == nil {
+				// Stop
+				return
+			}
 
-		if err := n.proxyToMaster(req); err != nil {
-			logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+			if err := n.proxyToMaster(req); err != nil {
+				logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+			}
 		}
 	}
 }
@@ -258,6 +286,16 @@ func (n *ClusterNode) reconnect() {
 
 	// Avoid parallel reconnection threads.
 	n.lock.Lock()
+	if n.retired {
+		n.lock.Unlock()
+		return
+	}
+	select {
+	case <-n.done:
+		n.lock.Unlock()
+		return
+	default:
+	}
 	if n.reconnecting {
 		n.lock.Unlock()
 		return
@@ -273,6 +311,20 @@ func (n *ClusterNode) reconnect() {
 				reconnTicker.Stop()
 			}
 			n.lock.Lock()
+			if n.retired {
+				n.reconnecting = false
+				n.lock.Unlock()
+				conn.Close()
+				return
+			}
+			select {
+			case <-n.done:
+				n.reconnecting = false
+				n.lock.Unlock()
+				conn.Close()
+				return
+			default:
+			}
 			n.endpoint = rpc.NewClient(conn)
 			n.connected = true
 			n.reconnecting = false
@@ -315,15 +367,20 @@ func (n *ClusterNode) reconnect() {
 }
 
 func (n *ClusterNode) call(proc string, req, resp any) error {
-	if !n.connected {
+	n.lock.Lock()
+	retired := n.retired
+	connected := n.connected
+	endpoint := n.endpoint
+	n.lock.Unlock()
+	if retired || !connected {
 		return errors.New("cluster: node '" + n.name + "' not connected")
 	}
 
-	if err := n.endpoint.Call(proc, req, resp); err != nil {
+	if err := endpoint.Call(proc, req, resp); err != nil {
 		logs.Warn.Println("cluster: call failed", n.name, err)
 
 		n.lock.Lock()
-		if n.connected {
+		if n.connected && !n.retired {
 			n.endpoint.Close()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
@@ -340,7 +397,7 @@ func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 	if call.Error != nil {
 		logs.Warn.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
 		n.lock.Lock()
-		if n.connected {
+		if n.connected && !n.retired {
 			n.endpoint.Close()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
@@ -355,7 +412,9 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		logs.Err.Panic("cluster: RPC done channel is unbuffered")
 	}
 
-	if !n.connected {
+	n.lock.Lock()
+	if n.retired || !n.connected {
+		n.lock.Unlock()
 		call := &rpc.Call{
 			ServiceMethod: proc,
 			Args:          req,
@@ -368,6 +427,7 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		}
 		return call
 	}
+	endpoint := n.endpoint
 
 	var responseChan chan *rpc.Call
 	if done != nil {
@@ -385,14 +445,14 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		responseChan = n.rpcDone
 	}
 
-	call := n.endpoint.Go(proc, req, resp, responseChan)
+	call := endpoint.Go(proc, req, resp, responseChan)
+	n.lock.Unlock()
 
 	return call
 }
 
 // proxyToMaster forwards request from topic proxy to topic master.
 func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
-	msg.Node = globals.cluster.thisNodeName
 	var rejected bool
 	err := n.call("Cluster.TopicMaster", msg, &rejected)
 	if err == nil && rejected {
@@ -403,8 +463,15 @@ func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
 
 // proxyToMaster forwards request from topic proxy to topic master.
 func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
+	n.lock.Lock()
+	if n.retired {
+		n.lock.Unlock()
+		return errors.New("cluster: node '" + n.name + "' not connected")
+	}
+
 	select {
 	case n.p2mSender <- msg:
+		n.lock.Unlock()
 		return nil
 	default:
 	}
@@ -413,8 +480,10 @@ func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
 	defer timer.Stop()
 	select {
 	case n.p2mSender <- msg:
+		n.lock.Unlock()
 		return nil
 	case <-timer.C:
+		n.lock.Unlock()
 		return errors.New("cluster: load exceeded")
 	}
 }
@@ -1380,8 +1449,7 @@ func (c *Cluster) shutdown() {
 	c.nodesLock.RUnlock()
 
 	for _, n := range peersSnapshot {
-		close(n.rpcDone)
-		close(n.p2mSender)
+		stopClusterNode(n)
 	}
 
 	globals.cluster.proxyEventQueue.Stop()
@@ -1391,10 +1459,6 @@ func (c *Cluster) shutdown() {
 
 	if c.fo != nil {
 		c.fo.done <- true
-	}
-
-	for _, n := range peersSnapshot {
-		n.done <- true
 	}
 
 	logs.Info.Println("Cluster shut down")
@@ -1485,9 +1549,9 @@ func (c *Cluster) startClusterNode(node *ClusterNode) {
 	go node.p2mSenderLoop()
 }
 
-// removeClusterNode tears down a peer at runtime: closes its RPC client,
-// drains the proxy send channel, signals the runner goroutine to exit, and
-// removes the entry from c.nodes. Safe to call on an already-removed name.
+// removeClusterNode tears down a peer at runtime: removes it from c.nodes,
+// closes its RPC client, and signals the runner goroutines to exit. Safe to
+// call on an already-removed name.
 //
 // Kept as a helper for targeted runtime add/remove operations and unit tests.
 // The Kubernetes reconciler publishes full membership snapshots via
@@ -1507,28 +1571,22 @@ func (c *Cluster) removeClusterNode(name string) {
 }
 
 func stopClusterNode(node *ClusterNode) {
-	// Stop the runner goroutine and close RPC channels. Order matches shutdown():
-	// signal done, then close the outgoing channels so asyncRpcLoop /
-	// p2mSenderLoop exit cleanly.
-	select {
-	case node.done <- true:
-	default:
-		// Already signalled or buffer full; runner will observe EOF from the
-		// closed rpcDone channel below.
-	}
-
 	node.lock.Lock()
+	node.retired = true
 	if node.endpoint != nil {
 		node.endpoint.Close()
 	}
+	if node.connected {
+		statsInc("LiveClusterNodes", -1)
+	}
+	node.connected = false
+	node.reconnecting = false
 	node.lock.Unlock()
 
-	// Closing the channels terminates the asyncRpcLoop / p2mSenderLoop ranges.
-	if node.rpcDone != nil {
-		close(node.rpcDone)
-	}
-	if node.p2mSender != nil {
-		close(node.p2mSender)
+	if node.done != nil {
+		node.stopOnce.Do(func() {
+			close(node.done)
+		})
 	}
 }
 
