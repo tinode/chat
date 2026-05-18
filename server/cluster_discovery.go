@@ -24,9 +24,11 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/tinode/chat/server/logs"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -62,6 +64,7 @@ type kubeDiscoveryConfig struct {
 	Namespace     string `json:"namespace"`
 	Service       string `json:"service"`
 	PortName      string `json:"port_name"`
+	SelfPort      int    `json:"self_port"`
 	LabelSelector string `json:"label_selector"`
 }
 
@@ -124,6 +127,9 @@ type kubernetesDiscovery struct {
 	client  kubernetes.Interface
 	factory informers.SharedInformerFactory
 	cfg     kubeDiscoveryConfig
+	// listEndpointSlices reads the current EndpointSlice view from the
+	// informer cache. Tests may override it to force error paths.
+	listEndpointSlices func() ([]*discoveryv1.EndpointSlice, error)
 
 	mu            sync.Mutex
 	lastSnapshot  []NodeEndpoint
@@ -187,7 +193,7 @@ func readPodNamespace() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ns := string(data)
+	ns := strings.TrimSpace(string(data))
 	if ns == "" {
 		return "", errors.New("namespace file was empty")
 	}
@@ -204,6 +210,9 @@ func newKubernetesDiscoveryWithClient(client kubernetes.Interface, cfg kubeDisco
 	}
 	if cfg.PortName == "" {
 		return nil, errors.New("kubernetes discovery: port_name is required")
+	}
+	if cfg.SelfPort < 1 || cfg.SelfPort > 65535 {
+		return nil, errors.New("kubernetes discovery: self_port must be in range 1..65535")
 	}
 	if cfg.Namespace == "" {
 		return nil, errors.New("kubernetes discovery: namespace is required")
@@ -239,6 +248,11 @@ func newKubernetesDiscoveryWithClient(client kubernetes.Interface, cfg kubeDisco
 		informers.WithNamespace(cfg.Namespace),
 		informers.WithTweakListOptions(tweakOptions),
 	)
+	if d.listEndpointSlices == nil {
+		d.listEndpointSlices = func() ([]*discoveryv1.EndpointSlice, error) {
+			return d.factory.Discovery().V1().EndpointSlices().Lister().EndpointSlices(d.cfg.Namespace).List(labels.Everything())
+		}
+	}
 
 	informer := d.factory.Discovery().V1().EndpointSlices().Informer()
 	// TODO use informer.AddEventHandlerWithOptions for logging support
@@ -299,6 +313,7 @@ func (d *kubernetesDiscovery) Stop() {
 		}
 		d.mu.Unlock()
 		close(d.stopCh)
+		close(d.subscriber)
 	})
 }
 
@@ -319,7 +334,25 @@ func (d *kubernetesDiscovery) refreshEndpointsWithDebouncer() {
 }
 
 func (d *kubernetesDiscovery) refreshEndpoints() {
-	snap := d.buildSnapshot()
+	snap, err := d.buildSnapshot()
+	if err != nil {
+		logs.Warn.Printf("cluster: endpoint slice snapshot refresh failed: %v", err)
+
+		d.mu.Lock()
+		if d.snapshotReady {
+			d.mu.Unlock()
+			return
+		}
+		// Publish a deterministic empty bootstrap snapshot so constructor
+		// callers and subscribers never observe nil before the first success.
+		snap = []NodeEndpoint{}
+		d.lastSnapshot = snap
+		d.snapshotReady = true
+		d.mu.Unlock()
+
+		d.publishSnapshot(snap)
+		return
+	}
 
 	d.mu.Lock()
 	changed := !d.snapshotReady || !nodeEndpointsEqual(snap, d.lastSnapshot)
@@ -330,6 +363,10 @@ func (d *kubernetesDiscovery) refreshEndpoints() {
 	if !changed {
 		return
 	}
+	d.publishSnapshot(snap)
+}
+
+func (d *kubernetesDiscovery) publishSnapshot(snap []NodeEndpoint) {
 	// Non-blocking publish with latest-wins semantics.
 	// if the previous snapshot is not consumed, drop it
 	// this is done to avoid blocking the informer loop
@@ -348,11 +385,14 @@ func (d *kubernetesDiscovery) refreshEndpoints() {
 }
 
 // buildSnapshot assembles the current membership from the informer cache.
-func (d *kubernetesDiscovery) buildSnapshot() []NodeEndpoint {
-	slices, err := d.factory.Discovery().V1().EndpointSlices().Lister().EndpointSlices(d.cfg.Namespace).List(labels.Everything())
+func (d *kubernetesDiscovery) buildSnapshot() ([]NodeEndpoint, error) {
+	if d.listEndpointSlices == nil {
+		return nil, errors.New("kubernetes discovery: endpoint slice lister is not configured")
+	}
+
+	slices, err := d.listEndpointSlices()
 	if err != nil {
-		// listing from the cache should never error, if errors, ignore and continue
-		return nil
+		return nil, err
 	}
 
 	out := make([]NodeEndpoint, 0, len(slices))
@@ -387,7 +427,7 @@ func (d *kubernetesDiscovery) buildSnapshot() []NodeEndpoint {
 	}
 	// Sort by name for deterministic snapshot comparison.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	return out, nil
 }
 
 // portFromSlice returns the port value for the named port on the slice, or 0

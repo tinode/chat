@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net"
+	"net/rpc"
 	"strconv"
 	"sync"
 	"testing"
@@ -184,6 +186,148 @@ func TestRemoveClusterNode_NoopOnUnknownName(t *testing.T) {
 	c.nodesLock.RUnlock()
 	if count != 0 {
 		t.Errorf("len(c.nodes) = %d after no-op remove, want 0", count)
+	}
+}
+
+func TestAsyncRpcLoop_DrainsRpcDoneAfterShutdown(t *testing.T) {
+	node := &ClusterNode{
+		done:    make(chan bool),
+		rpcDone: make(chan *rpc.Call, 1),
+	}
+
+	loopExited := make(chan struct{})
+	go func() {
+		node.asyncRpcLoop()
+		close(loopExited)
+	}()
+
+	close(node.done)
+
+	firstCall := &rpc.Call{ServiceMethod: "Cluster.TopicProxy"}
+	select {
+	case node.rpcDone <- firstCall:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("first rpcDone send blocked unexpectedly")
+	}
+
+	secondCall := &rpc.Call{ServiceMethod: "Cluster.TopicProxy"}
+	select {
+	case node.rpcDone <- secondCall:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("asyncRpcLoop did not drain rpcDone after shutdown")
+	}
+
+	select {
+	case <-loopExited:
+		t.Fatal("asyncRpcLoop exited before idle drain timeout elapsed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	select {
+	case <-loopExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("asyncRpcLoop did not exit after rpcDone went idle")
+	}
+}
+
+func TestAsyncRpcLoop_ShutdownClearsEndpointState(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	node := &ClusterNode{
+		done:         make(chan bool),
+		rpcDone:      make(chan *rpc.Call, 1),
+		endpoint:     rpc.NewClient(clientConn),
+		connected:    true,
+		reconnecting: true,
+	}
+
+	loopExited := make(chan struct{})
+	go func() {
+		node.asyncRpcLoop()
+		close(loopExited)
+	}()
+
+	close(node.done)
+
+	select {
+	case <-loopExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("asyncRpcLoop did not exit after shutdown")
+	}
+
+	node.lock.Lock()
+	endpoint := node.endpoint
+	connected := node.connected
+	reconnecting := node.reconnecting
+	node.lock.Unlock()
+
+	if endpoint != nil {
+		t.Error("asyncRpcLoop should clear endpoint on shutdown")
+	}
+	if connected {
+		t.Error("asyncRpcLoop should mark node disconnected on shutdown")
+	}
+	if reconnecting {
+		t.Error("asyncRpcLoop should clear reconnecting flag on shutdown")
+	}
+}
+
+func TestStopClusterNode_DrainsLateRpcDoneCompletions(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+
+	node := &ClusterNode{
+		done:      make(chan bool),
+		rpcDone:   make(chan *rpc.Call, 1),
+		endpoint:  rpc.NewClient(clientConn),
+		connected: true,
+	}
+
+	loopExited := make(chan struct{})
+	go func() {
+		node.asyncRpcLoop()
+		close(loopExited)
+	}()
+
+	stopClusterNode(node)
+
+	node.lock.Lock()
+	endpoint := node.endpoint
+	connected := node.connected
+	node.lock.Unlock()
+
+	if endpoint != nil {
+		t.Fatal("stopClusterNode should close and clear endpoint before late completions arrive")
+	}
+	if connected {
+		t.Fatal("stopClusterNode should mark node disconnected before late completions arrive")
+	}
+
+	firstLateCall := &rpc.Call{ServiceMethod: "Cluster.TopicProxy"}
+	select {
+	case node.rpcDone <- firstLateCall:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("first late rpcDone completion blocked after stopClusterNode")
+	}
+
+	secondLateCall := &rpc.Call{ServiceMethod: "Cluster.TopicProxy"}
+	select {
+	case node.rpcDone <- secondLateCall:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("asyncRpcLoop did not keep draining rpcDone after stopClusterNode")
+	}
+
+	select {
+	case <-loopExited:
+		t.Fatal("asyncRpcLoop exited before the retirement drain window elapsed")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	select {
+	case <-loopExited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("asyncRpcLoop did not exit after rpcDone went idle following stopClusterNode")
 	}
 }
 
@@ -386,9 +530,9 @@ func TestPortOnlyFromAddr(t *testing.T) {
 	}
 }
 
-func TestKubernetesDefaultListenAddrUsesServicePort(t *testing.T) {
-	if got := k8sDefaultListenAddr(); got != ":12001" {
-		t.Errorf("k8sDefaultListenAddr = %q, want :12001", got)
+func TestKubernetesListenAddrUsesConfiguredSelfPort(t *testing.T) {
+	if got := k8sListenAddr(13001); got != ":13001" {
+		t.Errorf("k8sListenAddr = %q, want :13001", got)
 	}
 }
 

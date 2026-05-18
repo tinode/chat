@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -81,6 +82,7 @@ func defaultKubeConfig() kubeDiscoveryConfig {
 		Namespace: testNamespace,
 		Service:   testService,
 		PortName:  testPortName,
+		SelfPort:  int(testPort),
 	}
 }
 
@@ -94,6 +96,12 @@ func newTestDiscovery(t *testing.T, client *fake.Clientset) *kubernetesDiscovery
 	}
 	t.Cleanup(d.Stop)
 	return d
+}
+
+func withListEndpointSlicesForTest(listFn func() ([]*discoveryv1.EndpointSlice, error)) kubeDiscoveryOption {
+	return func(d *kubernetesDiscovery) {
+		d.listEndpointSlices = listFn
+	}
 }
 
 // waitForSnapshot blocks until the subscriber publishes a snapshot or timeout
@@ -279,19 +287,94 @@ func TestKubernetesDiscovery_StopIsIdempotent(t *testing.T) {
 	d.Stop() // ditto
 }
 
-// TestKubernetesDiscovery_RequiresNamespaceServicePort asserts that the
+// TestKubernetesDiscovery_ListErrorKeepsLastSnapshot asserts that transient
+// informer-cache list failures do not overwrite the last known-good snapshot
+// or publish a disruptive empty membership update.
+func TestKubernetesDiscovery_ListErrorKeepsLastSnapshot(t *testing.T) {
+	slice := buildSlice("tinode-headless-abc",
+		readyEndpoint("tinode-0", "10.0.0.1"),
+		readyEndpoint("tinode-1", "10.0.0.2"),
+	)
+	client := fake.NewSimpleClientset(slice)
+	d := newTestDiscovery(t, client)
+
+	initialSnapshot := waitForSnapshot(t, d, 2*time.Second)
+	initialNames := endpointNames(initialSnapshot)
+	wantInitialNames := []string{"tinode-0", "tinode-1"}
+	if !stringSliceEqual(initialNames, wantInitialNames) {
+		t.Fatalf("initial snapshot names = %v, want %v", initialNames, wantInitialNames)
+	}
+
+	d.listEndpointSlices = func() ([]*discoveryv1.EndpointSlice, error) {
+		return nil, errors.New("cache list failed")
+	}
+
+	d.refreshEndpoints()
+
+	stillSnapshot := d.Snapshot()
+	stillNames := endpointNames(stillSnapshot)
+	if !stringSliceEqual(stillNames, wantInitialNames) {
+		t.Fatalf("snapshot after list error = %v, want %v", stillNames, wantInitialNames)
+	}
+
+	select {
+	case snap := <-d.Subscribe():
+		t.Fatalf("unexpected snapshot published after list error: %#v", snap)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestKubernetesDiscovery_InitialListErrorPublishesEmptySnapshot asserts that
+// a constructor-time cache list failure yields a deterministic empty snapshot
+// instead of nil so cluster bootstrap remains well-defined.
+func TestKubernetesDiscovery_InitialListErrorPublishesEmptySnapshot(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	d, err := newKubernetesDiscoveryWithClient(
+		client,
+		defaultKubeConfig(),
+		withDisabledDebounce(),
+		withListEndpointSlicesForTest(func() ([]*discoveryv1.EndpointSlice, error) {
+			return nil, errors.New("cache list failed")
+		}),
+	)
+	if err != nil {
+		t.Fatalf("newKubernetesDiscoveryWithClient: %v", err)
+	}
+	t.Cleanup(d.Stop)
+
+	snapshot := d.Snapshot()
+	if snapshot == nil {
+		t.Fatal("initial snapshot is nil, want empty slice")
+	}
+	if len(snapshot) != 0 {
+		t.Fatalf("initial snapshot length = %d, want 0", len(snapshot))
+	}
+
+	publishedSnapshot := waitForSnapshot(t, d, 2*time.Second)
+	if publishedSnapshot == nil {
+		t.Fatal("published snapshot is nil, want empty slice")
+	}
+	if len(publishedSnapshot) != 0 {
+		t.Fatalf("published snapshot length = %d, want 0", len(publishedSnapshot))
+	}
+}
+
+// TestKubernetesDiscovery_RequiresNamespaceServicePortSelfPort asserts that the
 // constructor rejects obviously-incomplete configs before talking to the
 // API server.
-func TestKubernetesDiscovery_RequiresNamespaceServicePort(t *testing.T) {
+func TestKubernetesDiscovery_RequiresNamespaceServicePortSelfPort(t *testing.T) {
 	client := fake.NewSimpleClientset()
 
 	cases := []struct {
 		name string
 		cfg  kubeDiscoveryConfig
 	}{
-		{"missing service", kubeDiscoveryConfig{Namespace: "ns", PortName: "cluster"}},
-		{"missing port name", kubeDiscoveryConfig{Namespace: "ns", Service: "svc"}},
-		{"missing namespace", kubeDiscoveryConfig{Service: "svc", PortName: "cluster"}},
+		{"missing service", kubeDiscoveryConfig{Namespace: "ns", PortName: "cluster", SelfPort: 12001}},
+		{"missing port name", kubeDiscoveryConfig{Namespace: "ns", Service: "svc", SelfPort: 12001}},
+		{"missing namespace", kubeDiscoveryConfig{Service: "svc", PortName: "cluster", SelfPort: 12001}},
+		{"missing self_port", kubeDiscoveryConfig{Namespace: "ns", Service: "svc", PortName: "cluster"}},
+		{"invalid self_port low", kubeDiscoveryConfig{Namespace: "ns", Service: "svc", PortName: "cluster", SelfPort: 0}},
+		{"invalid self_port high", kubeDiscoveryConfig{Namespace: "ns", Service: "svc", PortName: "cluster", SelfPort: 65536}},
 	}
 	for _, tc := range cases {
 		tc := tc

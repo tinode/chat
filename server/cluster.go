@@ -35,10 +35,10 @@ const (
 	clusterProxyToMasterBufferPerNode = 16
 	// Timeout for attempting to enqueue a proxy-to-master request when the buffer is full.
 	clusterP2MTimeout = 20 * time.Millisecond
+	// How long asyncRpcLoop keeps draining rpcDone after shutdown starts.
+	clusterAsyncRPCDrainTimeout = 500 * time.Millisecond
 	// Buffer size for receiving responses from other nodes, per node.
 	clusterRpcCompletionBuffer = 64
-	// Default base TCP port for cluster listeners in local/static setups.
-	clusterBaseListenPort = 12001
 )
 
 // ProxyReqType is the type of proxy requests.
@@ -113,15 +113,51 @@ type ClusterNode struct {
 }
 
 func (n *ClusterNode) asyncRpcLoop() {
+	draining := false
+	var idle *time.Timer
+
 	for {
+		if !draining {
+			select {
+			case <-n.done:
+				// Retirement/shutdown starts by closing done, but we continue
+				// draining rpcDone for a bounded idle window so late Client.Go
+				// completions do not block on the shared channel after the
+				// endpoint is closed.
+				draining = true
+				n.lock.Lock()
+				n.closeEndpointLocked()
+				n.connected = false
+				n.reconnecting = false
+				n.lock.Unlock()
+				idle = time.NewTimer(clusterAsyncRPCDrainTimeout)
+				continue
+			case call, ok := <-n.rpcDone:
+				if !ok {
+					return
+				}
+				n.handleRpcResponse(call)
+				continue
+			}
+		}
+
 		select {
-		case <-n.done:
-			return
 		case call, ok := <-n.rpcDone:
+			if idle != nil && !idle.Stop() {
+				select {
+				case <-idle.C:
+				default:
+				}
+			}
 			if !ok {
 				return
 			}
 			n.handleRpcResponse(call)
+			if idle != nil {
+				idle.Reset(clusterAsyncRPCDrainTimeout)
+			}
+		case <-idle.C:
+			return
 		}
 	}
 }
@@ -153,6 +189,15 @@ func (n *ClusterNode) p2mSenderLoop() {
 				logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
 			}
 		}
+	}
+}
+
+// closeEndpointLocked closes and clears the current RPC client.
+// Caller must hold n.lock.
+func (n *ClusterNode) closeEndpointLocked() {
+	if n.endpoint != nil {
+		n.endpoint.Close()
+		n.endpoint = nil
 	}
 }
 
@@ -353,10 +398,8 @@ func (n *ClusterNode) reconnect() {
 			// Shutting down
 			logs.Info.Println("cluster: shutdown started at node", n.name)
 			reconnTicker.Stop()
-			if n.endpoint != nil {
-				n.endpoint.Close()
-			}
 			n.lock.Lock()
+			n.closeEndpointLocked()
 			n.connected = false
 			n.reconnecting = false
 			n.lock.Unlock()
@@ -381,7 +424,7 @@ func (n *ClusterNode) call(proc string, req, resp any) error {
 
 		n.lock.Lock()
 		if n.connected && !n.retired {
-			n.endpoint.Close()
+			n.closeEndpointLocked()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
 			go n.reconnect()
@@ -398,7 +441,7 @@ func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 		logs.Warn.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
 		n.lock.Lock()
 		if n.connected && !n.retired {
-			n.endpoint.Close()
+			n.closeEndpointLocked()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
 			go n.reconnect()
@@ -1165,9 +1208,9 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	}
 
 	if mode == "kubernetes" {
-		// K8s mode derives peer membership from the API server, but every pod
-		// binds the same cluster container port in its own network namespace.
-		globals.cluster.listenOn = k8sDefaultListenAddr()
+		// K8s mode still derives peer membership from the API server, but the
+		// local cluster RPC listener binds the explicitly configured self_port.
+		globals.cluster.listenOn = k8sListenAddr(config.Discovery.Kubernetes.SelfPort)
 	} else {
 		if len(globals.cluster.nodes) == 0 {
 			// Cluster needs at least two nodes.
@@ -1251,8 +1294,8 @@ func k8sWorkerId(podName string) int {
 	return workerId
 }
 
-func k8sDefaultListenAddr() string {
-	return ":" + strconv.Itoa(clusterBaseListenPort)
+func k8sListenAddr(port int) string {
+	return ":" + strconv.Itoa(port)
 }
 
 func parseWorkerID(podName string) (int, bool) {
@@ -1573,9 +1616,7 @@ func (c *Cluster) removeClusterNode(name string) {
 func stopClusterNode(node *ClusterNode) {
 	node.lock.Lock()
 	node.retired = true
-	if node.endpoint != nil {
-		node.endpoint.Close()
-	}
+	node.closeEndpointLocked()
 	if node.connected {
 		statsInc("LiveClusterNodes", -1)
 	}
@@ -1585,6 +1626,8 @@ func stopClusterNode(node *ClusterNode) {
 
 	if node.done != nil {
 		node.stopOnce.Do(func() {
+			// Closing done starts bounded post-shutdown draining in
+			// asyncRpcLoop; it does not abandon rpcDone immediately.
 			close(node.done)
 		})
 	}
