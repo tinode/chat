@@ -115,12 +115,17 @@ fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
 init_stdout=./init-db-stdout.txt
+# init-db expects explicit boolean values for these flags; unset env vars
+# expand to the empty string and fail flag parsing.
+reset_db=${RESET_DB:-false}
+upgrade_db=${UPGRADE_DB:-false}
+no_db_init=${NO_DB_INIT:-false}
 ./init-db \
-	--reset=${RESET_DB} \
-	--upgrade=${UPGRADE_DB} \
+	--reset=${reset_db} \
+	--upgrade=${upgrade_db} \
 	--config=${CONFIG} \
 	--data=${SAMPLE_DATA} \
-	--no_init=${NO_DB_INIT} \
+	--no_init=${no_db_init} \
 	1>${init_stdout}
 if [ $? -ne 0 ]; then
 	echo "./init-db failed. Quitting."

@@ -5,6 +5,8 @@
 #     the stock tinode.conf needed to opt into k8s discovery).
 #   - `cluster_config.discovery.kubernetes.service` must match the Service
 #     name in 10-service.yaml.
+#   - `cluster_config.discovery.kubernetes.self_port` must match the local
+#     cluster RPC listen port exposed by the StatefulSet (12001 below).
 #   - `cluster_config.discovery.kubernetes.port_name` must match the named
 #     port on the headless Service that carries the 12001 cluster port.
 #   - `cluster_config.nodes` and `cluster_config.failover` are absent because
@@ -95,6 +97,7 @@ data:
           "mode": "kubernetes",
           "kubernetes": {
             "namespace": "",
+            "self_port": 12001,
             "service": "tinode-headless",
             "port_name": "cluster",
             "label_selector": ""
