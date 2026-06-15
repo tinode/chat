@@ -477,7 +477,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Extra == nil || (msg.Extra.AsUser == "" && msg.Extra.AuthLevel == "") {
+	authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel)
+	if msg.Extra == nil || (msg.Extra.AsUser == "" && authLvl == auth.LevelNone) {
 		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
 		msg.AuthLvl = int(s.authLvl)
@@ -496,7 +497,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.AsUser = msg.Extra.AsUser
 
 		// Assign auth level, if one is provided. Ignore invalid strings.
-		if authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel); authLvl == auth.LevelNone {
+		if authLvl == auth.LevelNone {
 			// AuthLvl is not set by the caller, assign default LevelAuth.
 			msg.AuthLvl = int(auth.LevelAuth)
 		} else {
