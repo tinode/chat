@@ -4,6 +4,7 @@
 package rethinkdb
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"hash/fnv"
@@ -154,6 +155,18 @@ func (a *adapter) Close() error {
 // connection is actually live.
 func (a *adapter) IsOpen() bool {
 	return a.conn != nil
+}
+
+// CheckHealth verifies that RethinkDB accepts a lightweight query.
+func (a *adapter) CheckHealth() error {
+	ctx, cancel := context.WithTimeout(context.Background(), common.HealthCheckTimeout)
+	defer cancel()
+
+	cursor, err := rdb.Expr(1).Run(a.conn, rdb.RunOpts{Context: ctx})
+	if cursor != nil {
+		cursor.Close()
+	}
+	return err
 }
 
 // GetDbVersion returns current database version.

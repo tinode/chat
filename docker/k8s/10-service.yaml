@@ -1,0 +1,43 @@
+# Headless Service (`clusterIP: None`) publishing one EndpointSlice entry per
+# ready Tinode pod. The Tinode discovery informer watches EndpointSlices
+# filtered by `kubernetes.io/service-name=tinode-headless`, so this Service's
+# name is load-bearing — it must match `cluster_config.discovery.kubernetes.service`
+# in the ConfigMap below.
+#
+# Three ports are exposed so pods can reach each other and clients can reach
+# any pod:
+#   - cluster (12001): server-to-server net/rpc for topic proxy/master fanout.
+#   - ws      (6060):  WebSocket + HTTP API for end-users (use a regular
+#                      Service in front of this for client-facing load
+#                      balancing; this Service is headless and intended for
+#                      in-cluster peer discovery).
+#   - grpc    (16060): optional gRPC API.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinode-headless
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+spec:
+  clusterIP: None
+  # Publish not-ready addresses? No. We rely on the readiness probe gating
+  # ring membership; including not-ready pods would cause the reconciler to
+  # route traffic to a pod that hasn't finished starting.
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: tinode
+  ports:
+    - name: cluster
+      port: 12001
+      targetPort: 12001
+      protocol: TCP
+    - name: ws
+      port: 6060
+      targetPort: 6060
+      protocol: TCP
+    - name: grpc
+      port: 16060
+      targetPort: 16060
+      protocol: TCP

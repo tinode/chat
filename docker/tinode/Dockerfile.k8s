@@ -1,0 +1,41 @@
+FROM golang:1.26 AS build
+
+WORKDIR /src/chat
+ENV CGO_ENABLED=0
+
+# Build context for this Dockerfile must be the parent directory that contains
+# both `chat/` and `webapp/`, for example:
+#   docker build -f chat/docker/tinode/Dockerfile.k8s -t tinode/tinode:k8s .
+# when run from /Users/<user>/personal
+COPY chat ./
+
+# Build static binaries so they run correctly in the Alpine runtime image.
+RUN go build -tags postgres -o /out/tinode ./server
+RUN go build -tags postgres -o /out/init-db ./tinode-db
+
+FROM alpine:3.22
+
+RUN apk add --no-cache bash grep netcat-openbsd ca-certificates curl
+
+WORKDIR /opt/tinode
+
+COPY --from=build /out/tinode ./tinode
+COPY --from=build /out/init-db ./init-db
+COPY chat/tinode-db/credentials.sh ./credentials.sh
+COPY chat/tinode-db/data.json ./data.json
+COPY chat/tinode-db/*.jpg ./
+COPY chat/docker/tinode/entrypoint.sh ./entrypoint.sh
+COPY chat/docker/tinode/entrypoint-k8s.sh ./entrypoint-k8s.sh
+COPY chat/docker/tinode/config.template ./config.template
+COPY webapp ./static
+
+RUN mkdir -p /botdata /var/log && \
+	chmod +x ./tinode ./init-db ./credentials.sh ./entrypoint.sh ./entrypoint-k8s.sh
+
+ENV WAIT_FOR=postgres:5432
+ENV EXT_STATIC_DIR=/opt/tinode/static
+ENV SAMPLE_DATA=data.json
+
+ENTRYPOINT ["./entrypoint.sh"]
+
+EXPOSE 6060 16060 12001

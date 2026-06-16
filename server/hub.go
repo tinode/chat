@@ -165,11 +165,16 @@ func (h *Hub) run() {
 			t := h.topicGet(join.RcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
+				var masterNode string
+				var isProxy bool
+				if globals.cluster != nil {
+					masterNode, isProxy = globals.cluster.topicOwner(join.RcptTo)
+				}
 				t = &Topic{
 					name:      join.RcptTo,
 					xoriginal: join.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(join.RcptTo),
+					isProxy:   isProxy,
 					sessions:  make(map[*Session]perSessionData),
 					clientMsg: make(chan *ClientComMessage, 192),
 					serverMsg: make(chan *ServerComMessage, 64),
@@ -182,7 +187,7 @@ func (h *Hub) run() {
 				if globals.cluster != nil {
 					if t.isProxy {
 						t.proxy = make(chan *ClusterResp, 128)
-						t.masterNode = globals.cluster.ring.Get(t.name)
+						t.masterNode = masterNode
 					} else {
 						// It's a master topic. Make a channel for handling
 						// direct messages from the proxy.

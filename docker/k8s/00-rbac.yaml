@@ -1,0 +1,45 @@
+# ServiceAccount + Role + RoleBinding giving Tinode pods the permissions they
+# need to watch their own headless Service's EndpointSlices. Everything is
+# scoped to the pod's own namespace; no cluster-wide privileges are required.
+#
+# Apply this before the StatefulSet so pods have identity from their first
+# start. Change the namespace stanza at the top of each object if you deploy
+# somewhere other than `default`.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tinode
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tinode-endpointslice-watcher
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+rules:
+  # client-go informer on EndpointSlice needs list + watch (for the watch
+  # stream) and get (for occasional single-object fetches during resync).
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tinode-endpointslice-watcher
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tinode-endpointslice-watcher
+subjects:
+  - kind: ServiceAccount
+    name: tinode
+    namespace: default

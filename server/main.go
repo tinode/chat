@@ -136,7 +136,7 @@ type credValidator struct {
 var globals struct {
 	// Topics cache and processing.
 	hub *Hub
-	// Indicator that shutdown is in progress
+	// Indicator that shutdown is in progress.
 	shuttingDown bool
 	// Sessions cache.
 	sessionStore *SessionStore
@@ -790,7 +790,7 @@ func main() {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
 	}
-
+	registerHealthHandlers(mux)
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		logs.Err.Fatal(err)
 	}

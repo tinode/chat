@@ -20,6 +20,8 @@ type Adapter interface {
 	Close() error
 	// IsOpen checks if the adapter is ready for use
 	IsOpen() bool
+	// CheckHealth verifies that the backing database is reachable right now.
+	CheckHealth() error
 	// GetDbVersion returns current database version.
 	GetDbVersion() (int, error)
 	// CheckDbVersion checks if the actual database version matches adapter version.

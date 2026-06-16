@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net"
 	"net/rpc"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +35,8 @@ const (
 	clusterProxyToMasterBufferPerNode = 16
 	// Timeout for attempting to enqueue a proxy-to-master request when the buffer is full.
 	clusterP2MTimeout = 20 * time.Millisecond
+	// How long asyncRpcLoop keeps draining rpcDone after shutdown starts.
+	clusterAsyncRPCDrainTimeout = 500 * time.Millisecond
 	// Buffer size for receiving responses from other nodes, per node.
 	clusterRpcCompletionBuffer = 64
 )
@@ -65,6 +70,9 @@ type clusterConfig struct {
 	NumProxyEventGoRoutines int `json:"-"`
 	// Failover configuration
 	Failover *clusterFailoverConfig
+	// Discovery selects how cluster membership is sourced. Missing => static
+	// mode using the `Nodes` list above, which preserves legacy behavior.
+	Discovery *discoveryConfig `json:"discovery,omitempty"`
 }
 
 // ClusterNode is a client's connection to another node.
@@ -77,6 +85,8 @@ type ClusterNode struct {
 	connected bool
 	// True if a go routine is trying to reconnect the node
 	reconnecting bool
+	// True if the node is no longer part of the active peer set
+	retired bool
 	// TCP address in the form host:port
 	address string
 	// Name of the node
@@ -87,8 +97,9 @@ type ClusterNode struct {
 	// A number of times this node has failed in a row
 	failCount int
 
-	// Channel for shutting down the runner; buffered, 1.
-	done chan bool
+	// Channel for shutting down the runner. Closed by stopOnce.
+	done     chan bool
+	stopOnce sync.Once
 
 	// IDs of multiplexing sessions belonging to this node.
 	msess map[string]struct{}
@@ -102,21 +113,91 @@ type ClusterNode struct {
 }
 
 func (n *ClusterNode) asyncRpcLoop() {
-	for call := range n.rpcDone {
-		n.handleRpcResponse(call)
+	draining := false
+	var idle *time.Timer
+
+	for {
+		if !draining {
+			select {
+			case <-n.done:
+				// Retirement/shutdown starts by closing done, but we continue
+				// draining rpcDone for a bounded idle window so late Client.Go
+				// completions do not block on the shared channel after the
+				// endpoint is closed.
+				draining = true
+				n.lock.Lock()
+				n.closeEndpointLocked()
+				n.connected = false
+				n.reconnecting = false
+				n.lock.Unlock()
+				idle = time.NewTimer(clusterAsyncRPCDrainTimeout)
+				continue
+			case call, ok := <-n.rpcDone:
+				if !ok {
+					return
+				}
+				n.handleRpcResponse(call)
+				continue
+			}
+		}
+
+		select {
+		case call, ok := <-n.rpcDone:
+			if idle != nil && !idle.Stop() {
+				select {
+				case <-idle.C:
+				default:
+				}
+			}
+			if !ok {
+				return
+			}
+			n.handleRpcResponse(call)
+			if idle != nil {
+				idle.Reset(clusterAsyncRPCDrainTimeout)
+			}
+		case <-idle.C:
+			return
+		}
 	}
 }
 
 func (n *ClusterNode) p2mSenderLoop() {
-	for req := range n.p2mSender {
-		if req == nil {
-			// Stop
-			return
-		}
+	for {
+		select {
+		case <-n.done:
+			for {
+				select {
+				case req, ok := <-n.p2mSender:
+					if !ok || req == nil {
+						return
+					}
+					if err := n.proxyToMaster(req); err != nil {
+						logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+					}
+				default:
+					return
+				}
+			}
+		case req, ok := <-n.p2mSender:
+			if !ok || req == nil {
+				// Stop
+				return
+			}
 
-		if err := n.proxyToMaster(req); err != nil {
-			logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+			if err := n.proxyToMaster(req); err != nil {
+				logs.Warn.Println("p2mSenderLoop: call failed", n.name, err)
+			}
 		}
+	}
+}
+
+// closeEndpointLocked closes and clears the current RPC client.
+// Caller must hold n.lock.
+func (n *ClusterNode) closeEndpointLocked() {
+	if n.endpoint != nil {
+		n.endpoint.Close()
+		n.endpoint = nil
 	}
 }
 
@@ -250,6 +331,16 @@ func (n *ClusterNode) reconnect() {
 
 	// Avoid parallel reconnection threads.
 	n.lock.Lock()
+	if n.retired {
+		n.lock.Unlock()
+		return
+	}
+	select {
+	case <-n.done:
+		n.lock.Unlock()
+		return
+	default:
+	}
 	if n.reconnecting {
 		n.lock.Unlock()
 		return
@@ -265,6 +356,20 @@ func (n *ClusterNode) reconnect() {
 				reconnTicker.Stop()
 			}
 			n.lock.Lock()
+			if n.retired {
+				n.reconnecting = false
+				n.lock.Unlock()
+				conn.Close()
+				return
+			}
+			select {
+			case <-n.done:
+				n.reconnecting = false
+				n.lock.Unlock()
+				conn.Close()
+				return
+			default:
+			}
 			n.endpoint = rpc.NewClient(conn)
 			n.connected = true
 			n.reconnecting = false
@@ -293,10 +398,8 @@ func (n *ClusterNode) reconnect() {
 			// Shutting down
 			logs.Info.Println("cluster: shutdown started at node", n.name)
 			reconnTicker.Stop()
-			if n.endpoint != nil {
-				n.endpoint.Close()
-			}
 			n.lock.Lock()
+			n.closeEndpointLocked()
 			n.connected = false
 			n.reconnecting = false
 			n.lock.Unlock()
@@ -307,16 +410,21 @@ func (n *ClusterNode) reconnect() {
 }
 
 func (n *ClusterNode) call(proc string, req, resp any) error {
-	if !n.connected {
+	n.lock.Lock()
+	retired := n.retired
+	connected := n.connected
+	endpoint := n.endpoint
+	n.lock.Unlock()
+	if retired || !connected {
 		return errors.New("cluster: node '" + n.name + "' not connected")
 	}
 
-	if err := n.endpoint.Call(proc, req, resp); err != nil {
+	if err := endpoint.Call(proc, req, resp); err != nil {
 		logs.Warn.Println("cluster: call failed", n.name, err)
 
 		n.lock.Lock()
-		if n.connected {
-			n.endpoint.Close()
+		if n.connected && !n.retired {
+			n.closeEndpointLocked()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
 			go n.reconnect()
@@ -332,8 +440,8 @@ func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 	if call.Error != nil {
 		logs.Warn.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
 		n.lock.Lock()
-		if n.connected {
-			n.endpoint.Close()
+		if n.connected && !n.retired {
+			n.closeEndpointLocked()
 			n.connected = false
 			statsInc("LiveClusterNodes", -1)
 			go n.reconnect()
@@ -347,7 +455,9 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		logs.Err.Panic("cluster: RPC done channel is unbuffered")
 	}
 
-	if !n.connected {
+	n.lock.Lock()
+	if n.retired || !n.connected {
+		n.lock.Unlock()
 		call := &rpc.Call{
 			ServiceMethod: proc,
 			Args:          req,
@@ -360,6 +470,7 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		}
 		return call
 	}
+	endpoint := n.endpoint
 
 	var responseChan chan *rpc.Call
 	if done != nil {
@@ -377,14 +488,14 @@ func (n *ClusterNode) callAsync(proc string, req, resp any, done chan *rpc.Call)
 		responseChan = n.rpcDone
 	}
 
-	call := n.endpoint.Go(proc, req, resp, responseChan)
+	call := endpoint.Go(proc, req, resp, responseChan)
+	n.lock.Unlock()
 
 	return call
 }
 
 // proxyToMaster forwards request from topic proxy to topic master.
 func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
-	msg.Node = globals.cluster.thisNodeName
 	var rejected bool
 	err := n.call("Cluster.TopicMaster", msg, &rejected)
 	if err == nil && rejected {
@@ -395,8 +506,15 @@ func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
 
 // proxyToMaster forwards request from topic proxy to topic master.
 func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
+	n.lock.Lock()
+	if n.retired {
+		n.lock.Unlock()
+		return errors.New("cluster: node '" + n.name + "' not connected")
+	}
+
 	select {
 	case n.p2mSender <- msg:
+		n.lock.Unlock()
 		return nil
 	default:
 	}
@@ -405,8 +523,10 @@ func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
 	defer timer.Stop()
 	select {
 	case n.p2mSender <- msg:
+		n.lock.Unlock()
 		return nil
 	case <-timer.C:
+		n.lock.Unlock()
 		return errors.New("cluster: load exceeded")
 	}
 }
@@ -430,7 +550,15 @@ func (n *ClusterNode) route(msg *ClusterRoute) error {
 // Cluster is the representation of the cluster.
 type Cluster struct {
 	// Cluster nodes with RPC endpoints (excluding current node).
+	// Mutated at runtime by the Kubernetes discovery reconciler (Phase D).
+	// Must be accessed under nodesLock together with ring so routing sees a
+	// coherent membership snapshot.
 	nodes map[string]*ClusterNode
+	// nodesLock guards reads and writes of nodes and ring. In static mode the
+	// map is populated once at init and never mutated, so the lock is inert;
+	// readers take it uniformly to keep runtime membership swaps coherent when
+	// k8s mode is on.
+	nodesLock sync.RWMutex
 	// Name of the local node
 	thisNodeName string
 	// Fingerprint of the local node
@@ -441,7 +569,8 @@ type Cluster struct {
 
 	// Socket for inbound connections
 	inbound *net.TCPListener
-	// Ring hash for mapping topic names to nodes
+	// Ring hash for mapping topic names to nodes. Published atomically with
+	// nodes under nodesLock.
 	ring *rh.Ring
 
 	// Failover parameters. Could be nil if failover is not enabled
@@ -453,6 +582,12 @@ type Cluster struct {
 	// running a separate event processing goroutine for each proxy session
 	// leads to a rather large memory usage and excessive scheduling overhead.
 	proxyEventQueue *concurrency.GoRoutinePool
+
+	// discovery is the source of cluster membership. In static mode it is a
+	// staticDiscovery emitting one snapshot from tinode.conf. In kubernetes
+	// mode (Phase D) it is a kubernetesDiscovery driven by an EndpointSlice
+	// informer. Must be non-nil once clusterInit returns a clustered mode.
+	discovery Discovery
 }
 
 func (n *ClusterNode) stopMultiplexingSession(msess *Session) {
@@ -469,7 +604,9 @@ func (n *ClusterNode) stopMultiplexingSession(msess *Session) {
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 
+	c.nodesLock.RLock()
 	node := c.nodes[msg.Node]
+	c.nodesLock.RUnlock()
 	if node == nil {
 		logs.Warn.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
@@ -504,7 +641,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		return nil
 	}
 
-	if msg.Signature != c.ring.Signature() {
+	if msg.Signature != c.ringSignature() {
 		logs.Warn.Println("cluster TopicMaster: session signature mismatch", msg.RcptTo)
 		*rejected = true
 		return nil
@@ -613,7 +750,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 }
 
 // TopicProxy is a gRPC endpoint at topic proxy which receives topic master responses.
-func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
+func (*Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 	// This cluster member received a response from the topic master to be forwarded to the topic.
 	// Find appropriate topic, send the message to it.
 	if t := globals.hub.topicGet(msg.RcptTo); t != nil {
@@ -643,7 +780,7 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 	}
 
 	*rejected = false
-	if msg.Signature != c.ring.Signature() {
+	if msg.Signature != c.ringSignature() {
 		logError("cluster Route: session signature mismatch")
 		return nil
 	}
@@ -683,7 +820,9 @@ func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
 
 // Ping is a gRPC endpoint which receives ping requests from peer nodes.Used to detect node restarts.
 func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
+	c.nodesLock.RLock()
 	node := c.nodes[ping.Node]
+	c.nodesLock.RUnlock()
 	if node == nil {
 		logs.Warn.Println("cluster Ping from unknown node", ping.Node)
 		return nil
@@ -745,14 +884,21 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	} else if req.Gone {
 		// Message that the user is deleted is sent to all nodes.
 		r := &UserCacheReq{Node: c.thisNodeName, UserIdList: req.UserIdList, Gone: true}
+		c.nodesLock.RLock()
 		for _, n := range c.nodes {
 			reqByNode[n.name] = r
 		}
+		c.nodesLock.RUnlock()
 	}
 
 	if len(reqByNode) > 0 {
 		for nodeName, r := range reqByNode {
+			c.nodesLock.RLock()
 			n := c.nodes[nodeName]
+			c.nodesLock.RUnlock()
+			if n == nil {
+				continue
+			}
 			var rejected bool
 			err := n.call("Cluster.UserCacheUpdate", r, &rejected)
 			if rejected {
@@ -781,14 +927,16 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 
 // Given topic name, find appropriate cluster node to route message to.
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
+	c.nodesLock.RLock()
 	key := c.ring.Get(topic)
 	if key == c.thisNodeName {
+		c.nodesLock.RUnlock()
 		logs.Err.Println("cluster: request to route to self")
 		// Do not route to self
 		return nil
 	}
-
 	node := c.nodes[key]
+	c.nodesLock.RUnlock()
 	if node == nil {
 		logs.Warn.Println("cluster: no node for topic", topic, key)
 	}
@@ -801,7 +949,22 @@ func (c *Cluster) isRemoteTopic(topic string) bool {
 		// Cluster not initialized, all topics are local
 		return false
 	}
-	return c.ring.Get(topic) != c.thisNodeName
+	_, remote := c.topicOwner(topic)
+	return remote
+}
+
+// topicOwner returns the cluster node that owns the topic and whether that
+// owner is remote, using a single ring snapshot.
+func (c *Cluster) topicOwner(topic string) (string, bool) {
+	if c == nil {
+		// Cluster not initialized, all topics are local.
+		return "", false
+	}
+	c.nodesLock.RLock()
+	owner := c.ring.Get(topic)
+	remote := owner != c.thisNodeName
+	c.nodesLock.RUnlock()
+	return owner, remote
 }
 
 // genLocalTopicName is just like genTopicName(), but the generated name belongs to the current cluster node.
@@ -813,7 +976,7 @@ func (c *Cluster) genLocalTopicName() string {
 	}
 
 	// TODO: if cluster is large it may become too inefficient.
-	for c.ring.Get(topic) != c.thisNodeName {
+	for c.ringOwner(topic) != c.thisNodeName {
 		topic = genTopicName()
 	}
 	return topic
@@ -837,7 +1000,7 @@ func (c *Cluster) isPartitioned() bool {
 func (c *Cluster) makeClusterReq(reqType ProxyReqType, msg *ClientComMessage, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
-		Signature:   c.ring.Signature(),
+		Signature:   c.ringSignature(),
 		Fingerprint: c.fingerprint,
 		ReqType:     reqType,
 		RcptTo:      topic,
@@ -911,7 +1074,7 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, 
 
 	route := &ClusterRoute{
 		Node:        c.thisNodeName,
-		Signature:   c.ring.Signature(),
+		Signature:   c.ringSignature(),
 		Fingerprint: c.fingerprint,
 		SrvMsg:      msg,
 	}
@@ -955,6 +1118,11 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	statsRegisterInt("TotalClusterNodes")
 	// Number of nodes currently believed to be up.
 	statsRegisterInt("LiveClusterNodes")
+	// Discovery mode: 0 = static / no cluster, 1 = kubernetes.
+	// Operators alerting on cluster health can use this to branch between
+	// "leader election must succeed" (ClusterLeader=1 in static mode) and
+	// "ring must match EndpointSlice count" (TotalClusterNodes in k8s mode).
+	statsRegisterInt("ClusterDiscoveryMode")
 
 	// This is a standalone server, not initializing
 	if len(configString) == 0 {
@@ -967,13 +1135,17 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		logs.Err.Fatal(err)
 	}
 
-	thisName := *self
-	if thisName == "" {
-		thisName = config.ThisName
+	// Select discovery mode. An absent `discovery` block or `mode: static`
+	// yields a staticDiscovery over config.Nodes, which reproduces the legacy
+	// behavior bit-for-bit.
+	mode := "static"
+	if config.Discovery != nil && config.Discovery.Mode != "" {
+		mode = config.Discovery.Mode
 	}
 
+	thisName := resolvePodName(mode, self, config.ThisName)
 	// Name of the current node is not specified: clustering disabled.
-	if thisName == "" {
+	if mode != "kubernetes" && thisName == "" {
 		logs.Info.Println("Cluster: running as a standalone server.")
 		return 1
 	}
@@ -988,51 +1160,163 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		logs.Warn.Println("Cluster config: field num_proxy_event_goroutines is deprecated.")
 	}
 
+	var discovery Discovery
+	switch mode {
+	case "static":
+		discovery = newStaticDiscovery(config.Nodes)
+	case "kubernetes":
+		if config.Discovery == nil || config.Discovery.Kubernetes == nil {
+			logs.Err.Fatal("Cluster: discovery.kubernetes config block is required when mode=kubernetes")
+		}
+		kd, err := newKubernetesDiscovery(*config.Discovery.Kubernetes)
+		if err != nil {
+			logs.Err.Fatalf("Cluster: %v", err)
+		}
+		discovery = kd
+	default:
+		logs.Err.Fatalf("Cluster: unsupported discovery mode %q", mode)
+	}
+
+	snapshot := discovery.Snapshot()
+
 	globals.cluster = &Cluster{
 		thisNodeName:    thisName,
 		fingerprint:     time.Now().Unix(),
 		nodes:           make(map[string]*ClusterNode),
-		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5),
+		proxyEventQueue: concurrency.NewGoRoutinePool(max(len(snapshot), 1) * 5),
+		discovery:       discovery,
 	}
 
 	var nodeNames []string
-	for _, host := range config.Nodes {
-		nodeNames = append(nodeNames, host.Name)
+	for _, ep := range snapshot {
+		nodeNames = append(nodeNames, ep.Name)
 
-		if host.Name == thisName {
-			globals.cluster.listenOn = host.Addr
+		if ep.Name == thisName {
+			if mode != "kubernetes" {
+				globals.cluster.listenOn = ep.Addr
+			}
 			// Don't create a cluster member for this local instance
 			continue
 		}
 
-		globals.cluster.nodes[host.Name] = &ClusterNode{
-			address: host.Addr,
-			name:    host.Name,
+		globals.cluster.nodes[ep.Name] = &ClusterNode{
+			address: ep.Addr,
+			name:    ep.Name,
 			done:    make(chan bool, 1),
 			msess:   make(map[string]struct{}),
 		}
 	}
 
-	if len(globals.cluster.nodes) == 0 {
-		// Cluster needs at least two nodes.
-		logs.Err.Fatal("Cluster: invalid cluster size: 1")
+	if mode == "kubernetes" {
+		// K8s mode still derives peer membership from the API server, but the
+		// local cluster RPC listener binds the explicitly configured self_port.
+		globals.cluster.listenOn = k8sListenAddr(config.Discovery.Kubernetes.SelfPort)
+	} else {
+		if len(globals.cluster.nodes) == 0 {
+			// Cluster needs at least two nodes.
+			logs.Err.Fatal("Cluster: invalid cluster size: 1")
+		}
+		if len(globals.cluster.nodes)%2 == 1 {
+			// Even number of cluster nodes (self + odd number).
+			logs.Warn.Println("Cluster: use odd number of cluster nodes")
+		}
 	}
 
-	if len(globals.cluster.nodes)%2 == 1 {
-		// Even number of cluster nodes (self + odd number).
-		logs.Warn.Println("Cluster: use odd number of cluster nodes")
-	}
-
-	if !globals.cluster.failoverInit(config.Failover) {
+	// failoverInit is a no-op in kubernetes mode: we skip it explicitly rather
+	// than letting the leader election goroutine start. Membership is driven by
+	// the discovery reconciler (started from Cluster.start()).
+	var workerId int
+	switch mode {
+	case "static":
+		if !globals.cluster.failoverInit(config.Failover) {
+			globals.cluster.rehash(nil)
+		}
+		sort.Strings(nodeNames)
+		workerId = sort.SearchStrings(nodeNames, thisName) + 1
+		statsSet("ClusterDiscoveryMode", 0)
+	case "kubernetes":
+		// In k8s mode the reconciler will rehash on each snapshot, but we need
+		// a valid initial ring before start() accepts traffic.
 		globals.cluster.rehash(nil)
+		workerId = k8sWorkerId(thisName)
+		// Leader election is disabled in k8s mode; pin the gauge so operators
+		// alerting on "no leader for N minutes" don't false-positive.
+		statsSet("ClusterLeader", 0)
+		statsSet("ClusterDiscoveryMode", 1)
 	}
-
-	sort.Strings(nodeNames)
-	workerId := sort.SearchStrings(nodeNames, thisName) + 1
 
 	statsSet("TotalClusterNodes", int64(len(globals.cluster.nodes)+1))
 
 	return workerId
+}
+
+// resolvePodName picks the local cluster identity for the selected discovery
+// mode. In kubernetes mode the identity is derived from POD_NAME; in static
+// mode it follows the legacy CLI flag -> config fallback order.
+func resolvePodName(mode string, self *string, configThisName string) string {
+	// In kubernetes mode the node name is derived from the pod (not from the
+	// static config / CLI flag), and the listen address is bound to all
+	// interfaces since peers dial via the pod IP published in EndpointSlices.
+	if mode == "kubernetes" {
+		if *self != "" || configThisName != "" {
+			logs.Warn.Println("Cluster: ignoring cluster_self / self config in kubernetes mode; identity is derived from POD_NAME")
+		}
+
+		thisName := os.Getenv("POD_NAME")
+		if thisName == "" {
+			logs.Err.Fatal("Cluster: POD_NAME env var is required in kubernetes mode (inject via downward API)")
+		}
+		return thisName
+	}
+
+	if *self != "" {
+		return *self
+	}
+	return configThisName
+}
+
+// k8sWorkerId derives the snowflake worker ID for a pod in kubernetes mode.
+//
+// Numeric suffix of podName, e.g. "tinode-2" → 2, yielding workerId 3.
+// Fails the process (log.Fatal) on any validation error. The pod-name
+// fallback guards against accidental Deployment usage: random ReplicaSet
+// suffixes do not match the StatefulSet ordinal pattern and will fail here.
+func k8sWorkerId(podName string) int {
+	ord, ok := parseWorkerID(podName)
+	if !ok {
+		logs.Err.Fatalf("Cluster: POD_NAME %q does not match `<name>-<non-negative-integer>` (StatefulSet required in kubernetes mode)", podName)
+	}
+
+	workerId := ord + 1
+	if workerId >= 1024 {
+		logs.Err.Fatalf("Cluster: pod ordinal %d yields worker ID ≥ 1024 (snowflake 10-bit limit)", ord)
+	}
+	return workerId
+}
+
+func k8sListenAddr(port int) string {
+	return ":" + strconv.Itoa(port)
+}
+
+func parseWorkerID(podName string) (int, bool) {
+	idx := strings.LastIndex(podName, "-")
+	if idx < 0 || idx == len(podName)-1 {
+		return 0, false
+	}
+	suffix := podName[idx+1:]
+	n, err := strconv.Atoi(suffix)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+func portOnlyFromAddr(addr string) string {
+	idx := strings.LastIndex(addr, ":")
+	if idx < 0 {
+		return addr
+	}
+	return addr[idx+1:]
 }
 
 // Proxied session is being closed at the Master node.
@@ -1079,17 +1363,136 @@ func (c *Cluster) start() {
 
 	go rpc.Accept(c.inbound)
 
+	// Start the discovery reconciler for modes that drive membership at
+	// runtime (currently only kubernetes). staticDiscovery's Subscribe()
+	// channel is closed, so runReconciler would return immediately anyway,
+	// but we skip it to make the intent explicit.
+	if _, ok := c.discovery.(*kubernetesDiscovery); ok {
+		go c.runReconciler()
+	}
+
 	logs.Info.Printf("Cluster of %d nodes initialized, node '%s' is listening on [%s]", len(globals.cluster.nodes)+1,
 		globals.cluster.thisNodeName, c.listenOn)
+}
+
+// runReconciler loops on the discovery subscription and applies membership
+// snapshots to the cluster by atomically publishing the next nodes+ring
+// snapshot, then invalidating proxy subs whose master moved and
+// garbage-collecting orphaned multiplexing sessions.
+//
+// Intended for kubernetes mode. Returns when the discovery Subscribe()
+// channel closes (i.e., Discovery.Stop() has been called).
+func (c *Cluster) runReconciler() {
+	logs.Info.Println("cluster: reconciler loop started")
+	for snapshot := range c.discovery.Subscribe() {
+		c.applySnapshot(snapshot)
+	}
+	logs.Info.Println("cluster: reconciler loop exited")
+}
+
+// applySnapshot diffs the incoming endpoint list against the current
+// membership, builds the next nodes+ring snapshot off-lock, starts newly
+// provisioned peers, publishes the swap atomically under nodesLock, then
+// retires replaced peers.
+func (c *Cluster) applySnapshot(snapshot []NodeEndpoint) {
+	// Compute the target set of peer names (snapshot minus self).
+	targetNames := make(map[string]string, len(snapshot))
+	for _, ep := range snapshot {
+		if ep.Name == c.thisNodeName {
+			continue
+		}
+		targetNames[ep.Name] = ep.Addr
+	}
+
+	c.nodesLock.RLock()
+	currentNodes := make(map[string]*ClusterNode, len(c.nodes))
+	for name, node := range c.nodes {
+		currentNodes[name] = node
+	}
+	c.nodesLock.RUnlock()
+
+	activeNames := make([]string, 0, len(targetNames)+1)
+	activeNames = append(activeNames, c.thisNodeName)
+	nextNodes := make(map[string]*ClusterNode, len(targetNames))
+	newNodes := make([]*ClusterNode, 0, len(targetNames))
+	retiredNodes := make([]*ClusterNode, 0, len(currentNodes))
+	desiredPeerCount := len(targetNames)
+
+	for name, addr := range targetNames {
+		activeNames = append(activeNames, name)
+
+		if existing := currentNodes[name]; existing != nil && existing.address == addr {
+			nextNodes[name] = existing
+			continue
+		}
+
+		node := c.prepareClusterNode(name, addr, desiredPeerCount)
+		nextNodes[name] = node
+		newNodes = append(newNodes, node)
+
+		if existing := currentNodes[name]; existing != nil {
+			retiredNodes = append(retiredNodes, existing)
+		}
+	}
+	for name, node := range currentNodes {
+		if _, keep := nextNodes[name]; !keep {
+			retiredNodes = append(retiredNodes, node)
+		}
+	}
+
+	nextRing := buildRing(activeNames)
+
+	for _, node := range newNodes {
+		c.startClusterNode(node)
+	}
+
+	c.nodesLock.Lock()
+	c.nodes = nextNodes
+	c.ring = nextRing
+	c.nodesLock.Unlock()
+
+	c.invalidateProxySubs("")
+	for _, node := range retiredNodes {
+		c.gcProxySessionsOnNode(node)
+	}
+
+	// Update stats gauges. TotalClusterNodes includes self.
+	statsSet("TotalClusterNodes", int64(len(targetNames)+1))
+
+	// Nudge the hub to reflect the new ring (topics may have re-homed).
+	// Hub may be nil during tests that exercise applySnapshot in isolation.
+	if globals.hub != nil {
+		select {
+		case globals.hub.rehash <- true:
+		default:
+		}
+	}
+
+	for _, node := range retiredNodes {
+		stopClusterNode(node)
+	}
 }
 
 func (c *Cluster) shutdown() {
 	if globals.cluster == nil {
 		return
 	}
+	// Stop the discovery source first so the reconciler stops scheduling
+	// add/remove operations against the peer map we are about to tear down.
+	// Safe to call on staticDiscovery (no-op).
+	if c.discovery != nil {
+		c.discovery.Stop()
+	}
+
+	c.nodesLock.RLock()
+	peersSnapshot := make([]*ClusterNode, 0, len(c.nodes))
 	for _, n := range c.nodes {
-		close(n.rpcDone)
-		close(n.p2mSender)
+		peersSnapshot = append(peersSnapshot, n)
+	}
+	c.nodesLock.RUnlock()
+
+	for _, n := range peersSnapshot {
+		stopClusterNode(n)
 	}
 
 	globals.cluster.proxyEventQueue.Stop()
@@ -1101,33 +1504,133 @@ func (c *Cluster) shutdown() {
 		c.fo.done <- true
 	}
 
-	for _, n := range c.nodes {
-		n.done <- true
-	}
-
 	logs.Info.Println("Cluster shut down")
 }
 
 // Recalculate the ring hash using provided list of nodes or only nodes in a non-failed state.
 // Returns the list of nodes used for ring hash.
 func (c *Cluster) rehash(nodes []string) []string {
-	ring := rh.New(clusterHashReplicas, nil)
-
 	var ringKeys []string
 
 	if nodes == nil {
+		c.nodesLock.RLock()
 		for _, node := range c.nodes {
 			ringKeys = append(ringKeys, node.name)
 		}
+		c.nodesLock.RUnlock()
 		ringKeys = append(ringKeys, c.thisNodeName)
 	} else {
 		ringKeys = append(ringKeys, nodes...)
 	}
-	ring.Add(ringKeys...)
-
+	ring := buildRing(ringKeys)
+	c.nodesLock.Lock()
 	c.ring = ring
+	c.nodesLock.Unlock()
 
 	return ringKeys
+}
+
+func buildRing(ringKeys []string) *rh.Ring {
+	ring := rh.New(clusterHashReplicas, nil)
+	ring.Add(ringKeys...)
+	return ring
+}
+
+// addClusterNode provisions a new peer at runtime: allocates RPC channels,
+// spawns asyncRpcLoop / p2mSenderLoop, and starts a reconnect goroutine that
+// dials the peer address. Returns the provisioned node.
+//
+// Kept as a helper for targeted runtime add/remove operations and unit tests.
+// The Kubernetes reconciler publishes full membership snapshots via
+// applySnapshot instead of mutating the peer set incrementally. Does nothing
+// and returns nil if a node with `name` already exists.
+func (c *Cluster) addClusterNode(name, addr string) *ClusterNode {
+	if name == c.thisNodeName {
+		return nil
+	}
+
+	c.nodesLock.Lock()
+	if existing, ok := c.nodes[name]; ok {
+		c.nodesLock.Unlock()
+		return existing
+	}
+	node := c.prepareClusterNode(name, addr, len(c.nodes)+1)
+	c.nodes[name] = node
+	c.nodesLock.Unlock()
+
+	c.nodesLock.RLock()
+	stillCurrent := c.nodes[name] == node
+	c.nodesLock.RUnlock()
+	if stillCurrent {
+		c.startClusterNode(node)
+	}
+
+	logs.Info.Printf("cluster: added peer '%s' at %s", name, addr)
+	return node
+}
+
+func (c *Cluster) prepareClusterNode(name, addr string, peerCount int) *ClusterNode {
+	bufferSize := clusterProxyToMasterBuffer
+	if peerCount > 2 {
+		bufferSize += clusterProxyToMasterBufferPerNode * (peerCount - 2)
+	}
+	rpcBufSize := max(peerCount, 1) * clusterRpcCompletionBuffer
+
+	return &ClusterNode{
+		address:   addr,
+		name:      name,
+		done:      make(chan bool, 1),
+		msess:     make(map[string]struct{}),
+		rpcDone:   make(chan *rpc.Call, rpcBufSize),
+		p2mSender: make(chan *ClusterReq, bufferSize),
+	}
+}
+
+func (c *Cluster) startClusterNode(node *ClusterNode) {
+	go node.reconnect()
+	go node.asyncRpcLoop()
+	go node.p2mSenderLoop()
+}
+
+// removeClusterNode tears down a peer at runtime: removes it from c.nodes,
+// closes its RPC client, and signals the runner goroutines to exit. Safe to
+// call on an already-removed name.
+//
+// Kept as a helper for targeted runtime add/remove operations and unit tests.
+// The Kubernetes reconciler publishes full membership snapshots via
+// applySnapshot instead of mutating the peer set incrementally.
+func (c *Cluster) removeClusterNode(name string) {
+	c.nodesLock.Lock()
+	node, ok := c.nodes[name]
+	if !ok {
+		c.nodesLock.Unlock()
+		return
+	}
+	delete(c.nodes, name)
+	c.nodesLock.Unlock()
+
+	stopClusterNode(node)
+	logs.Info.Printf("cluster: removed peer '%s'", name)
+}
+
+func stopClusterNode(node *ClusterNode) {
+	node.lock.Lock()
+	node.retired = true
+	node.closeEndpointLocked()
+	if node.connected {
+		statsInc("LiveClusterNodes", -1)
+	}
+	node.connected = false
+	node.reconnecting = false
+	node.lock.Unlock()
+
+	if node.done != nil {
+		node.stopOnce.Do(func() {
+			// Closing done starts bounded post-shutdown draining in
+			// asyncRpcLoop; it does not abandon rpcDone immediately.
+			close(node.done)
+		})
+	}
 }
 
 // invalidateProxySubs iterates over sessions proxied on this node and for each session
@@ -1144,7 +1647,7 @@ func (c *Cluster) invalidateProxySubs(forNode string) {
 			return true
 		}
 		if forNode == "" {
-			if topic.masterNode == c.ring.Get(topic.name) {
+			if topic.masterNode == c.ringOwner(topic.name) {
 				// The topic hasn't moved. Continue.
 				return true
 			}
@@ -1169,9 +1672,11 @@ func (c *Cluster) invalidateProxySubs(forNode string) {
 // The session is orphaned when the origin node is gone.
 func (c *Cluster) gcProxySessions(activeNodes []string) {
 	allNodes := []string{c.thisNodeName}
+	c.nodesLock.RLock()
 	for name := range c.nodes {
 		allNodes = append(allNodes, name)
 	}
+	c.nodesLock.RUnlock()
 	_, failedNodes, _ := stringSliceDelta(allNodes, activeNodes)
 	for _, node := range failedNodes {
 		// Iterate sessions of a failed node
@@ -1182,16 +1687,42 @@ func (c *Cluster) gcProxySessions(activeNodes []string) {
 // gcProxySessionsForNode terminates orphaned proxy sessions at a master node for the given node.
 // For example, a remote node is restarted or the cluster is rehashed without the node.
 func (c *Cluster) gcProxySessionsForNode(node string) {
+	c.nodesLock.RLock()
 	n := c.nodes[node]
-	n.lock.Lock()
-	msess := n.msess
-	n.msess = make(map[string]struct{})
-	n.lock.Unlock()
+	c.nodesLock.RUnlock()
+	if n == nil {
+		return
+	}
+	c.gcProxySessionsOnNode(n)
+}
+
+func (c *Cluster) gcProxySessionsOnNode(node *ClusterNode) {
+	if node == nil {
+		return
+	}
+	node.lock.Lock()
+	msess := node.msess
+	node.msess = make(map[string]struct{})
+	node.lock.Unlock()
 	for sid := range msess {
 		if sess := globals.sessionStore.Get(sid); sess != nil {
 			sess.stop <- nil
 		}
 	}
+}
+
+func (c *Cluster) ringSignature() string {
+	c.nodesLock.RLock()
+	sig := c.ring.Signature()
+	c.nodesLock.RUnlock()
+	return sig
+}
+
+func (c *Cluster) ringOwner(topic string) string {
+	c.nodesLock.RLock()
+	owner := c.ring.Get(topic)
+	c.nodesLock.RUnlock()
+	return owner
 }
 
 // clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.

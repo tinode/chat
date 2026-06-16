@@ -13,6 +13,8 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
+const HealthCheckTimeout = 3 * time.Second
+
 type AuthRecord struct {
 	Unique  string     `json:"unique" bson:"_id"`
 	UserId  string     `json:"userid"`

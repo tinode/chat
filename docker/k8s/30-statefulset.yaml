@@ -1,0 +1,118 @@
+# StatefulSet deploying Tinode in kubernetes-discovery mode.
+#
+# Critical properties:
+#   - podManagementPolicy: OrderedReady — guarantees at most one terminating
+#     + starting pod per ordinal at any time, which keeps snowflake worker
+#     IDs unique across restarts.
+#   - serviceName: tinode-headless — ties pod DNS (tinode-0.tinode-headless,
+#     tinode-1.tinode-headless, ...) to the Service that carries the
+#     EndpointSlice the discovery informer watches.
+#   - POD_NAME via downward API — Tinode's clusterInit reads it to derive
+#     the cluster identity and the snowflake worker ID (`ordinal + 1`).
+#   - K8s entrypoint — validates POD_NAME and lets clusterInit derive the
+#     snowflake worker ID from the StatefulSet ordinal.
+#   - readinessProbe hits port 6060 — peers drop this pod from their rings
+#     as soon as the probe fails, so a graceful shutdown can rely on
+#     `preStop` delaying SIGTERM long enough for informers to propagate.
+#
+# Operator notes:
+#   - Replicas can be scaled up and down freely; the reconciler picks up
+#     EndpointSlice deltas and rebuilds the ring.
+#   - Hard cap at 1023 replicas (snowflake 10-bit worker field). clusterInit
+#     will FATAL if asked to derive a worker ID above that.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tinode
+  namespace: default
+  labels:
+    app.kubernetes.io/name: tinode
+spec:
+  serviceName: tinode-headless
+  replicas: 3
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tinode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tinode
+    spec:
+      serviceAccountName: tinode
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: tinode
+          # Replace with the image you built from docker/tinode/Dockerfile
+          # (or your preferred registry/tag).
+          image: tinode/tinode:k8s
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ws
+              containerPort: 6060
+              protocol: TCP
+            - name: grpc
+              containerPort: 16060
+              protocol: TCP
+            - name: cluster
+              containerPort: 12001
+              protocol: TCP
+          env:
+            # POD_NAME is consumed by clusterInit to derive the cluster
+            # identity and the snowflake worker ID. Required.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: EXT_CONFIG
+              value: /opt/tinode/tinode.conf
+            # TINODE_WORKER_ID is not supported in kubernetes mode; worker ID
+            # is derived from POD_NAME's StatefulSet ordinal.
+          command: ["/opt/tinode/entrypoint-k8s.sh"]
+          volumeMounts:
+            - name: config
+              mountPath: /opt/tinode/tinode.conf
+              subPath: tinode.conf
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: ws
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: ws
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              # Sleep long enough that peers' informers remove this pod from
+              # their rings before SIGTERM drains any in-flight proxy
+              # requests. Tune upward if informer lag in your cluster is
+              # higher than ~3s.
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: tinode-config
+            items:
+              - key: tinode.conf
+                path: tinode.conf

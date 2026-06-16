@@ -1,3 +1,6 @@
+//go:build mysql
+// +build mysql
+
 // To test another db backend:
 // 1) Create GetAdapter function inside your db backend adapter package (like one inside mysql adapter)
 // 2) Uncomment your db backend package ('backend' named package)

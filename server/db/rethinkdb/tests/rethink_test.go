@@ -1,3 +1,6 @@
+//go:build rethinkdb
+// +build rethinkdb
+
 package tests
 
 // To test another db backend:

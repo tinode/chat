@@ -1,5 +1,12 @@
 #!/bin/bash
 
+if [ -z "$POD_NAME" ] ; then
+	echo "\$POD_NAME must be set when using entrypoint-k8s.sh"
+	exit 1
+fi
+
+echo "tinode: POD_NAME=$POD_NAME"
+
 # If EXT_CONFIG is set, use it as a config file.
 if [ ! -z "$EXT_CONFIG" ] ; then
 	CONFIG="$EXT_CONFIG"
@@ -147,5 +154,5 @@ fi
 
 args=("--config=${CONFIG}" "--static_data=$STATIC_DIR" "--cluster_self=$CLUSTER_SELF" "--pprof_url=$PPROF_URL")
 
-# Run the tinode server.
-./tinode "${args[@]}" 2>> /var/log/tinode.log
+# Run the tinode server and keep stderr visible in container logs.
+exec ./tinode "${args[@]}" 2>&1
