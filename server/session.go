@@ -477,7 +477,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
-	authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel)
+	var authLvl auth.Level
+	if msg.Extra != nil {
+		authLvl = auth.ParseAuthLevel(msg.Extra.AuthLevel)
+	}
 	if msg.Extra == nil || (msg.Extra.AsUser == "" && authLvl == auth.LevelNone) {
 		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
