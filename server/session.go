@@ -501,7 +501,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.AsUser = msg.Extra.AsUser
 
 		// Assign auth level, if one is provided. Ignore invalid strings.
-		if authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel); authLvl == auth.LevelNone {
+		if authLvl == auth.LevelNone {
 			// AuthLvl is not set by the caller, assign default LevelAuth.
 			msg.AuthLvl = int(auth.LevelAuth)
 		} else {
