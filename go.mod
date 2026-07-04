@@ -19,7 +19,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/tinode/jsonco v1.0.0
 	github.com/tinode/snowflake v1.0.0
-	go.mongodb.org/mongo-driver v1.17.4
+	go.mongodb.org/mongo-driver v1.17.7
 	golang.org/x/crypto v0.51.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/text v0.37.0
