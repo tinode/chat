@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	adapter "github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/store"
 	jcr "github.com/tinode/jsonco"
