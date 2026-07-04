@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	adapter "github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/store"
 	jcr "github.com/tinode/jsonco"

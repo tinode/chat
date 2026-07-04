@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db/common"
@@ -150,21 +150,26 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("postgres adapter failed to parse DSN: " + err.Error())
 	}
 
-	// ConnectConfig creates a new Pool and immediately establishes one connection.
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
-	if isMissingDb(err) {
-		// Missing DB is OK if we are initializing the database.
-		// Since tinode DB does not exist, connect without specifying the DB name.
-		a.poolConfig.ConnConfig.Database = ""
-		a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
-	}
+	// NewWithConfig only creates a pool object. Ping to validate connectivity.
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
 	if err != nil {
 		return err
 	}
 
-	// Actually opening the network connection if one was not opened earlier.
-	if a.poolConfig.LazyConnect {
+	err = a.db.Ping(ctx)
+	if isMissingDb(err) {
+		// Missing DB is OK if we are initializing the database.
+		// Since tinode DB does not exist, connect without specifying the DB name.
+		a.db.Close()
+		a.poolConfig.ConnConfig.Database = ""
+		a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
+		if err != nil {
+			return err
+		}
 		err = a.db.Ping(ctx)
+	}
+	if err != nil {
+		return err
 	}
 
 	if err == nil {
@@ -303,8 +308,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Create default database name
 	a.poolConfig.ConnConfig.Database = "postgres"
 
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
 	if err != nil {
+		return err
+	}
+	if err = a.db.Ping(ctx); err != nil {
 		return err
 	}
 
@@ -319,8 +327,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	a.poolConfig.ConnConfig.Database = a.dbName
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
 	if err != nil {
+		return err
+	}
+	if err = a.db.Ping(ctx); err != nil {
 		return err
 	}
 
