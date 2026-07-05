@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	textt "text/template"
+	"time"
 
 	"slices"
 
@@ -548,7 +549,10 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 
 func randomBoundary() string {
 	var buf [24]byte
-	crand.Read(buf[:])
+	if _, err := crand.Read(buf[:]); err != nil {
+		// Fall back to a time-based boundary on the unlikely event crypto/rand fails.
+		return fmt.Sprintf("tinode--%x", time.Now().UnixNano())
+	}
 	return fmt.Sprintf("tinode--%x", buf[:])
 }
 
