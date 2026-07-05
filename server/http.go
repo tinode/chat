@@ -62,7 +62,15 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 
 					// This is a second HTTP server listenning on a different port.
 					go func() {
-						if err := http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr)); err != nil && err != http.ErrServerClosed {
+						redirectServer := &http.Server{
+							Addr:              globals.tlsRedirectHTTP,
+							Handler:           tlsRedirect(addr),
+							ReadHeaderTimeout: 10 * time.Second,
+							IdleTimeout:       30 * time.Second,
+							WriteTimeout:      90 * time.Second,
+							MaxHeaderBytes:    1 << 14,
+						}
+						if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 							logs.Info.Println("HTTP redirect failed:", err)
 						}
 					}()

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"mime"
 	qp "mime/quotedprintable"
 	"net/mail"
@@ -549,7 +548,7 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 
 func randomBoundary() string {
 	var buf [24]byte
-	rand.Read(buf[:])
+	crand.Read(buf[:])
 	return fmt.Sprintf("tinode--%x", buf[:])
 }
 
