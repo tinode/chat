@@ -1,0 +1,62 @@
+{{/*
+  INDONESIAN
+
+  This template defines content of the email sent to users as a request to confirm registration email address.
+  See https://golang.org/pkg/text/template/ for syntax.
+
+  The template must contain the following parts parts:
+   - 'subject': Subject line of an email message
+   - One or both of the following:
+     - 'body_html': HTML content of the message. A header "Content-type: text/html" will be added.
+     - 'body_plain': plain text content of the message. A header "Content-type: text/plain" will be added.
+
+   If both body_html and body_plain are included, both are sent as parts of 'multipart/alternative' message.
+*/}}
+
+{{define "subject" -}}
+Pendaftaran Tinode: konfirmasi email
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>Halo.</p>
+
+<p>Anda menerima pesan ini karena seseorang menggunakan alamat email Anda untuk mendaftar di
+<a href="{{.HostUrl}}">Tinode</a>.</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">Klik untuk mengonfirmasi</a>
+atau buka
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+dan masukkan kode berikut:</p>
+<blockquote><big>{{.Code}}</big></blockquote>
+<p>Anda mungkin perlu memasukkan nama pengguna dan kata sandi.</p>
+
+<p>Jika Anda tidak mendaftar di Tinode, abaikan saja pesan ini.</p>
+
+<p><a href="https://tinode.co/">Tim Tinode</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+Halo.
+
+Anda menerima pesan ini karena seseorang menggunakan alamat email Anda untuk mendaftar di Tinode ({{.HostUrl}}).
+
+Klik tautan {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} untuk mengonfirmasi atau buka {{.HostUrl}}#cred?what=email
+dan masukkan kode berikut:
+
+	{{.Code}}
+
+Anda mungkin perlu memasukkan nama pengguna dan kata sandi.
+
+Jika Anda tidak mendaftar di Tinode, abaikan saja pesan ini.
+
+Tim Tinode
+https://tinode.co/
+
+{{- end}}
