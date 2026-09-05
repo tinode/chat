@@ -149,6 +149,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
+| Indonesian | &check; |   |   |   |
 | Italian |   | &check; | &check; | &check; |
 | Korean |   | &check; | &check; |   |
 | Portuguese | &check; | &check; | &check; |   |
@@ -159,7 +160,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Ukrainian | &check; | &check; | &check; | &check; |
 | Vietnamese | &check; | &check; |   |   |
 
-More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Bengali, Urdu, Japanese, Turkish, Persian.
 
 ## Third-Party
 
