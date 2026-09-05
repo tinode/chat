@@ -173,22 +173,21 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return err
 	}
 
-	if err == nil {
-		if config.MaxOpenConns > 0 {
-			a.poolConfig.MaxConns = int32(config.MaxOpenConns)
-		}
-		if config.MaxIdleConns > 0 {
-			a.poolConfig.MinConns = int32(config.MaxIdleConns)
-		}
-		if config.ConnMaxLifetime > 0 {
-			a.poolConfig.MaxConnLifetime = time.Duration(config.ConnMaxLifetime) * time.Second
-		}
-		if config.SqlTimeout > 0 {
-			a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
-			// We allocate txTimeoutMultiplier times sqlTimeout for transactions.
-			a.txTimeout = time.Duration(float64(config.SqlTimeout)*txTimeoutMultiplier) * time.Second
-		}
+	if config.MaxOpenConns > 0 {
+		a.poolConfig.MaxConns = int32(config.MaxOpenConns)
 	}
+	if config.MaxIdleConns > 0 {
+		a.poolConfig.MinConns = int32(config.MaxIdleConns)
+	}
+	if config.ConnMaxLifetime > 0 {
+		a.poolConfig.MaxConnLifetime = time.Duration(config.ConnMaxLifetime) * time.Second
+	}
+	if config.SqlTimeout > 0 {
+		a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
+		// We allocate txTimeoutMultiplier times sqlTimeout for transactions.
+		a.txTimeout = time.Duration(float64(config.SqlTimeout)*txTimeoutMultiplier) * time.Second
+	}
+
 	return err
 }
 
