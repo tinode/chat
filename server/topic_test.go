@@ -51,6 +51,30 @@ type TopicTestHelper struct {
 	ss *mock_store.MockSubsPersistenceInterface
 }
 
+func TestPresSubsOnlineDirectCopiesP2PMessage(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	helper.topic.presSubsOnlineDirect("acs", nilPresParams, nilPresFilters, "")
+	helper.finish()
+
+	for i, result := range helper.results {
+		if len(result.messages) != 1 {
+			t.Fatalf("User %d: expected 1 message, received %d", i, len(result.messages))
+		}
+
+		msg := result.messages[0].(*ServerComMessage)
+		if msg.Pres == nil {
+			t.Fatalf("User %d: expected presence message", i)
+		}
+		expectedTopic := helper.uids[i^1].UserId()
+		if msg.Pres.Topic != expectedTopic {
+			t.Errorf("User %d: presence topic expected %q, found %q", i, expectedTopic, msg.Pres.Topic)
+		}
+	}
+}
+
 func (b *TopicTestHelper) finish() {
 	b.topic.killTimer.Stop()
 	b.topic.callEstablishmentTimer.Stop()

@@ -378,6 +378,7 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 	}
 
 	for s, pssd := range t.sessions {
+		msgCopy := msg.copy()
 		if !s.isMultiplex() {
 			if skipSid == s.sid {
 				continue
@@ -399,11 +400,9 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 			}
 
 			// For p2p topics topic name is dependent on receiver.
-			// It's OK to change the pointer here because the message will be serialized in queueOut
-			// before being placed into the channel.
-			t.prepareBroadcastableMessage(msg, pssd.uid, pssd.isChanSub)
+			t.prepareBroadcastableMessage(msgCopy, pssd.uid, pssd.isChanSub)
 		}
-		s.queueOut(msg)
+		s.queueOut(msgCopy)
 	}
 }
 
