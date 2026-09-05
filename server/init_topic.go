@@ -63,7 +63,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
 
 		logs.Err.Println("init_topic: failed to load or create topic:", join.RcptTo, err)
 		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.Id, t.xoriginal, timestamp, join.Timestamp, nil))
@@ -107,7 +107,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
 		return
 	}
 

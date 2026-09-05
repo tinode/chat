@@ -191,6 +191,27 @@ func (b *TopicTestHelper) tearDown() {
 	b.ctrl.Finish()
 }
 
+func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
+	hub := &Hub{topics: &sync.Map{}}
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:    "usrMe",
+		cat:     types.TopicCatMe,
+		perUser: map[types.Uid]perUserData{uid: {}},
+		exit:    make(chan *shutDown, 1),
+	}
+
+	hub.topicPut(topic.name, topic)
+	hub.stopTopicsForUser(uid, StopDeleted, nil)
+
+	if count := hub.numTopics.Load(); count != 0 {
+		t.Errorf("topic count: expected 0, found %d", count)
+	}
+	if hub.topicGet(topic.name) != nil {
+		t.Error("deleted topic is still present")
+	}
+}
+
 func (s *Session) testWriteLoop(results *responses, wg *sync.WaitGroup) {
 	for msg := range s.send {
 		results.messages = append(results.messages, msg)

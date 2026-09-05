@@ -12,6 +12,7 @@ package main
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -59,7 +60,7 @@ type Hub struct {
 	topics *sync.Map
 
 	// Current number of loaded topics
-	numTopics int
+	numTopics atomic.Int64
 
 	// Channel for routing client-side messages, buffered at 4096
 	routeCli chan *ClientComMessage
@@ -94,13 +95,14 @@ func (h *Hub) topicGet(name string) *Topic {
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
-	h.numTopics++
+	h.numTopics.Add(1)
 	h.topics.Store(name, t)
 }
 
-func (h *Hub) topicDel(name string) {
-	h.numTopics--
-	h.topics.Delete(name)
+func (h *Hub) topicDel(name string, expected *Topic) {
+	if h.topics.CompareAndDelete(name, expected) {
+		h.numTopics.Add(-1)
+	}
 }
 
 func newHub() *Hub {
@@ -426,7 +428,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					sendPush(pushForChanDelete(t.name, now))
 				}
 
-				h.topicDel(topic)
+				h.topicDel(topic, t)
 				t.markDeleted()
 				t.exit <- &shutDown{reason: StopDeleted}
 				statsInc("LiveTopics", -1)
@@ -544,7 +546,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		// If t is nil, it's not registered, no action is needed
 		if t := h.topicGet(topic); t != nil {
 			t.markDeleted()
-			h.topicDel(topic)
+			h.topicDel(topic, t)
 
 			t.exit <- &shutDown{reason: reason}
 
@@ -576,7 +578,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
 			topic.markDeleted()
-			h.topics.Delete(name)
+			h.topicDel(topic.name, topic)
 
 			// This call is non-blocking unless some other routine tries to stop it at the same time.
 			topic.exit <- &shutDown{reason: reason, done: done}
