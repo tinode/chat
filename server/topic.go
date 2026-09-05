@@ -2932,11 +2932,11 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 	added, removed, _ := stringSliceDelta(t.tags, tags)
 
 	if t.cat == types.TopicCatMe && len(added) > 0 {
-		// User tags must all be prefixed. Users are not rearchable by generic tags.
+		// User tags must all be prefixed. Users are not reachable by generic tags.
 		var prefixed []string
 		for _, tag := range added {
 			if prefix, _ := validateTag(tag); prefix != "" {
-				prefixed = append(prefixed, prefix)
+				prefixed = append(prefixed, tag)
 			}
 		}
 		added = prefixed
