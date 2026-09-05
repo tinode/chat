@@ -732,6 +732,7 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 		if err != nil {
 			// Group topic cannot be addressed as channel unless channel functionality is enabled.
 			sess.queueOut(ErrNotFoundReply(msg, now))
+			return
 		}
 	}
 
@@ -752,17 +753,21 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 	}
 
 	// User wants to leave without unsubscribing.
+	if msg.init {
+		s := sess
+		if sess.multi != nil {
+			s = sess.multi
+		}
+		if pssd, ok := t.sessions[s]; ok && pssd.isChanSub != asChan {
+			// Cannot address non-channel subscription as channel and vice versa.
+			sess.queueOut(ErrNotFoundReply(msg, now))
+			return
+		}
+	}
+
 	if pssd, _ := t.remSession(sess, asUid); pssd != nil {
 		if !sess.isProxy() {
 			sess.delSub(t.name)
-		}
-		if pssd.isChanSub != asChan {
-			// Cannot address non-channel subscription as channel and vice versa.
-			if msg.init {
-				// Group topic cannot be addressed as channel unless channel functionality is enabled.
-				sess.queueOut(ErrNotFoundReply(msg, now))
-			}
-			return
 		}
 
 		var uid types.Uid

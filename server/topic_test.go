@@ -2208,6 +2208,66 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	}
 }
 
+func TestUnregisterSessionInvalidChannelAccess(t *testing.T) {
+	tests := []struct {
+		name        string
+		topicIsChan bool
+		leaveTopic  string
+		subIsChan   bool
+	}{
+		{
+			name:        "non-channel addressed as channel",
+			topicIsChan: false,
+			leaveTopic:  "chnTest",
+			subIsChan:   false,
+		},
+		{
+			name:        "channel addressed as non-channel",
+			topicIsChan: true,
+			leaveTopic:  "grpTest",
+			subIsChan:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			helper := TopicTestHelper{}
+			helper.setUp(t, 1, types.TopicCatGrp, "grpTest", true)
+			defer helper.tearDown()
+
+			helper.topic.isChan = test.topicIsChan
+			s := helper.sessions[0]
+			uid := helper.uids[0]
+			helper.topic.sessions[s] = perSessionData{uid: uid, isChanSub: test.subIsChan}
+			s.subs[helper.topic.name] = &Subscription{}
+
+			leave := &ClientComMessage{
+				Leave: &MsgClientLeave{
+					Id:    "id456",
+					Topic: test.leaveTopic,
+				},
+				Original: test.leaveTopic,
+				AsUser:   uid.UserId(),
+				sess:     s,
+				init:     true,
+			}
+			helper.topic.unregisterSession(leave)
+			helper.finish()
+
+			if len(helper.topic.sessions) != 1 {
+				t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+			}
+			if _, ok := s.subs[helper.topic.name]; !ok {
+				t.Error("session subscription was removed")
+			}
+			if online := helper.topic.perUser[uid].online; online != 1 {
+				t.Errorf("Number of online sessions: expected 1, found %d", online)
+			}
+			registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
+		})
+	}
+}
+
 func TestUnregisterSessionInactiveTopic(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
