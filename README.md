@@ -149,7 +149,7 @@ All client software has support for [internationalization](docs/translations.md)
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
-| Indonesian | &check; |   |   |   |
+| Indonesian | &check; | &check; |   |   |
 | Italian |   | &check; | &check; | &check; |
 | Korean |   | &check; | &check; |   |
 | Portuguese | &check; | &check; | &check; |   |
