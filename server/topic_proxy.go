@@ -15,6 +15,8 @@ import (
 )
 
 func (t *Topic) runProxy(hub *Hub) {
+	defer close(t.done)
+
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
 
@@ -89,6 +91,9 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(req, nil, t.name, tmpSess); err != nil {
 				logs.Warn.Printf("proxy topic[%s]: route sess update request from proxy to master failed - %s", t.name, err)
 			}
+
+		case status := <-t.userStatus:
+			t.handleUserStatus(status)
 
 		case msg := <-t.proxy:
 			t.proxyMasterResponse(msg, killTimer)

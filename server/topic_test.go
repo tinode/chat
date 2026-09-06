@@ -166,6 +166,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		perUser:                pu,
 		isProxy:                false,
 		sessions:               ps,
+		done:                   make(chan struct{}),
 		killTimer:              time.NewTimer(time.Hour),
 		callEstablishmentTimer: time.NewTimer(time.Second),
 	}
@@ -199,6 +200,7 @@ func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
 		cat:     types.TopicCatMe,
 		perUser: map[types.Uid]perUserData{uid: {}},
 		exit:    make(chan *shutDown, 1),
+		done:    make(chan struct{}),
 	}
 
 	hub.topicPut(topic.name, topic)
@@ -209,6 +211,37 @@ func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
 	}
 	if hub.topicGet(topic.name) != nil {
 		t.Error("deleted topic is still present")
+	}
+}
+
+func TestHubTopicsStateForUserUsesTopicHandler(t *testing.T) {
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:       "p2p-test",
+		cat:        types.TopicCatP2P,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		userStatus: make(chan *userStatusReq, 1),
+		done:       make(chan struct{}),
+	}
+	hub := &Hub{topics: &sync.Map{}}
+	hub.topics.Store(topic.name, topic)
+
+	done := make(chan struct{})
+	go func() {
+		status := <-topic.userStatus
+		topic.handleUserStatus(status)
+		close(done)
+	}()
+
+	hub.topicsStateForUser(uid, true)
+	<-done
+	if !topic.isReadOnly() {
+		t.Fatal("topic was not suspended")
+	}
+
+	topic.handleUserStatus(&userStatusReq{forUser: uid, state: types.StateOK})
+	if topic.isReadOnly() {
+		t.Fatal("topic was not resumed")
 	}
 }
 
@@ -3297,7 +3330,7 @@ func TestReplyDelMsgHardDelete(t *testing.T) {
 
 	pud1 := helper.topic.perUser[user1]
 	pud1.readID = 10
-	pud1.modeGiven = types.ModeCFull  // Full permissions including delete
+	pud1.modeGiven = types.ModeCFull // Full permissions including delete
 	pud1.modeWant = types.ModeCFull
 	helper.topic.perUser[user1] = pud1
 
@@ -3310,7 +3343,7 @@ func TestReplyDelMsgHardDelete(t *testing.T) {
 	// Simulate user1 doing a hard delete of messages 7 and 8
 	msg := &ClientComMessage{
 		Del: &MsgClientDel{
-			Id: "del123",
+			Id:   "del123",
 			What: "msg",
 			DelSeq: []MsgRange{
 				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
@@ -3365,17 +3398,17 @@ func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
 	helper.topic.lastID = 10
 
 	pud1 := helper.topic.perUser[user1]
-	pud1.readID = 10  // user1 has read all
+	pud1.readID = 10 // user1 has read all
 	helper.topic.perUser[user1] = pud1
 
 	pud2 := helper.topic.perUser[user2]
-	pud2.readID = 5   // user2 has 5 unread messages
+	pud2.readID = 5 // user2 has 5 unread messages
 	helper.topic.perUser[user2] = pud2
 
 	// Simulate user1 deleting messages 7 and 8 (2 of user2's unread messages)
 	msg := &ClientComMessage{
 		Del: &MsgClientDel{
-			Id: "del123",
+			Id:   "del123",
 			What: "msg",
 			DelSeq: []MsgRange{
 				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)

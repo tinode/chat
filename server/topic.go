@@ -105,8 +105,12 @@ type Topic struct {
 	unreg chan *ClientComMessage
 	// Session updates: background sessions coming online, User Agent changes. Buffered = 32
 	supd chan *sessionUpdate
+	// User account state changes. Buffered = 1
+	userStatus chan *userStatusReq
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
+	// Closed when the topic run loop exits.
+	done chan struct{}
 	// Channel to receive topic master responses (used only by proxy topics).
 	proxy chan *ClusterResp
 	// Channel to receive topic proxy service requests, e.g. sending deferred notifications.
@@ -499,6 +503,19 @@ func (t *Topic) handleSessionUpdate(upd *sessionUpdate, currentUA *string, uaTim
 	}
 }
 
+func (t *Topic) handleUserStatus(status *userStatusReq) {
+	if t.cat == types.TopicCatMe || t.cat == types.TopicCatFnd {
+		return
+	}
+
+	_, isMember := t.perUser[status.forUser]
+	if (t.cat == types.TopicCatP2P && isMember) || t.owner == status.forUser {
+		t.markReadOnly(status.state == types.StateSuspended)
+
+		// Don't send "off" notification on suspension. They will be sent when the user is evicted.
+	}
+}
+
 func (t *Topic) handleUATimerEvent(currentUA string) {
 	// Publish user agent changes after a delay
 	if currentUA == "" || currentUA == t.userAgent {
@@ -566,6 +583,8 @@ func (t *Topic) handleTopicTermination(sd *shutDown) {
 }
 
 func (t *Topic) runLocal(hub *Hub) {
+	defer close(t.done)
+
 	// Kills topic after a period of inactivity.
 	t.killTimer = time.NewTimer(time.Hour)
 	t.killTimer.Stop()
@@ -600,6 +619,9 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case upd := <-t.supd:
 			t.handleSessionUpdate(upd, &currentUA, uaTimer)
+
+		case status := <-t.userStatus:
+			t.handleUserStatus(status)
 
 		case <-uaTimer.C:
 			t.handleUATimerEvent(currentUA)

@@ -99,6 +99,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 			msg := <-t.exit
 			msg.done <- true
 		}
+		close(t.done)
 
 		return
 	}
@@ -108,11 +109,13 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
 		h.topicDel(join.RcptTo, t)
+		close(t.done)
 		return
 	}
 
 	if t.isDeleted() {
 		// Someone deleted the topic while we were trying to create it.
+		close(t.done)
 		return
 	}
 

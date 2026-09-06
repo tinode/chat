@@ -171,15 +171,17 @@ func (h *Hub) run() {
 					name:      join.RcptTo,
 					xoriginal: join.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(join.RcptTo),
-					sessions:  make(map[*Session]perSessionData),
-					clientMsg: make(chan *ClientComMessage, 192),
-					serverMsg: make(chan *ServerComMessage, 64),
-					reg:       make(chan *ClientComMessage, 256),
-					unreg:     make(chan *ClientComMessage, 256),
-					meta:      make(chan *ClientComMessage, 64),
-					perUser:   make(map[types.Uid]perUserData),
-					exit:      make(chan *shutDown, 1),
+					isProxy:    globals.cluster.isRemoteTopic(join.RcptTo),
+					sessions:   make(map[*Session]perSessionData),
+					clientMsg:  make(chan *ClientComMessage, 192),
+					serverMsg:  make(chan *ServerComMessage, 64),
+					reg:        make(chan *ClientComMessage, 256),
+					unreg:      make(chan *ClientComMessage, 256),
+					meta:       make(chan *ClientComMessage, 64),
+					userStatus: make(chan *userStatusReq, 1),
+					perUser:    make(map[types.Uid]perUserData),
+					exit:       make(chan *shutDown, 1),
+					done:       make(chan struct{}),
 				}
 				if globals.cluster != nil {
 					if t.isProxy {
@@ -350,16 +352,18 @@ func (h *Hub) run() {
 // * group topics where the given user is the owner.
 // 'me' and fnd' are ignored here because they are direcly tied to the user object.
 func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
-	h.topics.Range(func(name any, t any) bool {
+	status := &userStatusReq{forUser: uid}
+	if suspended {
+		status.state = types.StateSuspended
+	} else {
+		status.state = types.StateOK
+	}
+
+	h.topics.Range(func(_ any, t any) bool {
 		topic := t.(*Topic)
-		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatFnd {
-			return true
-		}
-
-		if _, isMember := topic.perUser[uid]; (topic.cat == types.TopicCatP2P && isMember) || topic.owner == uid {
-			topic.markReadOnly(suspended)
-
-			// Don't send "off" notification on suspension. They will be sent when the user is evicted.
+		select {
+		case topic.userStatus <- status:
+		case <-topic.done:
 		}
 		return true
 	})
