@@ -107,6 +107,8 @@ type Topic struct {
 	supd chan *sessionUpdate
 	// User account state changes. Buffered = 1
 	userStatus chan *userStatusReq
+	// User account deletion requests. Unbuffered to synchronize with the topic loop.
+	userDelete chan *userDeleteReq
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
 	// Closed when the topic run loop exits.
@@ -374,6 +376,7 @@ func (t *Topic) registerSession(msg *ClientComMessage) {
 	}
 }
 
+// handleMetaGet handles metadata read requests for a topic.
 func (t *Topic) handleMetaGet(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	if msg.MetaWhat&constMsgMetaDesc != 0 {
 		if err := t.replyGetDesc(msg.sess, asUid, asChan, msg.Get.Desc, msg); err != nil {
@@ -413,6 +416,7 @@ func (t *Topic) handleMetaGet(msg *ClientComMessage, asUid types.Uid, asChan boo
 	}
 }
 
+// handleMetaSet handles metadata update requests for a topic.
 func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	if msg.MetaWhat&constMsgMetaDesc != 0 {
 		if err := t.replySetDesc(msg.sess, asUid, asChan, authLevel, msg); err == nil {
@@ -444,6 +448,7 @@ func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan boo
 	}
 }
 
+// handleMetaDel handles metadata deletion requests for a topic.
 func (t *Topic) handleMetaDel(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	var err error
 	switch msg.MetaWhat {
@@ -462,8 +467,7 @@ func (t *Topic) handleMetaDel(msg *ClientComMessage, asUid types.Uid, asChan boo
 	}
 }
 
-// handleMeta implements logic handling meta requests
-// received via the Topic.meta channel.
+// handleMeta handles metadata requests received via the Topic.meta channel.
 func (t *Topic) handleMeta(msg *ClientComMessage) {
 	// Request to get/set topic metadata
 	asUid := types.ParseUserId(msg.AsUser)
@@ -489,6 +493,7 @@ func (t *Topic) handleMeta(msg *ClientComMessage) {
 	}
 }
 
+// handleSessionUpdate updates foreground session state or schedules a user-agent update.
 func (t *Topic) handleSessionUpdate(upd *sessionUpdate, currentUA *string, uaTimer *time.Timer) {
 	if upd.sess != nil {
 		// 'me' & 'grp' only. Background session timed out and came online.
@@ -503,6 +508,7 @@ func (t *Topic) handleSessionUpdate(upd *sessionUpdate, currentUA *string, uaTim
 	}
 }
 
+// handleUserStatus applies a user's suspended or active state to the topic.
 func (t *Topic) handleUserStatus(status *userStatusReq) {
 	if t.cat == types.TopicCatMe || t.cat == types.TopicCatFnd {
 		return
@@ -516,6 +522,35 @@ func (t *Topic) handleUserStatus(status *userStatusReq) {
 	}
 }
 
+// handleUserDelete removes a topic owned by or associated with a deleted user.
+func (t *Topic) handleUserDelete(hub *Hub, request *userDeleteReq) bool {
+	_, isMember := t.perUser[request.forUser]
+	if !((t.cat != types.TopicCatGrp && isMember) || t.owner == request.forUser) {
+		if request.done != nil {
+			request.done <- true
+		}
+		return false
+	}
+
+	if !hub.topicDel(t.name, t) {
+		if request.done != nil {
+			request.done <- true
+		}
+		return false
+	}
+
+	t.markDeleted()
+	statsInc("LiveTopics", -1)
+
+	if t.cat == types.TopicCatP2P && len(t.perUser) == 2 {
+		presSingleUserOfflineOffline(t.p2pOtherUser(request.forUser), request.forUser.UserId(),
+			"gone", nilPresParams, "")
+	}
+
+	return true
+}
+
+// handleUATimerEvent publishes a delayed user-agent change for a user's 'me' topic.
 func (t *Topic) handleUATimerEvent(currentUA string) {
 	// Publish user agent changes after a delay
 	if currentUA == "" || currentUA == t.userAgent {
@@ -525,6 +560,7 @@ func (t *Topic) handleUATimerEvent(currentUA string) {
 	t.presUsersOfInterest("ua", t.userAgent)
 }
 
+// handleTopicTimeout starts termination of an idle topic and sends its offline notifications.
 func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNotifTimer *time.Timer) {
 	// Topic timeout
 	hub.unreg <- &topicUnreg{rcptTo: t.name}
@@ -538,6 +574,7 @@ func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNoti
 	}
 }
 
+// handleTopicTermination performs final cleanup after a topic shutdown request.
 func (t *Topic) handleTopicTermination(sd *shutDown) {
 	// Handle four cases:
 	// 1. Topic is shutting down by timer due to inactivity (reason == StopNone)
@@ -623,6 +660,12 @@ func (t *Topic) runLocal(hub *Hub) {
 		case status := <-t.userStatus:
 			t.handleUserStatus(status)
 
+		case request := <-t.userDelete:
+			if t.handleUserDelete(hub, request) {
+				t.handleTopicTermination(&shutDown{reason: request.reason, done: request.done})
+				return
+			}
+
 		case <-uaTimer.C:
 			t.handleUATimerEvent(currentUA)
 
@@ -639,7 +682,7 @@ func (t *Topic) runLocal(hub *Hub) {
 	}
 }
 
-// handleClientMsg is the top-level handler of messages received by the topic from sessions.
+// handleClientMsg dispatches client messages received by the topic from sessions.
 func (t *Topic) handleClientMsg(msg *ClientComMessage) {
 	if msg.Pub != nil {
 		t.handlePubBroadcast(msg)
@@ -651,7 +694,7 @@ func (t *Topic) handleClientMsg(msg *ClientComMessage) {
 	}
 }
 
-// handleServerMsg is the top-level handler of messages generated at the server.
+// handleServerMsg dispatches server-generated messages to the topic.
 func (t *Topic) handleServerMsg(msg *ServerComMessage) {
 	// Server-generated message: {info} or {pres}.
 	if t.isInactive() {
@@ -668,7 +711,7 @@ func (t *Topic) handleServerMsg(msg *ServerComMessage) {
 	}
 }
 
-// Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
+// handleSubscription completes a session subscription and any requested metadata reads.
 func (t *Topic) handleSubscription(msg *ClientComMessage) error {
 	asUid := types.ParseUserId(msg.AsUser)
 	authLevel := auth.Level(msg.AuthLvl)
@@ -1114,7 +1157,7 @@ func (t *Topic) saveAndBroadcastMessage(msg *ClientComMessage, asUid types.Uid, 
 	return nil
 }
 
-// handlePubBroadcast fans out {pub} -> {data} messages to recipients in a master topic.
+// handlePubBroadcast saves and fans out a {pub} message as {data} in a master topic.
 // This is a NON-proxy broadcast.
 func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
@@ -1161,7 +1204,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	}
 }
 
-// handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.
+// handleNoteBroadcast processes a {note} and fans it out as {info} in a master topic.
 // This is a NON-proxy broadcast (at master topic).
 func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 	if t.isInactive() {
@@ -1296,7 +1339,7 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 	t.broadcastToSessions(info)
 }
 
-// handlePresence fans out {pres} messages to recipients in topic.
+// handlePresence processes a {pres} request and fans it out to topic recipients.
 func (t *Topic) handlePresence(msg *ServerComMessage) {
 	what := t.procPresReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
 	if t.xoriginal != msg.Pres.Topic || what == "" {

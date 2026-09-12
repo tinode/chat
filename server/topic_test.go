@@ -167,6 +167,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		isProxy:                false,
 		sessions:               ps,
 		done:                   make(chan struct{}),
+		userDelete:             make(chan *userDeleteReq),
 		killTimer:              time.NewTimer(time.Hour),
 		callEstablishmentTimer: time.NewTimer(time.Second),
 	}
@@ -196,15 +197,24 @@ func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
 	hub := &Hub{topics: &sync.Map{}}
 	uid := types.Uid(1)
 	topic := &Topic{
-		name:    "usrMe",
-		cat:     types.TopicCatMe,
-		perUser: map[types.Uid]perUserData{uid: {}},
-		exit:    make(chan *shutDown, 1),
-		done:    make(chan struct{}),
+		name:       "usrMe",
+		cat:        types.TopicCatMe,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		exit:       make(chan *shutDown, 1),
+		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
 	}
 
 	hub.topicPut(topic.name, topic)
-	hub.stopTopicsForUser(uid, StopDeleted, nil)
+	go func() {
+		request := <-topic.userDelete
+		if topic.handleUserDelete(hub, request) && request.done != nil {
+			request.done <- true
+		}
+	}()
+	allDone := make(chan bool, 1)
+	hub.stopTopicsForUser(uid, StopDeleted, allDone)
+	<-allDone
 
 	if count := hub.numTopics.Load(); count != 0 {
 		t.Errorf("topic count: expected 0, found %d", count)
@@ -222,6 +232,7 @@ func TestHubTopicsStateForUserUsesTopicHandler(t *testing.T) {
 		perUser:    map[types.Uid]perUserData{uid: {}},
 		userStatus: make(chan *userStatusReq, 1),
 		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
 	}
 	hub := &Hub{topics: &sync.Map{}}
 	hub.topics.Store(topic.name, topic)

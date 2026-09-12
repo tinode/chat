@@ -95,6 +95,22 @@ func (t *Topic) runProxy(hub *Hub) {
 		case status := <-t.userStatus:
 			t.handleUserStatus(status)
 
+		case request := <-t.userDelete:
+			if t.handleUserDelete(hub, request) {
+				for s := range t.sessions {
+					s.detachSession(t.name)
+				}
+
+				if err := globals.cluster.topicProxyGone(t.name); err != nil {
+					logs.Warn.Printf("proxy topic[%s] shutdown: failed to notify master - %s", t.name, err)
+				}
+
+				if request.done != nil {
+					request.done <- true
+				}
+				return
+			}
+
 		case msg := <-t.proxy:
 			t.proxyMasterResponse(msg, killTimer)
 

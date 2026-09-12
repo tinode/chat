@@ -53,6 +53,15 @@ type userStatusReq struct {
 	state types.ObjState
 }
 
+type userDeleteReq struct {
+	// UID of the user being deleted.
+	forUser types.Uid
+	// Reason for stopping the topic.
+	reason int
+	// Channel for reporting completion of this topic's handling.
+	done chan<- bool
+}
+
 // Hub is the core structure which holds topics.
 type Hub struct {
 
@@ -99,10 +108,12 @@ func (h *Hub) topicPut(name string, t *Topic) {
 	h.topics.Store(name, t)
 }
 
-func (h *Hub) topicDel(name string, expected *Topic) {
+func (h *Hub) topicDel(name string, expected *Topic) bool {
 	if h.topics.CompareAndDelete(name, expected) {
 		h.numTopics.Add(-1)
+		return true
 	}
+	return false
 }
 
 func newHub() *Hub {
@@ -179,6 +190,7 @@ func (h *Hub) run() {
 					unreg:      make(chan *ClientComMessage, 256),
 					meta:       make(chan *ClientComMessage, 64),
 					userStatus: make(chan *userStatusReq, 1),
+					userDelete: make(chan *userDeleteReq),
 					perUser:    make(map[types.Uid]perUserData),
 					exit:       make(chan *shutDown, 1),
 					done:       make(chan struct{}),
@@ -571,37 +583,29 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 // * group topics where the given user is the owner.
 // * user's 'me', 'fnd', 'slf' topics.
 func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
-	var done chan bool
-	if alldone != nil {
-		done = make(chan bool, 128)
-	}
+	h.topics.Range(func(_ any, value any) bool {
+		topic := value.(*Topic)
+		var done chan bool
+		if alldone != nil {
+			done = make(chan bool, 1)
+		}
 
-	count := 0
-	h.topics.Range(func(name any, t any) bool {
-		topic := t.(*Topic)
-		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
-			topic.owner == uid {
-			topic.markDeleted()
-			h.topicDel(topic.name, topic)
-
-			// This call is non-blocking unless some other routine tries to stop it at the same time.
-			topic.exit <- &shutDown{reason: reason, done: done}
-
-			// Just send to p2p topics here.
-			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
-				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
+		request := &userDeleteReq{
+			forUser: uid,
+			reason:  reason,
+			done:    done,
+		}
+		select {
+		case topic.userDelete <- request:
+			if done != nil {
+				<-done
 			}
-			count++
+		case <-topic.done:
 		}
 		return true
 	})
 
-	statsInc("LiveTopics", -count)
-
 	if alldone != nil {
-		for range count {
-			<-done
-		}
 		alldone <- true
 	}
 }
