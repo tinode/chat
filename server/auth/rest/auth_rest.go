@@ -213,32 +213,37 @@ func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Re
 	}
 
 	// Check if server provided a user ID. If not, create a new account in the local database.
-	if resp.Record.Uid.IsZero() && a.allowNewAccounts {
-		if resp.NewAcc == nil {
+	if resp.Record.Uid.IsZero() {
+		if a.allowNewAccounts {
+			if resp.NewAcc == nil {
+				return nil, nil, types.ErrNotFound
+			}
+
+			// Create account, get UID, report UID back to the server.
+
+			user := types.User{
+				State:   resp.Record.State,
+				Public:  resp.NewAcc.Public,
+				Trusted: resp.NewAcc.Trusted,
+				Tags:    resp.Record.Tags,
+			}
+			user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
+			user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
+			_, err = store.Users.Create(&user, resp.NewAcc.Private)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// Report the new UID to the server.
+			resp.Record.Uid = user.Uid()
+			_, err = a.callEndpoint("link", resp.Record, secret, "")
+			if err != nil {
+				store.Users.Delete(resp.Record.Uid, true)
+				return nil, nil, err
+			}
+		} else {
+			// The external service has no linked account and local account creation is disabled.
 			return nil, nil, types.ErrNotFound
-		}
-
-		// Create account, get UID, report UID back to the server.
-
-		user := types.User{
-			State:   resp.Record.State,
-			Public:  resp.NewAcc.Public,
-			Trusted: resp.NewAcc.Trusted,
-			Tags:    resp.Record.Tags,
-		}
-		user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
-		user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
-		_, err = store.Users.Create(&user, resp.NewAcc.Private)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Report the new UID to the server.
-		resp.Record.Uid = user.Uid()
-		_, err = a.callEndpoint("link", resp.Record, secret, "")
-		if err != nil {
-			store.Users.Delete(resp.Record.Uid, true)
-			return nil, nil, err
 		}
 	}
 
