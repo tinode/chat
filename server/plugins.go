@@ -238,15 +238,6 @@ type Plugin struct {
 	client pbx.PluginClient
 }
 
-// callContext ensures every plugin RPC has a finite deadline.
-func (p *Plugin) callContext() (context.Context, context.CancelFunc) {
-	timeout := p.timeout
-	if timeout <= 0 {
-		timeout = defaultPluginTimeout
-	}
-	return context.WithTimeout(context.Background(), timeout)
-}
-
 func pluginsInit(configString json.RawMessage) {
 	// Check if any plugins are defined
 	if len(configString) == 0 {
@@ -276,6 +267,9 @@ func pluginsInit(configString json.RawMessage) {
 			timeout:     time.Duration(conf.Timeout) * time.Microsecond,
 			failureCode: conf.FailureCode,
 			failureText: conf.FailureMessage,
+		}
+		if globals.plugins[count].timeout <= 0 {
+			globals.plugins[count].timeout = defaultPluginTimeout
 		}
 		var err error
 		if globals.plugins[count].filterFireHose, err =
@@ -388,7 +382,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			}
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		resp, err := p.client.FireHose(ctx, req)
 		cancel()
 		if err == nil {
@@ -447,7 +441,7 @@ func pluginFind(user types.Uid, query string) (string, []types.Subscription, err
 			continue
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		resp, err := p.client.Find(ctx, find)
 		cancel()
 		if err != nil {
@@ -500,7 +494,7 @@ func pluginAccount(user *types.User, action int) {
 			}
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		_, err := p.client.Account(ctx, event)
 		cancel()
 		if err != nil {
@@ -530,7 +524,7 @@ func pluginTopic(topic *Topic, action int) {
 			}
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		_, err := p.client.Topic(ctx, event)
 		cancel()
 		if err != nil {
@@ -571,7 +565,7 @@ func pluginSubscription(sub *types.Subscription, action int) {
 			}
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		_, err := p.client.Subscription(ctx, event)
 		cancel()
 		if err != nil {
@@ -601,7 +595,7 @@ func pluginMessage(data *MsgServerData, action int) {
 			}
 		}
 
-		ctx, cancel := p.callContext()
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		_, err := p.client.Message(ctx, event)
 		cancel()
 		if err != nil {
