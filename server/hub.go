@@ -182,18 +182,19 @@ func (h *Hub) run() {
 					name:      join.RcptTo,
 					xoriginal: join.Original,
 					// Indicates a proxy topic.
-					isProxy:    globals.cluster.isRemoteTopic(join.RcptTo),
-					sessions:   make(map[*Session]perSessionData),
-					clientMsg:  make(chan *ClientComMessage, 192),
-					serverMsg:  make(chan *ServerComMessage, 64),
-					reg:        make(chan *ClientComMessage, 256),
-					unreg:      make(chan *ClientComMessage, 256),
-					meta:       make(chan *ClientComMessage, 64),
-					userStatus: make(chan *userStatusReq, 1),
-					userDelete: make(chan *userDeleteReq),
-					perUser:    make(map[types.Uid]perUserData),
-					exit:       make(chan *shutDown, 1),
-					done:       make(chan struct{}),
+					isProxy:     globals.cluster.isRemoteTopic(join.RcptTo),
+					sessions:    make(map[*Session]perSessionData),
+					clientMsg:   make(chan *ClientComMessage, 192),
+					serverMsg:   make(chan *ServerComMessage, 64),
+					reg:         make(chan *ClientComMessage, 256),
+					unreg:       make(chan *ClientComMessage, 256),
+					meta:        make(chan *ClientComMessage, 64),
+					userStatus:  make(chan *userStatusReq, 1),
+					userDelete:  make(chan *userDeleteReq),
+					perUser:     make(map[types.Uid]perUserData),
+					exit:        make(chan *shutDown, 1),
+					done:        make(chan struct{}),
+					initialized: make(chan struct{}),
 				}
 				if globals.cluster != nil {
 					if t.isProxy {
@@ -585,6 +586,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
 	h.topics.Range(func(_ any, value any) bool {
 		topic := value.(*Topic)
+		if !topic.mayDeleteForUser(uid) {
+			return true
+		}
 		var done chan bool
 		if alldone != nil {
 			done = make(chan bool, 1)

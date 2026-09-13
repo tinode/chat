@@ -180,7 +180,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
-		b.topic.owner = b.uids[0]
+		b.topic.setOwner(b.uids[0])
 	}
 }
 
@@ -197,7 +197,7 @@ func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
 	hub := &Hub{topics: &sync.Map{}}
 	uid := types.Uid(1)
 	topic := &Topic{
-		name:       "usrMe",
+		name:       uid.UserId(),
 		cat:        types.TopicCatMe,
 		perUser:    map[types.Uid]perUserData{uid: {}},
 		exit:       make(chan *shutDown, 1),
@@ -1998,7 +1998,7 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	r := helper.results[0]
 
 	// User is the topic owner.
-	helper.topic.owner = uid
+	helper.topic.setOwner(uid)
 	pud := helper.topic.perUser[uid]
 	pud.modeGiven |= types.ModeOwner
 	helper.topic.perUser[uid] = pud

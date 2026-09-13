@@ -56,6 +56,8 @@ type Topic struct {
 
 	// User ID of the topic owner/creator. Could be zero.
 	owner types.Uid
+	// Owner published for hub-side deletion filtering without reading actor state.
+	deletionOwner atomic.Uint64
 
 	// Default access mode
 	accessAuth types.AccessMode
@@ -113,6 +115,8 @@ type Topic struct {
 	exit chan *shutDown
 	// Closed when the topic run loop exits.
 	done chan struct{}
+	// Closed once initialization has finished, including failed initialization.
+	initialized chan struct{}
 	// Channel to receive topic master responses (used only by proxy topics).
 	proxy chan *ClusterResp
 	// Channel to receive topic proxy service requests, e.g. sending deferred notifications.
@@ -519,6 +523,41 @@ func (t *Topic) handleUserStatus(status *userStatusReq) {
 		t.markReadOnly(status.state == types.StateSuspended)
 
 		// Don't send "off" notification on suspension. They will be sent when the user is evicted.
+	}
+}
+
+// setOwner updates the actor-owned owner and publishes it for deletion routing.
+func (t *Topic) setOwner(uid types.Uid) {
+	t.owner = uid
+	t.deletionOwner.Store(uint64(uid))
+}
+
+// mayDeleteForUser filters deletion requests using immutable names and a published
+// owner. The topic actor still checks its current membership before terminating.
+func (t *Topic) mayDeleteForUser(uid types.Uid) bool {
+	switch types.GetTopicCat(t.name) {
+	case types.TopicCatMe:
+		return t.name == uid.UserId()
+	case types.TopicCatFnd:
+		return t.name == uid.FndName()
+	case types.TopicCatSlf:
+		return t.name == uid.SlfName()
+	case types.TopicCatP2P:
+		first, second, err := types.ParseP2P(t.name)
+		return err == nil && (uid == first || uid == second)
+	case types.TopicCatGrp:
+		// A group being loaded may not have published its owner yet. Wait for
+		// initialization, not for its event loop to finish unrelated work.
+		if t.initialized != nil {
+			select {
+			case <-t.initialized:
+			case <-t.done:
+				return false
+			}
+		}
+		return types.Uid(t.deletionOwner.Load()) == uid
+	default:
+		return false
 	}
 }
 
@@ -1879,7 +1918,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			// Send presence notifications.
 			t.notifySubChange(t.owner, asUid, false,
 				oldOwnerOldWant, oldOwnerOldGiven, oldOwnerData.modeWant, oldOwnerData.modeGiven, "")
-			t.owner = asUid
+			t.setOwner(asUid)
 		}
 	}
 

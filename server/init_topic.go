@@ -19,6 +19,7 @@ import (
 
 // topicInit reads an existing topic from database or creates a new topic
 func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
+	defer close(t.initialized)
 	var subscribeReqIssued bool
 	defer func() {
 		if !subscribeReqIssued && join.Sub != nil && join.sess.inflightReqs != nil {
@@ -510,7 +511,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	t.isChan = isChan
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.AsUser)
+	t.setOwner(types.ParseUserId(sreg.AsUser))
 	authLevel := auth.Level(sreg.AuthLvl)
 
 	t.accessAuth = getDefaultAccess(t.cat, true, isChan)
@@ -752,7 +753,7 @@ func initTopicSlf(t *Topic, sreg *ClientComMessage) error {
 			return types.ErrUserNotFound
 		}
 
-		t.owner = userID
+		t.setOwner(userID)
 
 		t.accessAuth = getDefaultAccess(t.cat, true, false)
 		t.accessAnon = getDefaultAccess(t.cat, false, false)
@@ -840,7 +841,7 @@ func (t *Topic) loadSubscribers() error {
 		}
 
 		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
-			t.owner = uid
+			t.setOwner(uid)
 		}
 	}
 
