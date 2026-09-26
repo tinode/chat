@@ -298,7 +298,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		})
 		_, _, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
 		if err == nil {
-			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err != nil {
+			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err == nil {
 				var validated []string
 				for i := range allCreds {
 					validated = append(validated, allCreds[i].Method)

@@ -19,6 +19,7 @@ import (
 
 // topicInit reads an existing topic from database or creates a new topic
 func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
+	defer close(t.initialized)
 	var subscribeReqIssued bool
 	defer func() {
 		if !subscribeReqIssued && join.Sub != nil && join.sess.inflightReqs != nil {
@@ -63,7 +64,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
 
 		logs.Err.Println("init_topic: failed to load or create topic:", join.RcptTo, err)
 		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.Id, t.xoriginal, timestamp, join.Timestamp, nil))
@@ -99,6 +100,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 			msg := <-t.exit
 			msg.done <- true
 		}
+		close(t.done)
 
 		return
 	}
@@ -107,12 +109,14 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
+		close(t.done)
 		return
 	}
 
 	if t.isDeleted() {
 		// Someone deleted the topic while we were trying to create it.
+		close(t.done)
 		return
 	}
 
@@ -508,7 +512,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	t.isChan = isChan
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.AsUser)
+	t.setOwner(types.ParseUserId(sreg.AsUser))
 	authLevel := auth.Level(sreg.AuthLvl)
 
 	t.accessAuth = getDefaultAccess(t.cat, true, isChan)
@@ -752,7 +756,7 @@ func initTopicSlf(t *Topic, sreg *ClientComMessage) error {
 			return types.ErrUserNotFound
 		}
 
-		t.owner = userID
+		t.setOwner(userID)
 
 		t.accessAuth = getDefaultAccess(t.cat, true, false)
 		t.accessAnon = getDefaultAccess(t.cat, false, false)
@@ -840,7 +844,7 @@ func (t *Topic) loadSubscribers() error {
 		}
 
 		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
-			t.owner = uid
+			t.setOwner(uid)
 		}
 	}
 

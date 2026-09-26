@@ -51,6 +51,30 @@ type TopicTestHelper struct {
 	ss *mock_store.MockSubsPersistenceInterface
 }
 
+func TestPresSubsOnlineDirectCopiesP2PMessage(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	helper.topic.presSubsOnlineDirect("acs", nilPresParams, nilPresFilters, "")
+	helper.finish()
+
+	for i, result := range helper.results {
+		if len(result.messages) != 1 {
+			t.Fatalf("User %d: expected 1 message, received %d", i, len(result.messages))
+		}
+
+		msg := result.messages[0].(*ServerComMessage)
+		if msg.Pres == nil {
+			t.Fatalf("User %d: expected presence message", i)
+		}
+		expectedTopic := helper.uids[i^1].UserId()
+		if msg.Pres.Topic != expectedTopic {
+			t.Errorf("User %d: presence topic expected %q, found %q", i, expectedTopic, msg.Pres.Topic)
+		}
+	}
+}
+
 func (b *TopicTestHelper) finish() {
 	b.topic.killTimer.Stop()
 	b.topic.callEstablishmentTimer.Stop()
@@ -142,6 +166,8 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		perUser:                pu,
 		isProxy:                false,
 		sessions:               ps,
+		done:                   make(chan struct{}),
+		userDelete:             make(chan *userDeleteReq),
 		killTimer:              time.NewTimer(time.Hour),
 		callEstablishmentTimer: time.NewTimer(time.Second),
 	}
@@ -154,7 +180,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
-		b.topic.owner = b.uids[0]
+		b.topic.setOwner(b.uids[0])
 	}
 }
 
@@ -165,6 +191,69 @@ func (b *TopicTestHelper) tearDown() {
 	store.Topics = nil
 	store.Subs = nil
 	b.ctrl.Finish()
+}
+
+func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
+	hub := &Hub{topics: &sync.Map{}}
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:       uid.UserId(),
+		cat:        types.TopicCatMe,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		exit:       make(chan *shutDown, 1),
+		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
+	}
+
+	hub.topicPut(topic.name, topic)
+	go func() {
+		request := <-topic.userDelete
+		if topic.handleUserDelete(hub, request) && request.done != nil {
+			request.done <- true
+		}
+	}()
+	allDone := make(chan bool, 1)
+	hub.stopTopicsForUser(uid, StopDeleted, allDone)
+	<-allDone
+
+	if count := hub.numTopics.Load(); count != 0 {
+		t.Errorf("topic count: expected 0, found %d", count)
+	}
+	if hub.topicGet(topic.name) != nil {
+		t.Error("deleted topic is still present")
+	}
+}
+
+func TestHubTopicsStateForUserUsesTopicHandler(t *testing.T) {
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:       "p2p-test",
+		cat:        types.TopicCatP2P,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		userStatus: make(chan *userStatusReq, 1),
+		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
+	}
+	hub := &Hub{topics: &sync.Map{}}
+	hub.topics.Store(topic.name, topic)
+
+	done := make(chan struct{})
+	go func() {
+		status := <-topic.userStatus
+		topic.handleUserStatus(status)
+		close(done)
+	}()
+
+	hub.topicsStateForUser(uid, true)
+	<-done
+	if !topic.isReadOnly() {
+		t.Fatal("topic was not suspended")
+	}
+
+	topic.handleUserStatus(&userStatusReq{forUser: uid, state: types.StateOK})
+	if topic.isReadOnly() {
+		t.Fatal("topic was not resumed")
+	}
 }
 
 func (s *Session) testWriteLoop(results *responses, wg *sync.WaitGroup) {
@@ -1910,7 +1999,7 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	r := helper.results[0]
 
 	// User is the topic owner.
-	helper.topic.owner = uid
+	helper.topic.setOwner(uid)
 	pud := helper.topic.perUser[uid]
 	pud.modeGiven |= types.ModeOwner
 	helper.topic.perUser[uid] = pud
@@ -2206,6 +2295,66 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionInvalidChannelAccess(t *testing.T) {
+	tests := []struct {
+		name        string
+		topicIsChan bool
+		leaveTopic  string
+		subIsChan   bool
+	}{
+		{
+			name:        "non-channel addressed as channel",
+			topicIsChan: false,
+			leaveTopic:  "chnTest",
+			subIsChan:   false,
+		},
+		{
+			name:        "channel addressed as non-channel",
+			topicIsChan: true,
+			leaveTopic:  "grpTest",
+			subIsChan:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			helper := TopicTestHelper{}
+			helper.setUp(t, 1, types.TopicCatGrp, "grpTest", true)
+			defer helper.tearDown()
+
+			helper.topic.isChan = test.topicIsChan
+			s := helper.sessions[0]
+			uid := helper.uids[0]
+			helper.topic.sessions[s] = perSessionData{uid: uid, isChanSub: test.subIsChan}
+			s.subs[helper.topic.name] = &Subscription{}
+
+			leave := &ClientComMessage{
+				Leave: &MsgClientLeave{
+					Id:    "id456",
+					Topic: test.leaveTopic,
+				},
+				Original: test.leaveTopic,
+				AsUser:   uid.UserId(),
+				sess:     s,
+				init:     true,
+			}
+			helper.topic.unregisterSession(leave)
+			helper.finish()
+
+			if len(helper.topic.sessions) != 1 {
+				t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+			}
+			if _, ok := s.subs[helper.topic.name]; !ok {
+				t.Error("session subscription was removed")
+			}
+			if online := helper.topic.perUser[uid].online; online != 1 {
+				t.Errorf("Number of online sessions: expected 1, found %d", online)
+			}
+			registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
+		})
 	}
 }
 

@@ -216,11 +216,6 @@ var globals struct {
 	// Maximum age of messages which can be deleted with 'D' permission.
 	msgDeleteAge time.Duration
 
-	// Allowed reactions map for quick lookup of allowed emoji by serverside policy.
-	allowedReactions map[string]bool
-	// The same reactions as a priority-sorted list.
-	reactions []string
-
 	// allowedOrigins is the list of HTTP Origins permitted for WebSocket and long-poll
 	// connections. Supports exact matches and wildcards (e.g. https://*.example.com).
 	// An empty slice means all origins are allowed (backward-compatible default).
@@ -328,9 +323,6 @@ type configType struct {
 	// Missing or 0 means no age limit.
 	// Does not affect topic owners: owners can delete any message.
 	MsgDeleteAge int `json:"msg_delete_age"`
-
-	// AllowedReactions restricts reaction content that clients may use.
-	AllowedReactions []string `json:"allowed_reactions,omitempty"`
 
 	// AllowedOrigins is the list of HTTP Origins permitted for WebSocket and long-poll
 	// connections. An empty list allows all origins (default, backward compatible).
@@ -591,29 +583,6 @@ func main() {
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
 		globals.maxMessageSize = defaultMaxMessageSize
-	}
-
-	// Emoji reactions configuration.
-	var reactions []string
-	globals.allowedReactions = make(map[string]bool)
-	if len(config.AllowedReactions) > 0 {
-		for _, r := range config.AllowedReactions {
-			if isValidReaction(r) {
-				if _, exists := globals.allowedReactions[r]; exists {
-					logs.Warn.Println("Ignored duplicate reaction emoji:", r)
-					continue
-				}
-				globals.allowedReactions[r] = true
-				reactions = append(reactions, r)
-			} else {
-				logs.Warn.Println("Ignored invalid reaction emoji:", r)
-			}
-		}
-
-		if len(reactions) > 0 {
-			globals.reactions = reactions
-			logs.Info.Println("Number of allowed reactions:", len(globals.reactions))
-		}
 	}
 
 	// Allowed origins for WebSocket and long-poll connections.

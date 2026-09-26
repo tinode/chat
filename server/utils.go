@@ -485,6 +485,7 @@ func normalizeTags(src []string, maxTags int) types.StringSlice {
 	return types.StringSlice(dst)
 }
 
+// validateTag checks if a tag is valid and returns its namespace and value.
 func validateTag(tag string) (string, string) {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if parts := prefixedTagRegexp.FindStringSubmatch(tag); len(parts) == 3 {
