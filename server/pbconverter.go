@@ -11,7 +11,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
+func pbServCtrlSerializeBasic(ctrl *MsgServerCtrl) *pbx.ServerCtrl {
 	var params map[string][]byte
 	if ctrl.Params != nil {
 		if in, ok := ctrl.Params.(map[string]any); ok {
@@ -19,14 +19,18 @@ func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
 		}
 	}
 
+	return &pbx.ServerCtrl{
+		Id:     ctrl.Id,
+		Topic:  ctrl.Topic,
+		Code:   int32(ctrl.Code),
+		Text:   ctrl.Text,
+		Params: params,
+	}
+}
+
+func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
 	return &pbx.ServerMsg_Ctrl{
-		Ctrl: &pbx.ServerCtrl{
-			Id:     ctrl.Id,
-			Topic:  ctrl.Topic,
-			Code:   int32(ctrl.Code),
-			Text:   ctrl.Text,
-			Params: params,
-		},
+		Ctrl: pbServCtrlSerializeBasic(ctrl),
 	}
 }
 
@@ -71,6 +75,8 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 		what = pbx.ServerPres_DEL
 	case "tags":
 		what = pbx.ServerPres_TAGS
+	case "aux":
+		what = pbx.ServerPres_AUX
 	default:
 		logs.Info.Println("Unknown pres.what value", pres.What)
 	}
@@ -114,6 +120,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 			Del:   pbDelValuesSerialize(meta.Del),
 			Tags:  meta.Tags,
 			Cred:  pbServerCredsSerialize(meta.Cred),
+			Aux:   interfaceMapToByteMap(meta.Aux),
 		},
 	}
 }
@@ -189,6 +196,8 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			what = "del"
 		case pbx.ServerPres_TAGS:
 			what = "tags"
+		case pbx.ServerPres_AUX:
+			what = "aux"
 		}
 		msg.Pres = &MsgServerPres{
 			Topic:     pres.GetTopic(),
@@ -221,6 +230,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Del:   pbDelValuesDeserialize(meta.GetDel()),
 			Tags:  meta.GetTags(),
 			Cred:  pbServerCredsDeserialize(meta.GetCred()),
+			Aux:   byteMapToInterfaceMap(meta.GetAux()),
 		}
 	}
 	return &msg
@@ -577,6 +587,13 @@ func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 			SinceId:  int32(in.Data.SinceId),
 			Limit:    int32(in.Data.Limit),
 		}
+
+		if len(in.Data.IdRanges) > 0 {
+			out.Data.Ranges = make([]*pbx.SeqRange, len(in.Data.IdRanges))
+			for i, dq := range in.Data.IdRanges {
+				out.Data.Ranges[i] = &pbx.SeqRange{Low: int32(dq.LowId), Hi: int32(dq.HiId)}
+			}
+		}
 	}
 	return out
 }
@@ -607,6 +624,14 @@ func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
 			BeforeId: int(data.GetBeforeId()),
 			SinceId:  int(data.GetSinceId()),
 			Limit:    int(data.GetLimit()),
+		}
+
+		if ranges := data.GetRanges(); len(ranges) > 0 {
+			msg.Data.IdRanges = make([]MsgRange, len(ranges))
+			for i, sr := range ranges {
+				msg.Data.IdRanges[i].LowId = int(sr.GetLow())
+				msg.Data.IdRanges[i].HiId = int(sr.GetHi())
+			}
 		}
 	}
 
@@ -933,7 +958,7 @@ func pbTopicSubSliceSerialize(subs []MsgTopicSub) []*pbx.TopicSub {
 	}
 
 	out := make([]*pbx.TopicSub, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = pbTopicSubSerialize(&subs[i])
 	}
 	return out
@@ -969,7 +994,7 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 	}
 
 	out := make([]MsgTopicSub, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = MsgTopicSub{
 			UpdatedAt: int64ToTime(subs[i].GetUpdatedAt()),
 			DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
@@ -1004,7 +1029,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 	}
 
 	out := make([]types.Subscription, len(subs))
-	for i := 0; i < len(subs); i++ {
+	for i := range subs {
 		out[i] = types.Subscription{
 			ObjHeader: types.ObjHeader{
 				UpdatedAt: *int64ToTime(subs[i].GetUpdatedAt()),
@@ -1029,7 +1054,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 	return out
 }
 
-func pbDelQuerySerialize(in []MsgDelRange) []*pbx.SeqRange {
+func pbDelQuerySerialize(in []MsgRange) []*pbx.SeqRange {
 	if in == nil {
 		return nil
 	}
@@ -1042,12 +1067,12 @@ func pbDelQuerySerialize(in []MsgDelRange) []*pbx.SeqRange {
 	return out
 }
 
-func pbDelQueryDeserialize(in []*pbx.SeqRange) []MsgDelRange {
+func pbDelQueryDeserialize(in []*pbx.SeqRange) []MsgRange {
 	if in == nil {
 		return nil
 	}
 
-	out := make([]MsgDelRange, len(in))
+	out := make([]MsgRange, len(in))
 	for i, sr := range in {
 		out[i].LowId = int(sr.GetLow())
 		out[i].HiId = int(sr.GetHi())

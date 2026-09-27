@@ -19,9 +19,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+
+	"maps"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -30,77 +31,39 @@ import (
 // * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars
 // * tag body may contain Unicode letters and numbers, as well as the following symbols: +-.!?#@_
 // Tag body can be up to maxTagLength (96) chars long.
-var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#@\pL\pN]{1,96}$`)
+var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):([-_+.!?#@\pL\pN]{1,96})$`)
 
 // Generic tag: the same restrictions as tag body.
 var tagRegexp = regexp.MustCompile(`^[-_+.!?#@\pL\pN]{1,96}$`)
 
 const nullValue = "\u2421"
 
-// Convert a list of IDs into ranges
-func delrangeDeserialize(in []types.Range) []MsgDelRange {
+// Convert database ranges into wire protocol ranges.
+func rangeDeserialize(in []types.Range) []MsgRange {
 	if len(in) == 0 {
 		return nil
 	}
 
-	out := make([]MsgDelRange, 0, len(in))
+	out := make([]MsgRange, 0, len(in))
 	for _, r := range in {
-		out = append(out, MsgDelRange{LowId: r.Low, HiId: r.Hi})
+		out = append(out, MsgRange{LowId: r.Low, HiId: r.Hi})
 	}
 
 	return out
 }
 
-// Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
-// the number of tags does not exceed the maximum.
-func normalizeTags(src []string) types.StringSlice {
-	if src == nil {
+// Convert wire protocol ranges into database ranges.
+func rangeSerialize(in []MsgRange) []types.Range {
+	if len(in) == 0 {
 		return nil
 	}
 
-	// Make sure the number of tags does not exceed the maximum.
-	// Technically it may result in fewer tags than the maximum due to empty tags and
-	// duplicates, but that's user's fault.
-	if len(src) > globals.maxTagCount {
-		src = src[:globals.maxTagCount]
+	out := make([]types.Range, 0, len(in))
+	for _, r := range in {
+		out = append(out, types.Range{Low: r.LowId, Hi: r.HiId})
 	}
 
-	// Trim whitespace and force to lowercase.
-	for i := 0; i < len(src); i++ {
-		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
-	}
-
-	// Sort tags
-	sort.Strings(src)
-
-	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
-	// been if length were enforced later, but that's client's fault.
-	var prev string
-	var dst []string
-	for _, curr := range src {
-		if isNullValue(curr) {
-			// Return non-nil empty array
-			return make([]string, 0, 1)
-		}
-
-		// Unicode handling
-		ucurr := []rune(curr)
-
-		// Enforce length in characters, not in bytes.
-		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
-			continue
-		}
-
-		// Make sure the tag starts with a letter or a number.
-		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
-			continue
-		}
-
-		dst = append(dst, curr)
-		prev = curr
-	}
-
-	return types.StringSlice(dst)
+	return out
 }
 
 // stringSliceDelta extracts the slices of added and removed strings from two slices:
@@ -150,29 +113,6 @@ func stringSliceDelta(rold, rnew []string) (added, removed, intersection []strin
 	return added, removed, intersection
 }
 
-// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
-// true - same, false - different.
-func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
-	rold := filterRestrictedTags(oldTags, namespaces)
-	rnew := filterRestrictedTags(newTags, namespaces)
-
-	if len(rold) != len(rnew) {
-		return false
-	}
-
-	sort.Strings(rold)
-	sort.Strings(rnew)
-
-	// Match old tags against the new tags.
-	for i := 0; i < len(rnew); i++ {
-		if rold[i] != rnew[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Process credentials for correctness: remove duplicate and unknown methods.
 // In case of duplicate methods only the first one satisfying valueRequired is kept.
 // If valueRequired is true, keep only those where Value is non-empty.
@@ -215,6 +155,7 @@ func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
 			Limit:           req.Limit,
 			Since:           req.SinceId,
 			Before:          req.BeforeId,
+			IdRanges:        rangeSerialize(req.IdRanges),
 		}
 	}
 	return opts
@@ -307,7 +248,7 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 
 	switch cat {
 	case types.TopicCatP2P:
-		return types.ModeCP2P
+		return globals.typesModeCP2P
 	case types.TopicCatFnd:
 		return types.ModeNone
 	case types.TopicCatGrp:
@@ -316,6 +257,8 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 		}
 		return types.ModeCPublic
 	case types.TopicCatMe:
+		return types.ModeCMeFnd
+	case types.TopicCatSlf:
 		return types.ModeCSelf
 	default:
 		panic("Unknown topic category")
@@ -401,9 +344,10 @@ func versionToString(vers int) string {
 
 // Tag handling
 
-// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
-// Tags to filter, restricted namespaces to filter.
-func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
+// filterTags takes a slice of tags and a map of namespaces, return a slice of namespace tags
+// contained in the input.
+// params: Tags to filter, namespaces to use as the filter.
+func filterTags(tags []string, namespaces map[string]bool) []string {
 	var out []string
 	if len(namespaces) == 0 {
 		return out
@@ -416,6 +360,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 			continue
 		}
 
+		// [1] is the prefix. [0] is the whole tag.
 		if namespaces[parts[1]] {
 			out = append(out, s)
 		}
@@ -424,14 +369,15 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	return out
 }
 
-// rewriteTag attempts to match the original token against the email, telephone number and optionally login patterns.
-// The tag is expected to be converted to lowercase.
-// On success, it prepends the token with the corresponding prefix. It returns an empty string if the tag is invalid.
+// rewriteTag attempts to match the original token against the email and telephone number.
+// The tag is expected to be in lowercase.
+// On success, it returns a slice with the original tag and the tag with the corresponding prefix. It returns an
+// empty slice if the tag is invalid.
 // TODO: consider inferring country code from user location.
-func rewriteTag(orig, countryCode string, withLogin bool) string {
+func rewriteTag(orig, countryCode string) []string {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if prefixedTagRegexp.MatchString(orig) {
-		return orig
+		return []string{orig}
 	}
 
 	// Check if token can be rewritten by any of the validators
@@ -440,63 +386,170 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		if conf.addToTags {
 			val := store.Store.GetValidator(name)
 			if tag, _ := val.PreCheck(orig, param); tag != "" {
-				return tag
-			}
-		}
-	}
-
-	// Try authenticators now.
-	if withLogin {
-		auths := store.Store.GetAuthNames()
-		for _, name := range auths {
-			auth := store.Store.GetAuthHandler(name)
-			if tag := auth.AsTag(orig); tag != "" {
-				return tag
+				return []string{orig, tag}
 			}
 		}
 	}
 
 	if tagRegexp.MatchString(orig) {
-		return orig
+		return []string{orig}
 	}
 
-	logs.Warn.Printf("invalid generic tag '%s'", orig)
+	// invalid generic tag
 
-	return ""
+	return nil
+}
+
+// rewriteTagSlice calls rewriteTag for each slice member and return a new slice with original and converted values.
+func rewriteTagSlice(tags []string, countryCode string) []string {
+	var result []string
+	for _, tag := range tags {
+		rewritten := rewriteTag(tag, countryCode)
+		if len(rewritten) != 0 {
+			result = append(result, rewritten...)
+		}
+	}
+	return result
+}
+
+// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
+// true - same, false - different.
+func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
+	rold := filterTags(oldTags, namespaces)
+	rnew := filterTags(newTags, namespaces)
+
+	if len(rold) != len(rnew) {
+		return false
+	}
+
+	sort.Strings(rold)
+	sort.Strings(rnew)
+
+	// Match old tags against the new tags.
+	for i := range rnew {
+		if rold[i] != rnew[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
+// the number of tags does not exceed the maximum.
+func normalizeTags(src []string, maxTags int) types.StringSlice {
+	if src == nil {
+		return nil
+	}
+
+	// Make sure the number of tags does not exceed the maximum.
+	// Technically it may result in fewer tags than the maximum due to empty tags and
+	// duplicates, but that's user's fault.
+	if len(src) > maxTags {
+		src = src[:maxTags]
+	}
+
+	// Trim whitespace and force to lowercase.
+	for i := range src {
+		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
+	}
+
+	// Sort tags
+	sort.Strings(src)
+
+	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// been if length were enforced later, but that's client's fault.
+	var prev string
+	var dst []string
+	for _, curr := range src {
+		if isNullValue(curr) {
+			// Return non-nil empty array
+			return make([]string, 0, 1)
+		}
+
+		// Unicode handling
+		ucurr := []rune(curr)
+
+		// Enforce length in characters, not in bytes.
+		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
+			continue
+		}
+
+		// Make sure the tag starts with a letter or a number.
+		if unicode.IsLetter(ucurr[0]) || unicode.IsDigit(ucurr[0]) {
+			dst = append(dst, curr)
+			prev = curr
+		}
+	}
+
+	return types.StringSlice(dst)
+}
+
+// validateTag checks if a tag is valid and returns its namespace and value.
+func validateTag(tag string) (string, string) {
+	// Check if the tag already has a prefix e.g. basic:alice.
+	if parts := prefixedTagRegexp.FindStringSubmatch(tag); len(parts) == 3 {
+		// Valid prefixed tag.
+		return parts[1], parts[2]
+	}
+
+	if tagRegexp.MatchString(tag) {
+		// Valid unprefixed tag (tag value only).
+		return "", tag
+	}
+
+	return "", ""
+}
+
+// hasDuplicateNamespaceTags checks for duplication of unique NS tags.
+// Each namespace can have only one tag. This does not prevent tags from
+// being duplicate across requests, just saves an extra DB call.
+func hasDuplicateNamespaceTags(src []string, uniqueNS string) bool {
+	found := map[string]bool{}
+	for _, tag := range src {
+		parts := prefixedTagRegexp.FindStringSubmatch(tag)
+		if len(parts) != 3 {
+			// Invalid tag, ignored.
+			continue
+		}
+
+		if uniqueNS == parts[1] && found[parts[1]] {
+			return true
+		}
+		found[parts[1]] = true
+	}
+	return false
 }
 
 // Parser for search queries. The query may contain non-ASCII characters,
 // i.e. length of string in bytes != length of string in runes.
 // Returns
-// * required tags: AND of ORs of tags (at least one of each subset must be present in every result),
+// * required tags: AND tags (at least one must be present in every result),
 // * optional tags
 // * error.
-func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []string, error) {
+func parseSearchQuery(query string) ([]string, []string, error) {
 	const (
 		NONE = iota
-		QUO
-		AND
-		OR
-		END
-		ORD
+		QUO  // 1
+		AND  // 2
+		OR   // 3
+		END  // 4
+		ORD  // 5
 	)
 	type token struct {
-		op           int
-		val          string
-		rewrittenVal string
+		op  int
+		val string
 	}
 	type context struct {
-		// Pre-token operand
+		// Pre-token operand.
 		preOp int
-		// Post-token operand
+		// Post-token operand.
 		postOp int
-		// Inside quoted string
+		// Inside quoted string.
 		quo bool
-		// Current token is a quoted string
-		unquote bool
-		// Start of the current token
+		// Start of the current token.
 		start int
-		// End of the current token
+		// End of the current token.
 		end int
 	}
 	ctx := context{preOp: AND}
@@ -504,21 +557,29 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 	var prev int
 	query = strings.TrimSpace(query)
 	// Split query into tokens.
+	//   i - character index into the string.
+	//   pos - rune index into the string.
+	//   w - width of the current rune in characters.
 	for i, w, pos := 0, 0, 0; prev != END; i, pos = i+w, pos+1 {
 		//
 		var emit bool
 
 		// Lexer: get next rune.
 		var r rune
+		// Ordinary character by default.
 		curr := ORD
 		r, w = utf8.DecodeRuneInString(query[i:])
 		switch {
 		case w == 0:
+			// Width zero: end of the string.
 			curr = END
 		case r == '"':
+			// Quote opening or closing.
 			curr = QUO
 		case !ctx.quo:
+			// Not inside quoted string, test for control characters.
 			if r == ' ' || r == '\t' {
+				// Tab or space.
 				curr = AND
 			} else if r == ',' {
 				curr = OR
@@ -536,8 +597,8 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 				}
 				// Start of the quoted string. Open the quote.
 				ctx.quo = true
-				ctx.unquote = true
 			}
+			// Treat quoted string as ordinary.
 			curr = ORD
 		}
 
@@ -578,8 +639,8 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 		}
 
 		if emit {
-			if ctx.quo {
-				return nil, nil, fmt.Errorf("unterminated quoted string at or near %d", pos)
+			if ctx.quo && curr == END {
+				return nil, nil, fmt.Errorf("unterminated quoted string at or near %d %#v", pos, ctx)
 			}
 
 			// Emit the new token.
@@ -588,27 +649,16 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 				op = OR
 			}
 			start, end := ctx.start, ctx.end
-			if ctx.unquote {
+			if query[start] == '"' && query[end-1] == '"' {
 				start++
 				end--
 			}
 			// Add token if non-empty.
 			if start < end {
-				original := strings.ToLower(query[start:end])
-				rewritten := rewriteTag(original, countryCode, withLogin)
-				// The 'rewritten' equals to "" means the token is invalid.
-				if rewritten != "" {
-					t := token{val: original, op: op}
-					if rewritten != original {
-						t.rewrittenVal = rewritten
-					}
-					out = append(out, t)
-				}
+				out = append(out, token{val: strings.ToLower(query[start:end]), op: op})
 			}
 			ctx.start = i
-			ctx.preOp = ctx.postOp
-			ctx.postOp = NONE
-			ctx.unquote = false
+			ctx.preOp, ctx.postOp = ctx.postOp, NONE
 		}
 
 		prev = curr
@@ -619,22 +669,14 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 	}
 
 	// Convert tokens to two string slices.
-	var and [][]string
+	var and []string
 	var or []string
 	for _, t := range out {
 		switch t.op {
 		case AND:
-			var terms []string
-			terms = append(terms, t.val)
-			if len(t.rewrittenVal) > 0 {
-				terms = append(terms, t.rewrittenVal)
-			}
-			and = append(and, terms)
+			and = append(and, t.val)
 		case OR:
 			or = append(or, t.val)
-			if len(t.rewrittenVal) > 0 {
-				or = append(or, t.rewrittenVal)
-			}
 		}
 	}
 	return and, or, nil
@@ -807,13 +849,13 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 		switch xval.Kind() {
 		case reflect.Map:
 			if xsrc, _ := val.(map[string]any); xsrc != nil {
-				// Deep-copy map[string]interface{}
+				// Deep-copy map[string]any
 				xdst, _ := dst[key].(map[string]any)
 				var lchange bool
 				dst[key], lchange = mergeMaps(xdst, xsrc)
 				changed = changed || lchange
 			} else if val != nil {
-				// The map is shallow-copied if it's not of the type map[string]interface{}
+				// The map is shallow-copied if it's not of the type map[string]any
 				dst[key] = val
 				changed = true
 			}
@@ -833,6 +875,13 @@ func mergeMaps(dst, src map[string]any) (map[string]any, bool) {
 	}
 
 	return dst, changed
+}
+
+// Shallow copy of a map
+func copyMap(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	maps.Copy(dst, src)
+	return dst
 }
 
 // netListener creates net.Listener for tcp and unix domains:

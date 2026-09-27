@@ -55,10 +55,10 @@ func (mr *MockPersistentStorageInterfaceMockRecorder) Close() *gomock.Call {
 }
 
 // DbStats mocks base method.
-func (m *MockPersistentStorageInterface) DbStats() func() interface{} {
+func (m *MockPersistentStorageInterface) DbStats() func() any {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DbStats")
-	ret0, _ := ret[0].(func() interface{})
+	ret0, _ := ret[0].(func() any)
 	return ret0
 }
 
@@ -344,7 +344,7 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) ConfirmCred(id, method inte
 }
 
 // Create mocks base method.
-func (m *MockUsersPersistenceInterface) Create(user *types.User, private interface{}) (*types.User, error) {
+func (m *MockUsersPersistenceInterface) Create(user *types.User, private any) (*types.User, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", user, private)
 	ret0, _ := ret[0].(*types.User)
@@ -414,19 +414,34 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) FailCred(id, method interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailCred", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FailCred), id, method)
 }
 
-// FindSubs mocks base method.
-func (m *MockUsersPersistenceInterface) FindSubs(id types.Uid, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
+// FindOne mocks base method.
+func (m *MockUsersPersistenceInterface) FindOne(tag string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindSubs", id, required, optional, activeOnly)
+	ret := m.ctrl.Call(m, "FindOne", tag)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindOne indicates an expected call of FindOne.
+func (mr *MockUsersPersistenceInterfaceMockRecorder) FindOne(tag interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOne", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FindOne), tag)
+}
+
+// FindSubs mocks base method.
+func (m *MockUsersPersistenceInterface) FindSubs(caller types.Uid, prefPrefix string, required [][]string, optional []string, activeOnly bool) ([]types.Subscription, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindSubs", caller, prefPrefix, required, optional, activeOnly)
 	ret0, _ := ret[0].([]types.Subscription)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindSubs indicates an expected call of FindSubs.
-func (mr *MockUsersPersistenceInterfaceMockRecorder) FindSubs(id, required, optional, activeOnly interface{}) *gomock.Call {
+func (mr *MockUsersPersistenceInterfaceMockRecorder) FindSubs(caller, prefPrefix, required, optional, activeOnly interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSubs", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FindSubs), id, required, optional, activeOnly)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSubs", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).FindSubs), caller, prefPrefix, required, optional, activeOnly)
 }
 
 // Get mocks base method.
@@ -654,7 +669,7 @@ func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnvalidated(lastUpdatedB
 }
 
 // Update mocks base method.
-func (m *MockUsersPersistenceInterface) Update(uid types.Uid, update map[string]interface{}) error {
+func (m *MockUsersPersistenceInterface) Update(uid types.Uid, update map[string]any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", uid, update)
 	ret0, _ := ret[0].(error)
@@ -763,7 +778,7 @@ func (m *MockTopicsPersistenceInterface) EXPECT() *MockTopicsPersistenceInterfac
 }
 
 // Create mocks base method.
-func (m *MockTopicsPersistenceInterface) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
+func (m *MockTopicsPersistenceInterface) Create(topic *types.Topic, owner types.Uid, private any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", topic, owner, private)
 	ret0, _ := ret[0].(error)
@@ -894,7 +909,7 @@ func (mr *MockTopicsPersistenceInterfaceMockRecorder) OwnerChange(topic, newOwne
 }
 
 // Update mocks base method.
-func (m *MockTopicsPersistenceInterface) Update(topic string, update map[string]interface{}) error {
+func (m *MockTopicsPersistenceInterface) Update(topic string, update map[string]any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", topic, update)
 	ret0, _ := ret[0].(error)
@@ -905,6 +920,20 @@ func (m *MockTopicsPersistenceInterface) Update(topic string, update map[string]
 func (mr *MockTopicsPersistenceInterfaceMockRecorder) Update(topic, update interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).Update), topic, update)
+}
+
+// UpdateSubCnt mocks base method.
+func (m *MockTopicsPersistenceInterface) UpdateSubCnt(topic string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSubCnt", topic)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateSubCnt indicates an expected call of UpdateSubCnt.
+func (mr *MockTopicsPersistenceInterfaceMockRecorder) UpdateSubCnt(topic interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSubCnt", reflect.TypeOf((*MockTopicsPersistenceInterface)(nil).UpdateSubCnt), topic)
 }
 
 // MockSubsPersistenceInterface is a mock of SubsPersistenceInterface interface.
@@ -978,7 +1007,7 @@ func (mr *MockSubsPersistenceInterfaceMockRecorder) Get(topic, user, keepDeleted
 }
 
 // Update mocks base method.
-func (m *MockSubsPersistenceInterface) Update(topic string, user types.Uid, update map[string]interface{}) error {
+func (m *MockSubsPersistenceInterface) Update(topic string, user types.Uid, update map[string]any) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", topic, user, update)
 	ret0, _ := ret[0].(error)
@@ -1015,17 +1044,17 @@ func (m *MockMessagesPersistenceInterface) EXPECT() *MockMessagesPersistenceInte
 }
 
 // DeleteList mocks base method.
-func (m *MockMessagesPersistenceInterface) DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error {
+func (m *MockMessagesPersistenceInterface) DeleteList(topic string, delID int, forUser types.Uid, msgDelAge time.Duration, ranges []types.Range) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteList", topic, delID, forUser, ranges)
+	ret := m.ctrl.Call(m, "DeleteList", topic, delID, forUser, msgDelAge, ranges)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteList indicates an expected call of DeleteList.
-func (mr *MockMessagesPersistenceInterfaceMockRecorder) DeleteList(topic, delID, forUser, ranges interface{}) *gomock.Call {
+func (mr *MockMessagesPersistenceInterfaceMockRecorder) DeleteList(topic, delID, forUser, msgDelAge, ranges interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteList", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).DeleteList), topic, delID, forUser, ranges)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteList", reflect.TypeOf((*MockMessagesPersistenceInterface)(nil).DeleteList), topic, delID, forUser, msgDelAge, ranges)
 }
 
 // GetAll mocks base method.

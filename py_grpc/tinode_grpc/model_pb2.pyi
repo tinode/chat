@@ -128,21 +128,31 @@ class SetDesc(_message.Message):
     trusted: bytes
     def __init__(self, default_acs: _Optional[_Union[DefaultAcsMode, _Mapping]] = ..., public: _Optional[bytes] = ..., private: _Optional[bytes] = ..., trusted: _Optional[bytes] = ...) -> None: ...
 
+class SeqRange(_message.Message):
+    __slots__ = ["low", "hi"]
+    LOW_FIELD_NUMBER: _ClassVar[int]
+    HI_FIELD_NUMBER: _ClassVar[int]
+    low: int
+    hi: int
+    def __init__(self, low: _Optional[int] = ..., hi: _Optional[int] = ...) -> None: ...
+
 class GetOpts(_message.Message):
-    __slots__ = ["if_modified_since", "user", "topic", "since_id", "before_id", "limit"]
+    __slots__ = ["if_modified_since", "user", "topic", "since_id", "before_id", "limit", "ranges"]
     IF_MODIFIED_SINCE_FIELD_NUMBER: _ClassVar[int]
     USER_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     SINCE_ID_FIELD_NUMBER: _ClassVar[int]
     BEFORE_ID_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
+    RANGES_FIELD_NUMBER: _ClassVar[int]
     if_modified_since: int
     user: str
     topic: str
     since_id: int
     before_id: int
     limit: int
-    def __init__(self, if_modified_since: _Optional[int] = ..., user: _Optional[str] = ..., topic: _Optional[str] = ..., since_id: _Optional[int] = ..., before_id: _Optional[int] = ..., limit: _Optional[int] = ...) -> None: ...
+    ranges: _containers.RepeatedCompositeFieldContainer[SeqRange]
+    def __init__(self, if_modified_since: _Optional[int] = ..., user: _Optional[str] = ..., topic: _Optional[str] = ..., since_id: _Optional[int] = ..., before_id: _Optional[int] = ..., limit: _Optional[int] = ..., ranges: _Optional[_Iterable[_Union[SeqRange, _Mapping]]] = ...) -> None: ...
 
 class GetQuery(_message.Message):
     __slots__ = ["what", "desc", "sub", "data"]
@@ -157,24 +167,25 @@ class GetQuery(_message.Message):
     def __init__(self, what: _Optional[str] = ..., desc: _Optional[_Union[GetOpts, _Mapping]] = ..., sub: _Optional[_Union[GetOpts, _Mapping]] = ..., data: _Optional[_Union[GetOpts, _Mapping]] = ...) -> None: ...
 
 class SetQuery(_message.Message):
-    __slots__ = ["desc", "sub", "tags", "cred"]
+    __slots__ = ["desc", "sub", "tags", "cred", "aux"]
+    class AuxEntry(_message.Message):
+        __slots__ = ["key", "value"]
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: bytes
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
     DESC_FIELD_NUMBER: _ClassVar[int]
     SUB_FIELD_NUMBER: _ClassVar[int]
     TAGS_FIELD_NUMBER: _ClassVar[int]
     CRED_FIELD_NUMBER: _ClassVar[int]
+    AUX_FIELD_NUMBER: _ClassVar[int]
     desc: SetDesc
     sub: SetSub
     tags: _containers.RepeatedScalarFieldContainer[str]
     cred: ClientCred
-    def __init__(self, desc: _Optional[_Union[SetDesc, _Mapping]] = ..., sub: _Optional[_Union[SetSub, _Mapping]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Union[ClientCred, _Mapping]] = ...) -> None: ...
-
-class SeqRange(_message.Message):
-    __slots__ = ["low", "hi"]
-    LOW_FIELD_NUMBER: _ClassVar[int]
-    HI_FIELD_NUMBER: _ClassVar[int]
-    low: int
-    hi: int
-    def __init__(self, low: _Optional[int] = ..., hi: _Optional[int] = ...) -> None: ...
+    aux: _containers.ScalarMap[str, bytes]
+    def __init__(self, desc: _Optional[_Union[SetDesc, _Mapping]] = ..., sub: _Optional[_Union[SetSub, _Mapping]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Union[ClientCred, _Mapping]] = ..., aux: _Optional[_Mapping[str, bytes]] = ...) -> None: ...
 
 class ClientHi(_message.Message):
     __slots__ = ["id", "user_agent", "ver", "device_id", "lang", "platform", "background"]
@@ -539,6 +550,7 @@ class ServerPres(_message.Message):
         RECV: _ClassVar[ServerPres.What]
         DEL: _ClassVar[ServerPres.What]
         TAGS: _ClassVar[ServerPres.What]
+        AUX: _ClassVar[ServerPres.What]
     X3: ServerPres.What
     ON: ServerPres.What
     OFF: ServerPres.What
@@ -552,6 +564,7 @@ class ServerPres(_message.Message):
     RECV: ServerPres.What
     DEL: ServerPres.What
     TAGS: ServerPres.What
+    AUX: ServerPres.What
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     SRC_FIELD_NUMBER: _ClassVar[int]
     WHAT_FIELD_NUMBER: _ClassVar[int]
@@ -575,7 +588,14 @@ class ServerPres(_message.Message):
     def __init__(self, topic: _Optional[str] = ..., src: _Optional[str] = ..., what: _Optional[_Union[ServerPres.What, str]] = ..., user_agent: _Optional[str] = ..., seq_id: _Optional[int] = ..., del_id: _Optional[int] = ..., del_seq: _Optional[_Iterable[_Union[SeqRange, _Mapping]]] = ..., target_user_id: _Optional[str] = ..., actor_user_id: _Optional[str] = ..., acs: _Optional[_Union[AccessMode, _Mapping]] = ...) -> None: ...
 
 class ServerMeta(_message.Message):
-    __slots__ = ["id", "topic", "desc", "sub", "tags", "cred"]
+    __slots__ = ["id", "topic", "desc", "sub", "tags", "cred", "aux"]
+    class AuxEntry(_message.Message):
+        __slots__ = ["key", "value"]
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: bytes
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[bytes] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
     DESC_FIELD_NUMBER: _ClassVar[int]
@@ -583,13 +603,15 @@ class ServerMeta(_message.Message):
     DEL_FIELD_NUMBER: _ClassVar[int]
     TAGS_FIELD_NUMBER: _ClassVar[int]
     CRED_FIELD_NUMBER: _ClassVar[int]
+    AUX_FIELD_NUMBER: _ClassVar[int]
     id: str
     topic: str
     desc: TopicDesc
     sub: _containers.RepeatedCompositeFieldContainer[TopicSub]
     tags: _containers.RepeatedScalarFieldContainer[str]
     cred: _containers.RepeatedCompositeFieldContainer[ServerCred]
-    def __init__(self, id: _Optional[str] = ..., topic: _Optional[str] = ..., desc: _Optional[_Union[TopicDesc, _Mapping]] = ..., sub: _Optional[_Iterable[_Union[TopicSub, _Mapping]]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Iterable[_Union[ServerCred, _Mapping]]] = ..., **kwargs) -> None: ...
+    aux: _containers.ScalarMap[str, bytes]
+    def __init__(self, id: _Optional[str] = ..., topic: _Optional[str] = ..., desc: _Optional[_Union[TopicDesc, _Mapping]] = ..., sub: _Optional[_Iterable[_Union[TopicSub, _Mapping]]] = ..., tags: _Optional[_Iterable[str]] = ..., cred: _Optional[_Iterable[_Union[ServerCred, _Mapping]]] = ..., aux: _Optional[_Mapping[str, bytes]] = ..., **kwargs) -> None: ...
 
 class ServerInfo(_message.Message):
     __slots__ = ["topic", "from_user_id", "what", "seq_id", "src", "event", "payload"]
@@ -730,3 +752,79 @@ class MessageEvent(_message.Message):
     action: Crud
     msg: ServerData
     def __init__(self, action: _Optional[_Union[Crud, str]] = ..., msg: _Optional[_Union[ServerData, _Mapping]] = ...) -> None: ...
+
+class Auth(_message.Message):
+    __slots__ = ["scheme", "secret"]
+    SCHEME_FIELD_NUMBER: _ClassVar[int]
+    SECRET_FIELD_NUMBER: _ClassVar[int]
+    scheme: str
+    secret: str
+    def __init__(self, scheme: _Optional[str] = ..., secret: _Optional[str] = ...) -> None: ...
+
+class FileMeta(_message.Message):
+    __slots__ = ["name", "mime_type", "etag", "size"]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ETAG_FIELD_NUMBER: _ClassVar[int]
+    SIZE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    mime_type: str
+    etag: str
+    size: int
+    def __init__(self, name: _Optional[str] = ..., mime_type: _Optional[str] = ..., etag: _Optional[str] = ..., size: _Optional[int] = ...) -> None: ...
+
+class FileUpReq(_message.Message):
+    __slots__ = ["id", "auth", "topic", "meta", "content"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    AUTH_FIELD_NUMBER: _ClassVar[int]
+    TOPIC_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    auth: Auth
+    topic: str
+    meta: FileMeta
+    content: bytes
+    def __init__(self, id: _Optional[str] = ..., auth: _Optional[_Union[Auth, _Mapping]] = ..., topic: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., content: _Optional[bytes] = ...) -> None: ...
+
+class FileUpResp(_message.Message):
+    __slots__ = ["id", "code", "text", "meta", "redir_url"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    REDIR_URL_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    code: int
+    text: str
+    meta: FileMeta
+    redir_url: str
+    def __init__(self, id: _Optional[str] = ..., code: _Optional[int] = ..., text: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., redir_url: _Optional[str] = ...) -> None: ...
+
+class FileDownReq(_message.Message):
+    __slots__ = ["id", "auth", "uri", "if_modified"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    AUTH_FIELD_NUMBER: _ClassVar[int]
+    URI_FIELD_NUMBER: _ClassVar[int]
+    IF_MODIFIED_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    auth: Auth
+    uri: str
+    if_modified: str
+    def __init__(self, id: _Optional[str] = ..., auth: _Optional[_Union[Auth, _Mapping]] = ..., uri: _Optional[str] = ..., if_modified: _Optional[str] = ...) -> None: ...
+
+class FileDownResp(_message.Message):
+    __slots__ = ["id", "code", "text", "meta", "redir_url", "content"]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    REDIR_URL_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    code: int
+    text: str
+    meta: FileMeta
+    redir_url: str
+    content: bytes
+    def __init__(self, id: _Optional[str] = ..., code: _Optional[int] = ..., text: _Optional[str] = ..., meta: _Optional[_Union[FileMeta, _Mapping]] = ..., redir_url: _Optional[str] = ..., content: _Optional[bytes] = ...) -> None: ...

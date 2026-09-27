@@ -28,6 +28,10 @@ const (
 	clusterHashReplicas = 20
 	// Buffer size for sending requests from proxy to master.
 	clusterProxyToMasterBuffer = 64
+	// Expand buffer size by this value for nodes over the basic 3-node setup.
+	clusterProxyToMasterBufferPerNode = 16
+	// Timeout for attempting to enqueue a proxy-to-master request when the buffer is full.
+	clusterP2MTimeout = 20 * time.Millisecond
 	// Buffer size for receiving responses from other nodes, per node.
 	clusterRpcCompletionBuffer = 64
 )
@@ -395,6 +399,14 @@ func (n *ClusterNode) proxyToMasterAsync(msg *ClusterReq) error {
 	case n.p2mSender <- msg:
 		return nil
 	default:
+	}
+	// Buffer is full. Wait briefly before giving up.
+	timer := time.NewTimer(clusterP2MTimeout)
+	defer timer.Stop()
+	select {
+	case n.p2mSender <- msg:
+		return nil
+	case <-timer.C:
 		return errors.New("cluster: load exceeded")
 	}
 }
@@ -606,7 +618,11 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 	// Find appropriate topic, send the message to it.
 	if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
-		t.proxy <- msg
+		select {
+		case t.proxy <- msg:
+		default:
+			logs.Warn.Printf("cluster: proxy channel full, topic %s", msg.RcptTo)
+		}
 	} else {
 		logs.Warn.Println("cluster: master response for unknown topic", msg.RcptTo)
 	}
@@ -1039,10 +1055,15 @@ func (c *Cluster) start() {
 		logs.Err.Fatal(err)
 	}
 
+	var bufferSize = clusterProxyToMasterBuffer
+	if len(c.nodes) > 2 {
+		// Expand the buffer for larger (>3 node) clusters.
+		bufferSize += clusterProxyToMasterBufferPerNode * (len(c.nodes) - 2)
+	}
 	for _, n := range c.nodes {
 		go n.reconnect()
 		n.rpcDone = make(chan *rpc.Call, len(c.nodes)*clusterRpcCompletionBuffer)
-		n.p2mSender = make(chan *ClusterReq, clusterProxyToMasterBuffer)
+		n.p2mSender = make(chan *ClusterReq, bufferSize)
 		go n.asyncRpcLoop()
 		go n.p2mSenderLoop()
 	}

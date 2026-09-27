@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 
 	sf "github.com/tinode/snowflake"
 	"golang.org/x/crypto/xtea"
@@ -15,6 +16,8 @@ type UidGenerator struct {
 	cipher *xtea.Cipher
 }
 
+var ErrUninitialized = errors.New("uninitialized")
+
 // Init initialises the Uid generator
 func (ug *UidGenerator) Init(workerID uint, key []byte) error {
 	var err error
@@ -22,7 +25,7 @@ func (ug *UidGenerator) Init(workerID uint, key []byte) error {
 	if ug.seq == nil {
 		ug.seq, err = sf.NewSnowFlake(uint32(workerID))
 	}
-	if ug.cipher == nil {
+	if err == nil && ug.cipher == nil {
 		ug.cipher, err = xtea.NewCipher(key)
 	}
 
@@ -53,6 +56,10 @@ func (ug *UidGenerator) GetStr() string {
 
 // getIdBuffer returns a byte array holding the Uid bytes
 func getIDBuffer(ug *UidGenerator) ([]byte, error) {
+	if ug == nil || ug.seq == nil {
+		return nil, ErrUninitialized
+	}
+
 	var id uint64
 	var err error
 	if id, err = ug.seq.Next(); err != nil {
@@ -72,6 +79,9 @@ func getIDBuffer(ug *UidGenerator) ([]byte, error) {
 // set is unsupported and possibly for other uses such as MySQL's recommendation
 // for sequential primary keys.
 func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
+	if ug == nil || ug.seq == nil {
+		return 0
+	}
 	src := make([]byte, 8)
 	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, uint64(uid))
@@ -84,6 +94,9 @@ func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
 // set is unsupported  and possibly for other uses such as MySQL's recommendation
 // for sequential primary keys.
 func (ug *UidGenerator) EncodeInt64(val int64) Uid {
+	if ug == nil || ug.seq == nil {
+		return ZeroUid
+	}
 	src := make([]byte, 8)
 	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, uint64(val))

@@ -19,6 +19,7 @@ import (
 
 // topicInit reads an existing topic from database or creates a new topic
 func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
+	defer close(t.initialized)
 	var subscribeReqIssued bool
 	defer func() {
 		if !subscribeReqIssued && join.Sub != nil && join.sess.inflightReqs != nil {
@@ -52,6 +53,9 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	case t.xoriginal == "sys":
 		// Initialize system topic.
 		err = initTopicSys(t)
+	case t.xoriginal == "slf":
+		// Initialize self (notes and saved messages) topic.
+		err = initTopicSlf(t, join)
 	default:
 		// Unrecognized topic name
 		err = types.ErrTopicNotFound
@@ -60,7 +64,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
 
 		logs.Err.Println("init_topic: failed to load or create topic:", join.RcptTo, err)
 		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.Id, t.xoriginal, timestamp, join.Timestamp, nil))
@@ -96,6 +100,7 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 			msg := <-t.exit
 			msg.done <- true
 		}
+		close(t.done)
 
 		return
 	}
@@ -104,12 +109,14 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(join.RcptTo)
+		h.topicDel(join.RcptTo, t)
+		close(t.done)
 		return
 	}
 
 	if t.isDeleted() {
 		// Someone deleted the topic while we were trying to create it.
+		close(t.done)
 		return
 	}
 
@@ -259,6 +266,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 		if !stopic.TouchedAt.IsZero() {
 			t.touched = stopic.TouchedAt
 		}
+		t.aux = stopic.Aux
 		t.lastID = stopic.SeqId
 		t.delID = stopic.DelId
 	}
@@ -275,7 +283,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 
 	if stopic != nil && len(subs) == 2 {
 		// Case 4.
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
 				// Adapter has already swapped the state, public, defaultAccess, lastSeen values.
@@ -358,7 +366,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 				sub2.ModeGiven = users[u1].Access.Auth
 			}
 			// Sanity check
-			sub2.ModeGiven = sub2.ModeGiven&types.ModeCP2P | types.ModeApprove
+			sub2.ModeGiven = sub2.ModeGiven&globals.typesModeCP2P | types.ModeApprove
 
 			// Swap Public+Trusted to match swapped Public+Trusted in subs returned from store.Topics.GetSubs
 			sub2.SetPublic(users[u1].Public)
@@ -376,7 +384,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 			userData.modeGiven = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
-				types.ModeCP2P)
+				globals.typesModeCP2P)
 
 			// By default assign the same mode that user1 gave to user2 (could be changed below)
 			userData.modeWant = sub2.ModeGiven
@@ -397,7 +405,7 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 							logs.Err.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
 						}
 						// Ensure sanity
-						userData.modeWant = userData.modeWant&types.ModeCP2P | types.ModeApprove
+						userData.modeWant = userData.modeWant&globals.typesModeCP2P | types.ModeApprove
 					}
 
 					// Since user1 issued a {sub} request, make sure the user can join
@@ -433,9 +441,9 @@ func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
 			sub2.ModeWant = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
-				types.ModeCP2P)
+				globals.typesModeCP2P)
 			// Ensure sanity
-			sub2.ModeWant = sub2.ModeWant&types.ModeCP2P | types.ModeApprove
+			sub2.ModeWant = sub2.ModeWant&globals.typesModeCP2P | types.ModeApprove
 		}
 
 		// Create everything
@@ -503,7 +511,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	t.isChan = isChan
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.AsUser)
+	t.setOwner(types.ParseUserId(sreg.AsUser))
 	authLevel := auth.Level(sreg.AuthLvl)
 
 	t.accessAuth = getDefaultAccess(t.cat, true, isChan)
@@ -515,7 +523,6 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 		modeWant:  types.ModeCFull,
 	}
 
-	var tags []string
 	if pktsub.Set != nil {
 		// User sent initialization parameters
 		if pktsub.Set.Desc != nil {
@@ -570,17 +577,16 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 			userData.modeWant |= types.ModeJoin | types.ModeOwner
 		}
 
-		if tags = normalizeTags(pktsub.Set.Tags); len(tags) > 0 {
+		if tags := normalizeTags(pktsub.Set.Tags, globals.maxTagCount); len(tags) > 0 {
 			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				return types.ErrPermissionDenied
 			}
+			// Assign tags
+			t.tags = tags
 		}
 	}
 
 	t.perUser[t.owner] = userData
-
-	// Assign tags
-	t.tags = tags
 
 	t.created = timestamp
 	t.updated = timestamp
@@ -591,7 +597,7 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	stopic := &types.Topic{
 		ObjHeader: types.ObjHeader{Id: sreg.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
-		Tags:      tags,
+		Tags:      t.tags,
 		UseBt:     isChan,
 		Public:    t.public,
 		Trusted:   t.trusted,
@@ -613,6 +619,8 @@ func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	}
 
 	t.xoriginal = t.name // keeping 'new' or 'nch' as original has no value to the client
+	t.subCnt = 1         // One subscription, the owner.
+
 	pktsub.Created = true
 	pktsub.Newsub = true
 
@@ -643,8 +651,9 @@ func initTopicGrp(t *Topic) error {
 	t.accessAuth = stopic.Access.Auth
 	t.accessAnon = stopic.Access.Anon
 
-	// Assign tags
+	// Assign tags & auxiliary data.
 	t.tags = stopic.Tags
+	t.aux = stopic.Aux
 
 	t.public = stopic.Public
 	t.trusted = stopic.Trusted
@@ -656,6 +665,7 @@ func initTopicGrp(t *Topic) error {
 	}
 	t.lastID = stopic.SeqId
 	t.delID = stopic.DelId
+	t.subCnt = stopic.SubCnt
 
 	// Initialize channel for receiving session online updates.
 	t.supd = make(chan *sessionUpdate, 32)
@@ -699,6 +709,114 @@ func initTopicSys(t *Topic) error {
 	return nil
 }
 
+// Initialize or load a self-topic 'slf'.
+func initTopicSlf(t *Topic, sreg *ClientComMessage) error {
+	t.cat = types.TopicCatSlf
+
+	stopic, err := store.Topics.Get(t.name)
+	if err != nil {
+		return err
+	}
+
+	// If topic exists, load subscriptions
+	if stopic != nil {
+		if err = t.loadSubscribers(); err != nil {
+			return err
+		}
+
+		// t.owner is set by loadSubscriptions
+
+		// Topic exists but subscription is missing. Fail.
+		if len(t.perUser) == 0 {
+			logs.Err.Println("hub: missing subscription for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
+			return types.ErrInternal
+		}
+
+		t.created = stopic.CreatedAt
+		t.updated = stopic.UpdatedAt
+		if !stopic.TouchedAt.IsZero() {
+			t.touched = stopic.TouchedAt
+		}
+		t.aux = stopic.Aux
+		t.lastID = stopic.SeqId
+		t.delID = stopic.DelId
+
+	} else {
+		// Get topic owner.
+		userID := types.ParseUserId(sreg.AsUser)
+		user, err := store.Users.Get(userID)
+		if err != nil {
+			return err
+		}
+		if user == nil {
+			// User not found. Really should not happen.
+			return types.ErrUserNotFound
+		}
+
+		t.setOwner(userID)
+
+		t.accessAuth = getDefaultAccess(t.cat, true, false)
+		t.accessAnon = getDefaultAccess(t.cat, false, false)
+
+		// Default access for the self-owner.
+		userData := perUserData{
+			modeGiven: t.accessAuth,
+			modeWant:  t.accessAuth,
+		}
+
+		// Mark the topic as new.
+		sreg.Sub.Created = true
+
+		if sreg.Sub.Set != nil {
+			// User sets non-default Private
+			if sreg.Sub.Set.Desc != nil {
+				if !isNullValue(sreg.Sub.Set.Desc.Private) {
+					userData.private = sreg.Sub.Set.Desc.Private
+				}
+				// Public, trusted are ignored.
+			}
+
+			if tags := normalizeTags(sreg.Sub.Set.Tags, globals.maxTagCount); len(tags) > 0 {
+				if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
+					return types.ErrPermissionDenied
+				}
+
+				// Assign tags
+				t.tags = tags
+			}
+		}
+
+		// Mark this subscription as new
+		sreg.Sub.Newsub = true
+
+		t.perUser[t.owner] = userData
+
+		timestamp := types.TimeNow()
+
+		t.created = timestamp
+		t.updated = timestamp
+		t.touched = timestamp
+
+		stopic = &types.Topic{
+			ObjHeader: types.ObjHeader{Id: sreg.RcptTo, CreatedAt: timestamp},
+			Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
+			Tags:      t.tags,
+		}
+
+		// store.Topics.Create will add a subscription record for the topic creator
+		stopic.GiveAccess(t.owner, userData.modeWant, userData.modeGiven)
+		err = store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
+		if err != nil {
+			return err
+		}
+
+		sreg.Sub.Created = true
+		sreg.Sub.Newsub = true
+	}
+
+	return nil
+}
+
 // loadSubscribers loads topic subscribers, sets topic owner.
 func (t *Topic) loadSubscribers() error {
 	subs, err := store.Topics.GetSubs(t.name, nil)
@@ -723,7 +841,7 @@ func (t *Topic) loadSubscribers() error {
 		}
 
 		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
-			t.owner = uid
+			t.setOwner(uid)
 		}
 	}
 

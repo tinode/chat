@@ -51,6 +51,30 @@ type TopicTestHelper struct {
 	ss *mock_store.MockSubsPersistenceInterface
 }
 
+func TestPresSubsOnlineDirectCopiesP2PMessage(t *testing.T) {
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	helper.topic.presSubsOnlineDirect("acs", nilPresParams, nilPresFilters, "")
+	helper.finish()
+
+	for i, result := range helper.results {
+		if len(result.messages) != 1 {
+			t.Fatalf("User %d: expected 1 message, received %d", i, len(result.messages))
+		}
+
+		msg := result.messages[0].(*ServerComMessage)
+		if msg.Pres == nil {
+			t.Fatalf("User %d: expected presence message", i)
+		}
+		expectedTopic := helper.uids[i^1].UserId()
+		if msg.Pres.Topic != expectedTopic {
+			t.Errorf("User %d: presence topic expected %q, found %q", i, expectedTopic, msg.Pres.Topic)
+		}
+	}
+}
+
 func (b *TopicTestHelper) finish() {
 	b.topic.killTimer.Stop()
 	b.topic.callEstablishmentTimer.Stop()
@@ -83,7 +107,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	t.Helper()
 	b.numUsers = numUsers
 	b.uids = make([]types.Uid, numUsers)
-	for i := 0; i < numUsers; i++ {
+	for i := range numUsers {
 		// Can't use 0 as a valid uid.
 		b.uids[i] = types.Uid(i + 1)
 	}
@@ -142,6 +166,8 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		perUser:                pu,
 		isProxy:                false,
 		sessions:               ps,
+		done:                   make(chan struct{}),
+		userDelete:             make(chan *userDeleteReq),
 		killTimer:              time.NewTimer(time.Hour),
 		callEstablishmentTimer: time.NewTimer(time.Second),
 	}
@@ -154,7 +180,7 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
-		b.topic.owner = b.uids[0]
+		b.topic.setOwner(b.uids[0])
 	}
 }
 
@@ -165,6 +191,69 @@ func (b *TopicTestHelper) tearDown() {
 	store.Topics = nil
 	store.Subs = nil
 	b.ctrl.Finish()
+}
+
+func TestHubStopTopicsForUserMaintainsTopicCount(t *testing.T) {
+	hub := &Hub{topics: &sync.Map{}}
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:       uid.UserId(),
+		cat:        types.TopicCatMe,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		exit:       make(chan *shutDown, 1),
+		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
+	}
+
+	hub.topicPut(topic.name, topic)
+	go func() {
+		request := <-topic.userDelete
+		if topic.handleUserDelete(hub, request) && request.done != nil {
+			request.done <- true
+		}
+	}()
+	allDone := make(chan bool, 1)
+	hub.stopTopicsForUser(uid, StopDeleted, allDone)
+	<-allDone
+
+	if count := hub.numTopics.Load(); count != 0 {
+		t.Errorf("topic count: expected 0, found %d", count)
+	}
+	if hub.topicGet(topic.name) != nil {
+		t.Error("deleted topic is still present")
+	}
+}
+
+func TestHubTopicsStateForUserUsesTopicHandler(t *testing.T) {
+	uid := types.Uid(1)
+	topic := &Topic{
+		name:       "p2p-test",
+		cat:        types.TopicCatP2P,
+		perUser:    map[types.Uid]perUserData{uid: {}},
+		userStatus: make(chan *userStatusReq, 1),
+		done:       make(chan struct{}),
+		userDelete: make(chan *userDeleteReq),
+	}
+	hub := &Hub{topics: &sync.Map{}}
+	hub.topics.Store(topic.name, topic)
+
+	done := make(chan struct{})
+	go func() {
+		status := <-topic.userStatus
+		topic.handleUserStatus(status)
+		close(done)
+	}()
+
+	hub.topicsStateForUser(uid, true)
+	<-done
+	if !topic.isReadOnly() {
+		t.Fatal("topic was not suspended")
+	}
+
+	topic.handleUserStatus(&userStatusReq{forUser: uid, state: types.StateOK})
+	if topic.isReadOnly() {
+		t.Fatal("topic was not resumed")
+	}
 }
 
 func (s *Session) testWriteLoop(results *responses, wg *sync.WaitGroup) {
@@ -178,7 +267,15 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 	t.Helper()
 	for msg := range h.routeSrv {
 		if msg.RcptTo == "" {
-			t.Fatal("Hub.route received a message without addressee.")
+			// Don't call t.Fatal from goroutine - instead send error info back
+			results["__ERROR__"] = []*ServerComMessage{{
+				Ctrl: &MsgServerCtrl{
+					Code: 500,
+					Text: "Hub.route received a message without addressee.",
+				},
+			}}
+			done <- true
+			return
 		}
 		results[msg.RcptTo] = append(results[msg.RcptTo], msg)
 	}
@@ -205,6 +302,11 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Message uid1 -> uid2.
 	for i, m := range helper.results {
@@ -286,6 +388,12 @@ func TestHandleBroadcastCall(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	globals.iceServers = nil
 
 	// Message uid1 -> uid2.
@@ -402,6 +510,11 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if helper.topic.lastID != 1 {
 		t.Errorf("Topic.lastID: expected 1, found %d", helper.topic.lastID)
 	}
@@ -498,6 +611,11 @@ func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Message uid1 -> uid2.
 	if len(helper.results[0].messages) == 1 {
 		em := helper.results[0].messages[0].(*ServerComMessage)
@@ -544,6 +662,11 @@ func TestHandleBroadcastDataDbError(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if helper.topic.lastID != 0 {
 		t.Errorf("Topic.lastID: expected to remain 0, found %d", helper.topic.lastID)
@@ -592,6 +715,11 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Message uid1 -> uid2.
 	if len(helper.results[0].messages) == 1 {
 		em := helper.results[0].messages[0].(*ServerComMessage)
@@ -639,6 +767,11 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != readId {
@@ -744,6 +877,11 @@ func TestHandleBroadcastInfoBogusNotification(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -791,6 +929,11 @@ func TestHandleBroadcastInfoFilterOutRecvWithoutRPermission(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
@@ -840,6 +983,11 @@ func TestHandleBroadcastInfoFilterOutKpWithoutWPermission(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -888,6 +1036,11 @@ func TestHandleBroadcastInfoDuplicatedRead(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 8 {
 		t.Errorf("perUser[%s].readID: expected 8, found %d.", from.UserId(), actualReadId)
@@ -932,6 +1085,11 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
@@ -985,6 +1143,11 @@ func TestHandleBroadcastInfoInvalidChannelAccess(t *testing.T) {
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Read id should not be updated.
 	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
 		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
@@ -1036,6 +1199,11 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 	}
 	helper.topic.handleClientMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	// We do not update read ids for channel topics.
@@ -1101,6 +1269,11 @@ func TestHandleBroadcastPresMe(t *testing.T) {
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; !online {
 		t.Errorf("User %s is expected to be online.", srcUid.UserId())
@@ -1160,6 +1333,11 @@ func TestHandleBroadcastPresInactiveTopic(t *testing.T) {
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; online {
 		t.Errorf("User %s is expected to be offline.", srcUid.UserId())
@@ -1212,6 +1390,11 @@ func NoChangeInStatusTest(t *testing.T, subscriptionStatus int, what string) *To
 
 	helper.topic.handleServerMsg(msg)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Topic metadata.
 	if online := helper.topic.perSubs[srcUid.UserId()].online; online {
@@ -1269,6 +1452,11 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 	}
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.results[0].messages) != 1 {
 		t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
 	}
@@ -1291,7 +1479,7 @@ func registerSessionVerifyOutputs(t *testing.T, sessionOutput *responses, expect
 	// Session output.
 	if len(sessionOutput.messages) == len(expectedCtrlCodes) {
 		n := len(expectedCtrlCodes)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			resp := sessionOutput.messages[i].(*ServerComMessage)
 			code := expectedCtrlCodes[i]
 			if resp.Ctrl != nil {
@@ -1340,6 +1528,11 @@ func TestRegisterSessionMe(t *testing.T) {
 		helper.topic.registerSession(join)
 	}
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
@@ -1392,6 +1585,11 @@ func TestRegisterSessionInactiveTopic(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1440,6 +1638,11 @@ func TestRegisterSessionUserSpecifiedInSetMessage(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1487,6 +1690,11 @@ func TestRegisterSessionInvalidWantStrInSetMessage(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1539,6 +1747,11 @@ func TestRegisterSessionMaxSubscriberCountExceeded(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1585,6 +1798,11 @@ func TestRegisterSessionLowAuthLevelWithSysTopic(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1637,6 +1855,11 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1686,6 +1909,11 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1734,6 +1962,11 @@ func TestRegisterSessionAsChanUserNotChanSubcriber(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1765,7 +1998,7 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	r := helper.results[0]
 
 	// User is the topic owner.
-	helper.topic.owner = uid
+	helper.topic.setOwner(uid)
 	pud := helper.topic.perUser[uid]
 	pud.modeGiven |= types.ModeOwner
 	helper.topic.perUser[uid] = pud
@@ -1789,6 +2022,11 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1845,6 +2083,11 @@ func TestRegisterSessionInvalidOwnershipTransfer(t *testing.T) {
 
 	helper.topic.registerSession(join)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
@@ -1905,6 +2148,11 @@ func TestRegisterSessionMetadataUpdateFails(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -1964,6 +2212,11 @@ func TestRegisterSessionOwnerChangeDbCallFails(t *testing.T) {
 	helper.topic.registerSession(join)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
@@ -2022,6 +2275,10 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 
 	helper.finish()
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 2 {
 		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
@@ -2037,6 +2294,66 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionInvalidChannelAccess(t *testing.T) {
+	tests := []struct {
+		name        string
+		topicIsChan bool
+		leaveTopic  string
+		subIsChan   bool
+	}{
+		{
+			name:        "non-channel addressed as channel",
+			topicIsChan: false,
+			leaveTopic:  "chnTest",
+			subIsChan:   false,
+		},
+		{
+			name:        "channel addressed as non-channel",
+			topicIsChan: true,
+			leaveTopic:  "grpTest",
+			subIsChan:   true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			helper := TopicTestHelper{}
+			helper.setUp(t, 1, types.TopicCatGrp, "grpTest", true)
+			defer helper.tearDown()
+
+			helper.topic.isChan = test.topicIsChan
+			s := helper.sessions[0]
+			uid := helper.uids[0]
+			helper.topic.sessions[s] = perSessionData{uid: uid, isChanSub: test.subIsChan}
+			s.subs[helper.topic.name] = &Subscription{}
+
+			leave := &ClientComMessage{
+				Leave: &MsgClientLeave{
+					Id:    "id456",
+					Topic: test.leaveTopic,
+				},
+				Original: test.leaveTopic,
+				AsUser:   uid.UserId(),
+				sess:     s,
+				init:     true,
+			}
+			helper.topic.unregisterSession(leave)
+			helper.finish()
+
+			if len(helper.topic.sessions) != 1 {
+				t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+			}
+			if _, ok := s.subs[helper.topic.name]; !ok {
+				t.Error("session subscription was removed")
+			}
+			if online := helper.topic.perUser[uid].online; online != 1 {
+				t.Errorf("Number of online sessions: expected 1, found %d", online)
+			}
+			registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
+		})
 	}
 }
 
@@ -2076,6 +2393,11 @@ func TestUnregisterSessionInactiveTopic(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 1 {
 		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
 	}
@@ -2104,7 +2426,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	helper.ss.EXPECT().Delete(topicName, uid).Return(nil)
 
 	// Add a couple more sessions.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		s, r := helper.newSession(fmt.Sprintf("sid-uid-%d-%d", uid, i), uid)
 		helper.sessions = append(helper.sessions, s)
 		helper.results = append(helper.results, r)
@@ -2135,6 +2457,11 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	}
 	helper.topic.unregisterSession(leave)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.topic.sessions) != 2 {
 		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
@@ -2226,6 +2553,11 @@ func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
 	}
@@ -2271,6 +2603,11 @@ func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
 	helper.topic.unregisterSession(leave)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(helper.topic.sessions) != 3 {
 		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
 	}
@@ -2308,6 +2645,11 @@ func TestHandleMetaChanErr(t *testing.T) {
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// Session output.
 	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
@@ -2347,6 +2689,11 @@ func TestHandleMetaGet(t *testing.T) {
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	r := helper.results[0]
 	if len(r.messages) != 4 {
@@ -2428,6 +2775,11 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 	helper.topic.handleMeta(meta)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	r := helper.results[0]
 	if len(r.messages) != 1 {
 		t.Fatalf("responses received: expected 1, received %d", len(r.messages))
@@ -2481,6 +2833,11 @@ func TestHandleSessionUpdateSessToForeground(t *testing.T) {
 	helper.topic.handleSessionUpdate(supd, &uaAgent, nil)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	// Expect online count bumped up to 2.
 	if online := helper.topic.perUser[uid].online; online != 2 {
 		t.Errorf("online count for %s: expected 2, found %d", uid.UserId(), online)
@@ -2502,6 +2859,11 @@ func TestHandleSessionUpdateUserAgent(t *testing.T) {
 	timer := time.NewTimer(time.Hour)
 	helper.topic.handleSessionUpdate(supd, &uaAgent, timer)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	// online count stays 1.
 	if online := helper.topic.perUser[uid].online; online != 1 {
@@ -2525,6 +2887,11 @@ func TestHandleUATimerEvent(t *testing.T) {
 	helper.topic.perSubs[uid.UserId()] = perSubsData{online: true}
 	helper.topic.handleUATimerEvent("newUA")
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if helper.topic.userAgent != "newUA" {
 		t.Errorf("Topic's user agent: expected 'newUA', found '%s'", helper.topic.userAgent)
@@ -2571,6 +2938,11 @@ func TestHandleTopicTimeout(t *testing.T) {
 	notifTimer := time.NewTimer(time.Hour)
 	helper.topic.handleTopicTimeout(helper.hub, "newUA", uaTimer, notifTimer)
 	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
 
 	if len(helper.hub.unreg) != 1 {
 		t.Fatalf("Hub.unreg chan must contain exactly 1 message. Found %d.", len(helper.hub.unreg))
@@ -2622,6 +2994,11 @@ func TestHandleTopicTermination(t *testing.T) {
 	helper.topic.handleTopicTermination(exit)
 	helper.finish()
 
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
 	if len(done) != 1 {
 		t.Fatal("done callback isn't invoked.")
 	}
@@ -2641,9 +3018,516 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 }
 
+func TestHandleBroadcastDataWithAttachments(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	from := helper.uids[0].UserId()
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: from,
+		Pub: &MsgClientPub{
+			Topic:   "p2p",
+			Content: "Check out this image!",
+			Head: map[string]any{
+				"attachments": []map[string]any{
+					{"mime": "image/jpeg", "name": "photo.jpg", "size": 1024000},
+				},
+			},
+			NoEcho: true,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Verify message with attachments was delivered
+	if len(helper.results[1].messages) != 1 {
+		t.Fatalf("Uid2: expected 1 message, got %d", len(helper.results[1].messages))
+	}
+	r := helper.results[1].messages[0].(*ServerComMessage)
+	if r.Data == nil {
+		t.Fatal("Response must have a data message")
+	}
+	if r.Data.Head == nil {
+		t.Fatal("Response must have attachments in head")
+	}
+	attachments := r.Data.Head["attachments"]
+	if attachments == nil {
+		t.Fatal("Expected attachments in message head")
+	}
+}
+
+func TestHandleBroadcastInfoChannelWithMultipleReaders(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 5
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	helper.topic.isChan = true
+	defer helper.tearDown()
+	helper.topic.lastID = 15
+
+	readId := 12
+	from := helper.uids[0]
+
+	// Set up multiple channel readers
+	for i := 1; i < numUsers; i++ {
+		uid := helper.uids[i]
+		pud := helper.topic.perUser[uid]
+		pud.modeGiven = types.ModeCChnReader
+		pud.isChan = true
+		helper.topic.perUser[uid] = pud
+	}
+
+	helper.ss.EXPECT().Update(chanName, from, map[string]any{"ReadSeqId": readId}).Return(nil)
+
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: chanName,
+		Note: &MsgClientNote{
+			Topic: chanName,
+			What:  "read",
+			SeqId: readId,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Channel topics don't forward note messages to other users
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received", i, numMessages)
+		}
+	}
+
+	// Only sender gets presence notification
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hub expected exactly 1 recipient, got %d", len(helper.hubMessages))
+	}
+	if _, ok := helper.hubMessages[from.UserId()]; !ok {
+		t.Fatal("Expected presence notification for sender")
+	}
+}
+
+func TestRegisterSessionWithComplexModeString(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+
+	uid := helper.uids[1]
+	s := helper.sessions[1]
+	r := helper.results[1]
+
+	// User with existing subscription wants to change mode
+	pud := helper.topic.perUser[uid]
+	pud.modeWant = types.ModeCPublic
+	pud.modeGiven = types.ModeCPublic
+	helper.topic.perUser[uid] = pud
+
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					Mode: "JRWPAS", // Complex mode string with multiple permissions
+				},
+			},
+		},
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
+	}
+
+	helper.ss.EXPECT().Update(topicName, uid, gomock.Any()).Return(nil)
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	if len(helper.topic.sessions) != 1 {
+		t.Fatalf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 1 {
+		t.Fatalf("Session subscriptions: expected 1, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 1 {
+		t.Fatalf("Number of online sessions: expected 1, found %d", online)
+	}
+	registerSessionVerifyOutputs(t, r, []int{http.StatusOK})
+}
+
+func TestHandleBroadcastDataGroupWithMutedUser(t *testing.T) {
+	topicName := "grp-test"
+	numUsers := 4
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	defer helper.tearDown()
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	// User 2 has muted the topic (no Pres permission)
+	pu2 := helper.topic.perUser[helper.uids[2]]
+	pu2.modeWant = types.ModeJoin | types.ModeRead | types.ModeWrite
+	pu2.modeGiven = pu2.modeWant
+	helper.topic.perUser[helper.uids[2]] = pu2
+
+	from := helper.uids[0].UserId()
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: topicName,
+		Pub: &MsgClientPub{
+			Topic:   topicName,
+			Content: "test message",
+			NoEcho:  true,
+		},
+		sess: helper.sessions[0],
+	}
+
+	helper.topic.handleClientMsg(msg)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// User 2 should still receive the message (has Read permission)
+	if len(helper.results[2].messages) != 1 {
+		t.Fatalf("Uid2: expected 1 message, got %d", len(helper.results[2].messages))
+	}
+
+	// Check presence notifications - muted user should not receive presence
+	if len(helper.hubMessages) != 3 { // Users 0, 1, 3 but not 2
+		t.Fatalf("Hub expected 3 recipients, got %d", len(helper.hubMessages))
+	}
+
+	// Verify user 2 is not in presence notifications
+	if _, ok := helper.hubMessages[helper.uids[2].UserId()]; ok {
+		t.Fatal("Muted user should not receive presence notifications")
+	}
+}
+
+func TestUnregisterSessionWithPendingCall(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	uid := helper.uids[0]
+	s := helper.sessions[0]
+	r := helper.results[0]
+
+	// Set up a pending call matching the actual videoCall structure
+	helper.topic.currentCall = &videoCall{
+		seq:     123,
+		parties: make(map[string]callPartyData),
+	}
+	helper.topic.currentCall.parties[s.sid] = callPartyData{
+		uid:          uid,
+		isOriginator: true,
+		sess:         s,
+	}
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, true)
+
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: "p2p-test",
+		},
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
+	}
+
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	// Check for errors from testHubLoop
+	if errorMsgs, hasError := helper.hubMessages["__ERROR__"]; hasError {
+		t.Fatal(errorMsgs[0].Ctrl.Text)
+	}
+
+	// Verify session was unregistered
+	if len(helper.topic.sessions) != 1 {
+		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+
+	// Verify call party was removed (if the implementation handles this)
+	if helper.topic.currentCall != nil && helper.topic.currentCall.parties != nil {
+		if _, exists := helper.topic.currentCall.parties[s.sid]; exists {
+			t.Error("Call party should have been removed when session unregistered")
+		}
+	}
+
+	if len(r.messages) != 3 {
+		t.Fatalf("`responses` expected to contain 3 elements, found %d", len(r.messages))
+	}
+
+	// Expected one of each: {data}, {info}, {ctrl}.
+	var found = 0
+	for _, msg := range r.messages {
+		m := msg.(*ServerComMessage)
+		if m.Data != nil {
+			found++
+			if m.Data.Head == nil || m.Data.Head["webrtc"] != "disconnected" || m.Data.Head["replace"] != ":123" {
+				t.Fatalf("Unexpected Data.Head: %+v", m.Data.Head)
+			}
+		} else if m.Info != nil {
+			found++
+			if m.Info.SeqId != 123 {
+				t.Fatalf("Unexpected Info.SeqId: %d", m.Info.SeqId)
+			}
+			if m.Info.What != "call" {
+				t.Fatalf("Unexpected Info.What: %s", m.Info.What)
+			}
+			if m.Info.Event != "hang-up" {
+				t.Fatalf("Unexpected Info.Event: %s", m.Info.Event)
+			}
+		} else if m.Ctrl != nil {
+			found++
+			if m.Ctrl.Code != http.StatusOK {
+				t.Fatalf("Unexpected Ctrl.Code: %d", m.Ctrl.Code)
+			}
+		} else {
+			t.Error("Expected only {data}, {info}, {ctrl} messages.")
+		}
+	}
+
+	if found != 3 {
+		t.Fatal("Expected only {data}, {info}, {ctrl} messages, but some are missing")
+	}
+}
+
+func TestReplyDelMsgHardDelete(t *testing.T) {
+	// Test hard delete scenario - hard deletes affect all users equally
+	// and don't update individual unread counters the same way as soft deletes
+
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // User with delete permission
+	user2 := helper.uids[1] // Other user
+
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	helper.topic.lastID = 10
+
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10
+	pud1.modeGiven = types.ModeCFull // Full permissions including delete
+	pud1.modeWant = types.ModeCFull
+	helper.topic.perUser[user1] = pud1
+
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5
+	pud2.modeGiven = types.ModeCFull
+	pud2.modeWant = types.ModeCFull
+	helper.topic.perUser[user2] = pud2
+
+	// Simulate user1 doing a hard delete of messages 7 and 8
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id:   "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: true, // Hard delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion for hard delete (forUser = types.ZeroUid)
+	helper.mm.EXPECT().DeleteList(topicName, 1, types.ZeroUid, gomock.Any(), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+
+	// For hard deletes, all users' delID should be updated
+	if helper.topic.perUser[user1].delID != 1 {
+		t.Errorf("Expected user1.delID to be 1, got %d", helper.topic.perUser[user1].delID)
+	}
+	if helper.topic.perUser[user2].delID != 1 {
+		t.Errorf("Expected user2.delID to be 1, got %d", helper.topic.perUser[user2].delID)
+	}
+}
+
+func TestReplyDelMsgUpdatesUnreadCounters(t *testing.T) {
+	// This test simulates the scenario from issue #898:
+	// 1. User1 sends messages to User2
+	// 2. User1 deletes some messages (soft delete)
+	// 3. Verify that the unread calculation logic works correctly
+
+	topicName := "p2pTest"
+	helper := TopicTestHelper{}
+	helper.setUp(t, 2, types.TopicCatP2P, topicName, true)
+	defer helper.tearDown()
+
+	user1 := helper.uids[0] // Sender/deleter
+	user2 := helper.uids[1] // Recipient
+
+	// Set up initial state: user2 has read up to message 5, topic has messages up to 10
+	// So user2 has 5 unread messages (6, 7, 8, 9, 10)
+	helper.topic.lastID = 10
+
+	pud1 := helper.topic.perUser[user1]
+	pud1.readID = 10 // user1 has read all
+	helper.topic.perUser[user1] = pud1
+
+	pud2 := helper.topic.perUser[user2]
+	pud2.readID = 5 // user2 has 5 unread messages
+	helper.topic.perUser[user2] = pud2
+
+	// Simulate user1 deleting messages 7 and 8 (2 of user2's unread messages)
+	msg := &ClientComMessage{
+		Del: &MsgClientDel{
+			Id:   "del123",
+			What: "msg",
+			DelSeq: []MsgRange{
+				{LowId: 7, HiId: 9}, // Deletes messages 7 and 8 [7, 9)
+			},
+			Hard: false, // Soft delete
+		},
+		AsUser: user1.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
+	}
+
+	// Mock the message deletion
+	helper.mm.EXPECT().DeleteList(topicName, 1, user1, time.Duration(0), []types.Range{{Low: 7, Hi: 9}}).Return(nil)
+
+	// Call the function under test
+	err := helper.topic.replyDelMsg(helper.sessions[0], user1, false, msg)
+
+	// Verify
+	if err != nil {
+		t.Fatalf("replyDelMsg failed: %v", err)
+	}
+
+	// Verify session got success response
+	helper.finish()
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
+
+	// The key verification is that calculateUnreadInRanges should have been called
+	// with the correct parameters. We can test this indirectly by testing the function:
+	ranges := []types.Range{{Low: 7, Hi: 9}}
+	unreadDeleted := calculateUnreadInRanges(5, 10, ranges) // user2's readID=5, lastID=10
+	if unreadDeleted != 2 {
+		t.Errorf("Expected 2 unread messages to be deleted for user2, got %d", unreadDeleted)
+	}
+}
+
+func TestCalculateUnreadInRanges(t *testing.T) {
+	tests := []struct {
+		name     string
+		readID   int
+		lastID   int
+		ranges   []types.Range
+		expected int
+	}{
+		{
+			name:     "no unread messages",
+			readID:   10,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 5, Hi: 15}},
+			expected: 0,
+		},
+		{
+			name:     "no deleted messages in unread range",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 1, Hi: 5}},
+			expected: 0,
+		},
+		{
+			name:     "all unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 6, Hi: 11}},
+			expected: 5,
+		},
+		{
+			name:     "partial unread messages deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 9}},
+			expected: 2,
+		},
+		{
+			name:     "single message deleted",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 7, Hi: 0}}, // Hi: 0 means single message
+			expected: 1,
+		},
+		{
+			name:     "multiple ranges",
+			readID:   5,
+			lastID:   15,
+			ranges:   []types.Range{{Low: 7, Hi: 9}, {Low: 12, Hi: 14}},
+			expected: 4, // 2 messages in range [7,9) + 2 messages in range [12,14)
+		},
+		{
+			name:     "overlapping with unread boundaries",
+			readID:   5,
+			lastID:   10,
+			ranges:   []types.Range{{Low: 4, Hi: 8}, {Low: 9, Hi: 12}},
+			expected: 4, // [6,8) + [9,11) = 2 + 2 = 4 unread messages deleted
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := calculateUnreadInRanges(tt.readID, tt.lastID, tt.ranges)
+			if result != tt.expected {
+				t.Errorf("calculateUnreadInRanges(%d, %d, %v) = %d; want %d",
+					tt.readID, tt.lastID, tt.ranges, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	logs.Init(os.Stderr, "stdFlags")
 	// Set max subscriber count to effective infinity.
-	globals.maxSubscriberCount = 1000000000
+	globals.maxSubscriberCount = 1_000_000_000
 	os.Exit(m.Run())
 }

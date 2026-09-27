@@ -75,7 +75,7 @@ func TestConsistency(t *testing.T) {
 	ring2.Add("sparrow", "owl", "crow")
 
 	if ring1.Get("duck") != ring2.Get("duck") {
-		t.Errorf("'duck' should map to 'sparrow' in both cases")
+		t.Error("'duck' should map to 'sparrow' in both cases")
 	}
 
 	// Collision test: these strings generate CRC32 collisions
@@ -119,7 +119,7 @@ func TestSignature(t *testing.T) {
 	ring2.Add("sparrow", "owl", "crow")
 
 	if ring1.Signature() != ring2.Signature() {
-		t.Errorf("Signatures must be identical")
+		t.Error("Signatures must be identical")
 	}
 
 	ring1 = ringhash.New(4, nil)
@@ -129,7 +129,7 @@ func TestSignature(t *testing.T) {
 	ring2.Add("owl", "crow", "sparrow")
 
 	if ring1.Signature() == ring2.Signature() {
-		t.Errorf("Signatures must be different - different count of replicas")
+		t.Error("Signatures must be different - different count of replicas")
 	}
 
 	ring1 = ringhash.New(4, nil)
@@ -139,7 +139,7 @@ func TestSignature(t *testing.T) {
 	ring2.Add("owl", "crow", "sparrow", "crane")
 
 	if ring1.Signature() == ring2.Signature() {
-		t.Errorf("Signatures must be different - different keys")
+		t.Error("Signatures must be different - different keys")
 	}
 
 	fnvHashfunc := func(data []byte) uint32 {
@@ -155,7 +155,7 @@ func TestSignature(t *testing.T) {
 	ring2.Add("owl", "crow", "sparrow")
 
 	if ring1.Signature() == ring2.Signature() {
-		t.Errorf("Signatures must be different - different hash functions")
+		t.Error("Signatures must be different - different hash functions")
 	}
 }
 
@@ -169,7 +169,7 @@ func benchmarkGet(b *testing.B, keycount int) {
 	ring := ringhash.New(53, nil)
 
 	var ids []string
-	for i := 0; i < keycount; i++ {
+	for i := range keycount {
 		ids = append(ids, fmt.Sprintf("id=%d", i))
 	}
 
@@ -177,7 +177,7 @@ func benchmarkGet(b *testing.B, keycount int) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ring.Get(ids[i&(keycount-1)])
 	}
 }

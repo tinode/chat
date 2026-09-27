@@ -191,7 +191,7 @@ func (authenticator) RestrictedTags() ([]string, error) {
 
 // GetResetParams returns authenticator parameters passed to password reset handler
 // (none for short code).
-func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+func (authenticator) GetResetParams(uid types.Uid) (map[string]any, error) {
 	return nil, nil
 }
 

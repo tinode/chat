@@ -30,7 +30,12 @@ if [ `uname -m` != 'x86_64' ]; then
   buildcmd='buildx build --platform=linux/amd64'
 fi
 
-dbtags=( mysql postgres mongodb rethinkdb alldbs )
+# If explicit DB is specified, build just one, otherwise build all.
+if [ "$db" ]; then
+  dbtags=( "$db" )
+else
+  dbtags=( mysql postgres mongodb rethinkdb alldbs )
+fi
 
 # Build an images for various DB backends
 for dbtag in "${dbtags[@]}"
@@ -52,6 +57,10 @@ do
   docker rmi ${rmitags}
   docker ${buildcmd} --build-arg VERSION=$tag --build-arg TARGET_DB=${dbtag} ${buildtags} docker/tinode
 done
+
+if [ "$db" ]; then
+  exit 0
+fi
 
 # Build chatbot image
 buildtags="--tag tinode/chatbot:${ver[0]}.${ver[1]}.${ver[2]}"

@@ -218,7 +218,7 @@ func (t *Topic) getCallOriginator() (types.Uid, *Session) {
 }
 
 // Handles video call invite (initiation)
-// (in response to msg = {pub head=[mime: application/x-tiniode-webrtc]}).
+// (in response to msg = {pub head=[mime: application/x-tinode-webrtc]}).
 func (t *Topic) handleCallInvite(msg *ClientComMessage, asUid types.Uid) {
 	// Call being establshed.
 	t.currentCall = &videoCall{

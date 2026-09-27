@@ -127,10 +127,10 @@ func (mr *MockAuthHandlerMockRecorder) GetRealName() *gomock.Call {
 }
 
 // GetResetParams mocks base method.
-func (m *MockAuthHandler) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+func (m *MockAuthHandler) GetResetParams(uid types.Uid) (map[string]any, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetResetParams", uid)
-	ret0, _ := ret[0].(map[string]interface{})
+	ret0, _ := ret[0].(map[string]any)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

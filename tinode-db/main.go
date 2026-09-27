@@ -4,7 +4,6 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -24,7 +23,8 @@ import (
 )
 
 type configType struct {
-	StoreConfig json.RawMessage `json:"store_config"`
+	P2PDeleteEnabled bool            `json:"p2p_delete_enabled"`
+	StoreConfig      json.RawMessage `json:"store_config"`
 }
 
 type theCard struct {
@@ -75,19 +75,19 @@ User object in data.json
 	  }
 */
 type User struct {
-	CreatedAt   string      `json:"createdAt"`
-	Email       string      `json:"email"`
-	Tel         string      `json:"tel"`
-	AuthLevel   string      `json:"authLevel"`
-	Username    string      `json:"username"`
-	Password    string      `json:"passhash"`
-	Private     tPrivate    `json:"private"`
-	Public      theCard     `json:"public"`
-	Trusted     tTrusted    `json:"trusted"`
-	State       string      `json:"state"`
-	Status      interface{} `json:"status"`
-	AddressBook []string    `json:"addressBook"`
-	Tags        []string    `json:"tags"`
+	CreatedAt   string   `json:"createdAt"`
+	Email       string   `json:"email"`
+	Tel         string   `json:"tel"`
+	AuthLevel   string   `json:"authLevel"`
+	Username    string   `json:"username"`
+	Password    string   `json:"passhash"`
+	Private     tPrivate `json:"private"`
+	Public      theCard  `json:"public"`
+	Trusted     tTrusted `json:"trusted"`
+	State       string   `json:"state"`
+	Status      any      `json:"status"`
+	AddressBook []string `json:"addressBook"`
+	Tags        []string `json:"tags"`
 }
 
 /*
@@ -160,12 +160,12 @@ type P2PSub struct {
 
 // Data is a message in data.json.
 type Data struct {
-	Users       []User                   `json:"users"`
-	Grouptopics []GroupTopic             `json:"grouptopics"`
-	Groupsubs   []GroupSub               `json:"groupsubs"`
-	P2psubs     []P2PSub                 `json:"p2psubs"`
-	Messages    []string                 `json:"messages"`
-	Forms       []map[string]interface{} `json:"forms"`
+	Users       []User           `json:"users"`
+	Grouptopics []GroupTopic     `json:"grouptopics"`
+	Groupsubs   []GroupSub       `json:"groupsubs"`
+	P2psubs     []P2PSub         `json:"p2psubs"`
+	Messages    []string         `json:"messages"`
+	Forms       []map[string]any `json:"forms"`
 	datapath    string
 }
 
@@ -204,7 +204,7 @@ func main() {
 
 	var data Data
 	if *datafile != "" && *datafile != "-" {
-		raw, err := ioutil.ReadFile(*datafile)
+		raw, err := os.ReadFile(*datafile)
 		if err != nil {
 			log.Fatalln("Failed to read sample data file:", err)
 		}
@@ -301,7 +301,7 @@ func main() {
 	}
 
 	if *reset || created {
-		genDb(&data)
+		genDb(&data, config.P2PDeleteEnabled)
 	} else if len(data.Users) > 0 {
 		log.Println("Sample data ignored.")
 	}

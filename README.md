@@ -91,11 +91,15 @@ When you register a new account you are asked for an email address to send valid
   * Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, videos, file attachments.
   * Forms and templated responses suitable for chatbots.
   * Verified/staff/untrusted account markers.
+  * Leave notes to self, bookmark (save) messages.
   * Message status notifications: message delivery to server; received and read notifications; typing notifications.
   * Most recent message preview in contact list.
   * Server-generated presence notifications for people, group chats.
   * Forwarding and replying to messages.
   * Editing sent messages.
+  * Pinned chats and messages.
+  * Customizable message backgrounds (wallpapers).
+  * Light/dark/system UI themes.
 * Administration:
   * Granular access control with permissions for various actions.
   * Support for custom authentication backends.
@@ -116,7 +120,7 @@ When you register a new account you are asked for an email address to send valid
     * MySQL (and MariaDB, Percona as long as they remain SQL and wire protocol compatible)
     * PostgreSQL
     * MongoDB
-    * [RethinkDB](http://rethinkdb.com/). Support is deprecated because RethinkDB is no longer being developed
+    * [RethinkDB](http://rethinkdb.com/). Support is deprecated and will be dropped in 2027 because RethinkDB is no longer being developed (unless its development resumes).
 
 ### Planned
 
@@ -127,7 +131,6 @@ When you register a new account you are asked for an email address to send valid
 * Video/audio broadcasting.
 * Group video/audio calls.
 * Attaching music/audio other than voice messages.
-* Better emoji support.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
@@ -140,27 +143,30 @@ All client software has support for [internationalization](docs/translations.md)
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
+| Arabic |   | &check; |   |   |
 | Chinese simplified | &check; | &check; | &check; | &check; |
-| Chinese traditional |   | &check; | &check; | &check; |
+| Chinese traditional | &check; | &check; | &check; | &check; |
 | French | &check; | &check; | &check; |   |
 | German |   | &check; | &check; |   |
 | Hindi |   |   | &check; |   |
+| Indonesian | &check; | &check; | &check; | &check; |
+| Italian |   | &check; | &check; | &check; |
 | Korean |   | &check; | &check; |   |
-| Portuguese | &check; |   | &check; |   |
+| Portuguese | &check; | &check; | &check; |   |
 | Romanian |   | &check; | &check; |   |
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish | &check; | &check; | &check; | &check; |
 | Thai |   | &check; |   |   |
 | Ukrainian | &check; | &check; | &check; | &check; |
-| Vietnamese | &check; |   |   |   |
+| Vietnamese | &check; | &check; |   |   |
 
-More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Arabic, Bengali, Indonesian, Urdu, Japanese, Turkish, Persian.
+More translations are [welcome](docs/translations.md). In addition to languages listed above, particularly interested in Bengali, Urdu, Japanese, Turkish, Persian.
 
 ## Third-Party
 
 ### Projects
 
-* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango)
+* [Arango DB adapter](https://github.com/gfxlabs/chat/tree/master/server/db/arango) (outdated)
 * [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) (outdated)
 
 ### Licenses

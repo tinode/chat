@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/tinode/chat/server/logs"
+	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -161,8 +162,11 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:    1024,
 	WriteBufferSize:   1024,
 	EnableCompression: globals.wsCompression,
-	// Allow connections from any Origin
-	CheckOrigin: func(r *http.Request) bool { return true },
+	// Validate the Origin header against the configured whitelist.
+	// If no whitelist is set all origins are permitted (backward-compatible).
+	CheckOrigin: func(r *http.Request) bool {
+		return media.IsOriginAllowed(globals.allowedOrigins, r.Header.Get("Origin"))
+	},
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {

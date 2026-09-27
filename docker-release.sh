@@ -31,7 +31,11 @@ if [[ ${ver[2]} != *"-"* ]]; then
   FULLRELEASE=1
 fi
 
-dbtags=( mysql postgres mongodb rethinkdb alldbs )
+if [ "$db" ]; then
+  dbtags=( "$db" )
+else
+  dbtags=( mysql postgres mongodb rethinkdb alldbs )
+fi
 
 # Read dockerhub login/password from a separate file
 source .dockerhub
@@ -50,6 +54,10 @@ do
   fi
   docker push tinode/${name}:"${ver[0]}.${ver[1]}.${ver[2]}"
 done
+
+if [ "$db" ]; then
+  exit 0
+fi
 
 # Deploy chatbot images
 if [ -n "$FULLRELEASE" ]; then

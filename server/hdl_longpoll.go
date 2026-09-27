@@ -12,11 +12,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/tinode/chat/server/logs"
+	"github.com/tinode/chat/server/media"
 )
 
 func (sess *Session) sendMessageLp(wrt http.ResponseWriter, msg any) bool {
@@ -100,7 +101,7 @@ func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, 
 	}
 
 	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxMessageSize)
-	raw, err := ioutil.ReadAll(req.Body)
+	raw, err := io.ReadAll(req.Body)
 	if err == nil {
 		// Locking-unlocking is needed because the client may issue multiple requests in parallel.
 		// Should not affect performance
@@ -138,9 +139,16 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO(gene): should it be configurable?
-	// Currently any domain is allowed to get data from the chat server
-	wrt.Header().Set("Access-Control-Allow-Origin", "*")
+	// Set CORS header. If an origin allowlist is configured, echo the request
+	// origin back only when it is permitted; otherwise allow all origins.
+	if origin := req.Header.Get("Origin"); origin != "" {
+		if media.IsOriginAllowed(globals.allowedOrigins, origin) {
+			wrt.Header().Set("Access-Control-Allow-Origin", origin)
+			wrt.Header().Set("Vary", "Origin")
+		}
+	} else {
+		// No Origin header: non-browser client, no CORS header needed.
+	}
 
 	// Ensure the response is not cached
 	if req.ProtoAtLeast(1, 1) {
@@ -202,19 +210,4 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	sess.writeOnce(wrt, req)
-}
-
-// Obtain IP address of the client.
-func getRemoteAddr(req *http.Request) string {
-	var addr string
-	if globals.useXForwardedFor {
-		addr = req.Header.Get("X-Forwarded-For")
-		if !isRoutableIP(addr) {
-			addr = ""
-		}
-	}
-	if addr != "" {
-		return addr
-	}
-	return req.RemoteAddr
 }

@@ -36,7 +36,7 @@ func (w *boundedWaitGroup) Add(delta int) {
 	if delta <= 0 {
 		return
 	}
-	for i := 0; i < delta; i++ {
+	for range delta {
 		w.sem <- struct{}{}
 	}
 	w.wg.Add(delta)

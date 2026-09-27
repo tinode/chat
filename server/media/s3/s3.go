@@ -2,22 +2,25 @@
 package s3
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/media"
@@ -26,10 +29,12 @@ import (
 )
 
 const (
-	defaultServeURL = "/v0/file/s/"
-	handlerName     = "s3"
+	defaultServeURL     = "/v0/file/s/"
+	defaultCacheControl = "no-cache, must-revalidate"
+
+	handlerName = "s3"
 	// Presign GET URLs for this number of seconds.
-	presignDuration = 120
+	defaultPresignDuration = 120
 )
 
 type awsconfig struct {
@@ -42,11 +47,15 @@ type awsconfig struct {
 	BucketName      string   `json:"bucket"`
 	CorsOrigins     []string `json:"cors_origins"`
 	ServeURL        string   `json:"serve_url"`
+	PresignTTL      int      `json:"presign_ttl"`
+	CacheControl    string   `json:"cache_control"`
 }
 
 type awshandler struct {
-	svc  *s3.S3
-	conf awsconfig
+	svc         *s3.Client
+	presign     *s3.PresignClient
+	conf        awsconfig
+	corsOrigins []media.AllowedOrigin
 }
 
 // readerCounter is a byte counter for bytes read through the io.Reader
@@ -82,50 +91,74 @@ func (ah *awshandler) Init(jsconf string) error {
 	if ah.conf.BucketName == "" {
 		return errors.New("missing Bucket")
 	}
-
+	if ah.conf.PresignTTL <= 0 {
+		ah.conf.PresignTTL = defaultPresignDuration
+	}
+	if ah.conf.CacheControl == "" {
+		ah.conf.CacheControl = defaultCacheControl
+	}
 	if ah.conf.ServeURL == "" {
 		ah.conf.ServeURL = defaultServeURL
 	}
+	ah.corsOrigins, err = media.ParseCORSAllow(ah.conf.CorsOrigins)
+	if err != nil {
+		return errors.New("failed to parse CORS allowed origins: " + err.Error())
+	}
 
-	var sess *session.Session
-	if sess, err = session.NewSession(&aws.Config{
-		Region:           aws.String(ah.conf.Region),
-		DisableSSL:       aws.Bool(ah.conf.DisableSSL),
-		S3ForcePathStyle: aws.Bool(ah.conf.ForcePathStyle),
-		Endpoint:         aws.String(ah.conf.Endpoint),
-		Credentials:      credentials.NewStaticCredentials(ah.conf.AccessKeyId, ah.conf.SecretAccessKey, ""),
-	}); err != nil {
+	cfgOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(ah.conf.Region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			ah.conf.AccessKeyId,
+			ah.conf.SecretAccessKey,
+			"",
+		)),
+	}
+
+	var cfg aws.Config
+	if cfg, err = config.LoadDefaultConfig(context.Background(), cfgOpts...); err != nil {
 		return err
 	}
 
 	// Create S3 service client
-	ah.svc = s3.New(sess)
+	clientOpts := []func(*s3.Options){
+		func(o *s3.Options) {
+			o.UsePathStyle = ah.conf.ForcePathStyle
+		},
+	}
+	if ah.conf.Endpoint != "" {
+		endpoint := ah.conf.Endpoint
+		if !strings.Contains(endpoint, "://") {
+			if ah.conf.DisableSSL {
+				endpoint = "http://" + endpoint
+			} else {
+				endpoint = "https://" + endpoint
+			}
+		}
+		clientOpts = append(clientOpts, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+	ah.svc = s3.NewFromConfig(cfg, clientOpts...)
+	ah.presign = s3.NewPresignClient(ah.svc)
 
 	// Check if bucket already exists.
-	_, err = ah.svc.HeadBucket(&s3.HeadBucketInput{Bucket: aws.String(ah.conf.BucketName)})
+	_, err = ah.svc.HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err == nil {
 		// Bucket exists
 		return nil
 	}
 
-	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != s3.ErrCodeNoSuchBucket {
+	if !isAPIError(err, "NoSuchBucket", "NotFound") {
 		// Hard error.
 		return err
 	}
 
 	// Bucket does not exist. Create one.
-	_, err = ah.svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
+	_, err = ah.svc.CreateBucket(context.Background(), &s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err != nil {
-		// Check if someone has already created a bucket (possible in a cluster).
-		if aerr, ok := err.(awserr.Error); ok {
-			if aerr.Code() == s3.ErrCodeBucketAlreadyExists ||
-				aerr.Code() == s3.ErrCodeBucketAlreadyOwnedByYou ||
-				// Someone is already creating this bucket:
-				// OperationAborted: A conflicting conditional operation is currently in progress against this resource.
-				aerr.Code() == "OperationAborted" {
-				// Clear benign error
-				err = nil
-			}
+		if isAPIError(err, "BucketAlreadyExists", "BucketAlreadyOwnedByYou", "OperationAborted") {
+			// Check if someone has already created a bucket (possible in a cluster).
+			err = nil
 		}
 	} else {
 		// This is a new bucket.
@@ -137,13 +170,13 @@ func (ah *awshandler) Init(jsconf string) error {
 		if len(origins) == 0 {
 			origins = append(origins, "*")
 		}
-		_, err = ah.svc.PutBucketCors(&s3.PutBucketCorsInput{
+		_, err = ah.svc.PutBucketCors(context.Background(), &s3.PutBucketCorsInput{
 			Bucket: aws.String(ah.conf.BucketName),
-			CORSConfiguration: &s3.CORSConfiguration{
-				CORSRules: []*s3.CORSRule{{
-					AllowedMethods: aws.StringSlice([]string{http.MethodGet, http.MethodHead}),
-					AllowedOrigins: aws.StringSlice(origins),
-					AllowedHeaders: aws.StringSlice([]string{"*"}),
+			CORSConfiguration: &s3types.CORSConfiguration{
+				CORSRules: []s3types.CORSRule{{
+					AllowedMethods: []string{http.MethodGet, http.MethodHead},
+					AllowedOrigins: origins,
+					AllowedHeaders: []string{"*"},
 				}},
 			},
 		})
@@ -152,66 +185,91 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Headers adds CORS headers and redirects GET and HEAD requests to the AWS server.
-func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-
+func (ah *awshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
 	// Add CORS headers, if necessary.
-	headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve)
-	if status != 0 || req.Method == http.MethodPost || req.Method == http.MethodPut {
+	headers, status := media.CORSHandler(method, headers, ah.corsOrigins, serve)
+	if status != 0 || method == http.MethodPost || method == http.MethodPut {
 		return headers, status, nil
 	}
 
-	fid := ah.GetIdFromUrl(req.URL.String())
+	fid := ah.GetIdFromUrl(url.String())
 	if fid.IsZero() {
 		return nil, 0, types.ErrNotFound
 	}
 
-	fd, err := ah.getFileRecord(fid)
+	fdef, err := ah.getFileRecord(fid)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	var awsReq *request.Request
-	if req.Method == http.MethodGet {
-		var contentDisposition *string
-		if isAttachment, _ := strconv.ParseBool(req.URL.Query().Get("asatt")); isAttachment {
-			contentDisposition = aws.String("attachment")
-		}
-		awsReq, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
-			Bucket:                     aws.String(ah.conf.BucketName),
-			Key:                        aws.String(fid.String32()),
-			ResponseContentType:        aws.String(fd.MimeType),
-			ResponseContentDisposition: contentDisposition,
-		})
-	} else if req.Method == http.MethodHead {
-		awsReq, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
-			Bucket: aws.String(ah.conf.BucketName),
-			Key:    aws.String(fid.String32()),
-		})
+	if fdef.ETag != "" && headers.Get("If-None-Match") == `"`+fdef.ETag+`"` {
+		return http.Header{
+				"ETag":          {`"` + fdef.ETag + `"`},
+				"Cache-Control": {ah.conf.CacheControl},
+			},
+			http.StatusNotModified, nil
 	}
 
-	if awsReq != nil {
-		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
-		// as a free file server.
-		url, err := awsReq.Presign(time.Second * presignDuration)
-		headers := map[string][]string{
-			"Location":      {url},
-			"Content-Type":  {"application/json; charset=utf-8"},
-			"Cache-Control": {"no-cache, no-store, must-revalidate"},
+	ctx := context.Background()
+	var redirURL string
+	switch method {
+	case http.MethodGet:
+		// If the query parameter "asatt" is set to a true, set Content-Disposition to attachment.
+		// This will cause browsers to download the file rather than attempt to display it.
+		// This closes an XSS vulnerability when users upload HTML files.
+		var contentDisposition *string
+		if isAttachment, _ := strconv.ParseBool(url.Query().Get("asatt")); isAttachment {
+			contentDisposition = aws.String("attachment")
 		}
-		return headers, http.StatusTemporaryRedirect, err
+		presigned, err := ah.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket:                     aws.String(ah.conf.BucketName),
+			Key:                        aws.String(fid.String32()),
+			ResponseCacheControl:       aws.String(ah.conf.CacheControl),
+			ResponseContentType:        aws.String(fdef.MimeType),
+			ResponseContentDisposition: contentDisposition,
+		}, func(opts *s3.PresignOptions) {
+			opts.Expires = time.Second * time.Duration(ah.conf.PresignTTL)
+		})
+		if err != nil {
+			return nil, 0, err
+		}
+		redirURL = presigned.URL
+	case http.MethodHead:
+		presigned, err := ah.presign.PresignHeadObject(ctx, &s3.HeadObjectInput{
+			Bucket: aws.String(ah.conf.BucketName),
+			Key:    aws.String(fid.String32()),
+		}, func(opts *s3.PresignOptions) {
+			opts.Expires = time.Second * time.Duration(ah.conf.PresignTTL)
+		})
+		if err != nil {
+			return nil, 0, err
+		}
+		redirURL = presigned.URL
+	}
+
+	if redirURL != "" {
+		// Return presigned URL with 308 Permanent redirect. Let the client cache the response.
+		// The original URL will stop working after a short period of time to prevent use of Tinode
+		// as a free file server.
+		return http.Header{
+				"Location":      {redirURL},
+				"ETag":          {`"` + fdef.ETag + `"`},
+				"Content-Type":  {"application/json; charset=utf-8"},
+				"Cache-Control": {ah.conf.CacheControl},
+			},
+			http.StatusPermanentRedirect, nil
 	}
 	return nil, 0, nil
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.
-func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
+func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64, error) {
 	var err error
 
 	// Using String32 just for consistency with the file handler.
 	key := fdef.Uid().String32()
-	fdef.Location = key
 
-	uploader := s3manager.NewUploaderWithClient(ah.svc)
+	tmClient := transfermanager.New(ah.svc)
 
 	if err = store.Files.StartUpload(fdef); err != nil {
 		logs.Warn.Println("failed to create file record", fdef.Id, err)
@@ -219,10 +277,11 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, i
 	}
 
 	rc := readerCounter{reader: file}
-	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(ah.conf.BucketName),
-		Key:    aws.String(key),
-		Body:   &rc,
+	result, err := tmClient.UploadObject(context.Background(), &transfermanager.UploadObjectInput{
+		CacheControl: aws.String(ah.conf.CacheControl),
+		Bucket:       aws.String(ah.conf.BucketName),
+		Key:          aws.String(key),
+		Body:         &rc,
 	})
 
 	if err != nil {
@@ -235,6 +294,10 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, i
 		fname += ext[0]
 	}
 
+	fdef.Location = key
+	if result.ETag != nil {
+		fdef.ETag = strings.Trim(*result.ETag, "\"")
+	}
 	return ah.conf.ServeURL + fname, rc.count, nil
 }
 
@@ -246,18 +309,43 @@ func (ah *awshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser
 
 // Delete deletes files from aws by provided slice of locations.
 func (ah *awshandler) Delete(locations []string) error {
-	toDelete := make([]s3manager.BatchDeleteObject, len(locations))
-	for i, key := range locations {
-		toDelete[i] = s3manager.BatchDeleteObject{
-			Object: &s3.DeleteObjectInput{
-				Key:    aws.String(key),
-				Bucket: aws.String(ah.conf.BucketName),
-			}}
+	ctx := context.Background()
+	for i := 0; i < len(locations); i += 1000 {
+		end := i + 1000
+		if end > len(locations) {
+			end = len(locations)
+		}
+
+		objects := make([]s3types.ObjectIdentifier, end-i)
+		for j, key := range locations[i:end] {
+			objects[j] = s3types.ObjectIdentifier{Key: aws.String(key)}
+		}
+
+		_, err := ah.svc.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(ah.conf.BucketName),
+			Delete: &s3types.Delete{
+				Objects: objects,
+				Quiet:   aws.Bool(true),
+			},
+		})
+		if err != nil {
+			return err
+		}
 	}
-	batcher := s3manager.NewBatchDeleteWithClient(ah.svc)
-	return batcher.Delete(aws.BackgroundContext(), &s3manager.DeleteObjectsIterator{
-		Objects: toDelete,
-	})
+	return nil
+}
+
+func isAPIError(err error, codes ...string) bool {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	for _, code := range codes {
+		if apiErr.ErrorCode() == code {
+			return true
+		}
+	}
+	return false
 }
 
 // GetIdFromUrl converts an attahment URL to a file UID.

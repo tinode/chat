@@ -24,7 +24,7 @@ type Validator interface {
 	// PreCheck pre-validates the credential without sending an actual request for validation:
 	// check uniqueness (if appropriate), format, etc
 	// Returns normalized credential prefixed with an appropriate namespace prefix.
-	PreCheck(cred string, params map[string]interface{}) (string, error)
+	PreCheck(cred string, params map[string]any) (string, error)
 
 	// Request sends a request for validation to the user. Returns true if it's a new credential,
 	// false if it re-sent request for an existing unconfirmed credential.
@@ -41,7 +41,7 @@ type Validator interface {
 	//   lang: human language as reported in the session.
 	//   tmpToken: temporary authentication token
 	//   params: authentication params.
-	ResetSecret(cred, scheme, lang string, tmpToken []byte, params map[string]interface{}) error
+	ResetSecret(cred, scheme, lang string, tmpToken []byte, params map[string]any) error
 
 	// Check checks validity of user's response.
 	// Returns the value of validated credential on success.
@@ -78,7 +78,7 @@ func ValidateHostURL(origUrl string) (string, error) {
 	return hostUrl.String(), nil
 }
 
-func ExecuteTemplate(template *template.Template, parts []string, params map[string]interface{}) (map[string]string, error) {
+func ExecuteTemplate(template *template.Template, parts []string, params map[string]any) (map[string]string, error) {
 	content := map[string]string{}
 	buffer := new(bytes.Buffer)
 
@@ -117,7 +117,7 @@ func ResolveTemplatePath(path string) (string, error) {
 
 func ReadTemplateFile(pathTempl *template.Template, lang string) (*template.Template, string, error) {
 	buffer := bytes.Buffer{}
-	err := pathTempl.Execute(&buffer, map[string]interface{}{"Language": lang})
+	err := pathTempl.Execute(&buffer, map[string]any{"Language": lang})
 	path := buffer.String()
 	if err != nil {
 		return nil, path, fmt.Errorf("reading %s: %w", path, err)

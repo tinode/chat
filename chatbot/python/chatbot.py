@@ -9,7 +9,11 @@ from concurrent import futures
 from datetime import datetime
 import json
 import os
-import pkg_resources
+try:
+    from importlib.metadata import version
+except ImportError:
+    # Fallback for Python < 3.8
+    from importlib_metadata import version
 import platform
 try:
     import Queue as queue
@@ -32,8 +36,8 @@ if sys.version_info[0] >= 3:
     unicode = str
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.2.2"
-LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
+APP_VERSION = "1.2.3"
+LIB_VERSION = version("tinode_grpc")
 
 # Maximum length of string to log. Shorten longer strings.
 MAX_LOG_LEN = 64

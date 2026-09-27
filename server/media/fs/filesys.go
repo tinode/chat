@@ -4,13 +4,17 @@
 package fs
 
 import (
+	"encoding/base32"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/media"
@@ -19,61 +23,105 @@ import (
 )
 
 const (
-	defaultServeURL = "/v0/file/s/"
-	handlerName     = "fs"
+	defaultServeURL     = "/v0/file/s/"
+	defaultCacheControl = "max-age=86400"
+
+	handlerName = "fs"
+
+	// uploadDirMode is the permission bits for the upload directory.
+	// Owner: rwx, Group: r-x, Other: --- (no world access).
+	uploadDirMode = 0750
 )
 
-type configType struct {
+type fileConfig struct {
+	// FileUploadDirectory: In case of a cluster fileUploadLocation must be accessible to all cluster members.
 	FileUploadDirectory string   `json:"upload_dir"`
 	ServeURL            string   `json:"serve_url"`
 	CorsOrigins         []string `json:"cors_origins"`
+	CacheControl        string   `json:"cache_control"`
 }
 
 type fshandler struct {
-	// In case of a cluster fileUploadLocation must be accessible to all cluster members.
-	fileUploadLocation string
-	serveURL           string
-	corsOrigins        []string
+	fileConfig
+	// corsOrigins parsed allowed origins.
+	corsOrigins []media.AllowedOrigin
 }
 
 func (fh *fshandler) Init(jsconf string) error {
 	var err error
-	var config configType
 
-	if err = json.Unmarshal([]byte(jsconf), &config); err != nil {
+	if err = json.Unmarshal([]byte(jsconf), &fh.fileConfig); err != nil {
 		return errors.New("failed to parse config: " + err.Error())
 	}
 
-	fh.fileUploadLocation = config.FileUploadDirectory
-	if fh.fileUploadLocation == "" {
+	if fh.FileUploadDirectory == "" {
 		return errors.New("missing upload location")
 	}
 
-	fh.serveURL = config.ServeURL
-	if fh.serveURL == "" {
-		fh.serveURL = defaultServeURL
+	if fh.ServeURL == "" {
+		fh.ServeURL = defaultServeURL
 	}
 
+	if fh.CacheControl == "" {
+		fh.CacheControl = defaultCacheControl
+	}
+
+	fh.corsOrigins, err = media.ParseCORSAllow(fh.CorsOrigins)
+	if err != nil {
+		return errors.New("failed to parse CORS allowed origins: " + err.Error())
+	}
 	// Make sure the upload directory exists.
-	return os.MkdirAll(fh.fileUploadLocation, 0777)
+	return os.MkdirAll(fh.FileUploadDirectory, uploadDirMode)
 }
 
-// Headers is used for serving CORS headers.
-func (fh *fshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
-	header, status := media.CORSHandler(req, fh.corsOrigins, serve)
+// Headers is used for cache management and serving CORS headers.
+func (fh *fshandler) Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error) {
+	if method == http.MethodGet {
+
+		fid := fh.GetIdFromUrl(url.String())
+		if fid.IsZero() {
+			return nil, 0, types.ErrNotFound
+		}
+
+		fdef, err := fh.getFileRecord(fid)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if etag := strings.Trim(headers.Get("If-None-Match"), "\""); etag != "" && etag == fdef.ETag {
+			return http.Header{
+					"Last-Modified": {fdef.UpdatedAt.Format(http.TimeFormat)},
+					"ETag":          {`"` + fdef.ETag + `"`},
+					"Cache-Control": {fh.CacheControl},
+				},
+				http.StatusNotModified, nil
+		}
+
+		return http.Header{
+			"Content-Type":  {fdef.MimeType},
+			"Cache-Control": {fh.CacheControl},
+			"ETag":          {`"` + fdef.ETag + `"`},
+		}, 0, nil
+	}
+
+	if method != http.MethodOptions {
+		// Not an OPTIONS request. No special handling for all other requests.
+		return nil, 0, nil
+	}
+	header, status := media.CORSHandler(method, headers, fh.corsOrigins, serve)
 	return header, status, nil
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
-func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
+func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, int64, error) {
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
 
 	// Generate a unique file name and attach it to path. Using base32 instead of base64 to avoid possible
 	// file name collisions on Windows due to case-insensitive file names there.
-	fdef.Location = filepath.Join(fh.fileUploadLocation, fdef.Uid().String32())
+	location := filepath.Join(fh.FileUploadDirectory, fdef.Uid().String32())
 
-	outfile, err := os.Create(fdef.Location)
+	outfile, err := os.Create(location)
 	if err != nil {
 		logs.Warn.Println("Upload: failed to create file", fdef.Location, err)
 		return "", 0, err
@@ -81,7 +129,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, in
 
 	if err = store.Files.StartUpload(fdef); err != nil {
 		outfile.Close()
-		os.Remove(fdef.Location)
+		os.Remove(location)
 		logs.Warn.Println("failed to create file record", fdef.Id, err)
 		return "", 0, err
 	}
@@ -89,7 +137,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, in
 	size, err := io.Copy(outfile, file)
 	outfile.Close()
 	if err != nil {
-		os.Remove(fdef.Location)
+		os.Remove(location)
 		return "", 0, err
 	}
 
@@ -99,7 +147,11 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, in
 		fname += ext[0]
 	}
 
-	return fh.serveURL + fname, size, nil
+	fdef.Location = location
+	// Use file path to create ETag. File paths are unique so will be the ETag.
+	fdef.ETag = etagFromPath(fdef.Location)
+
+	return fh.ServeURL + fname, size, nil
 }
 
 // Download processes request for file download.
@@ -142,7 +194,7 @@ func (fh *fshandler) Delete(locations []string) error {
 
 // GetIdFromUrl converts an attahment URL to a file UID.
 func (fh *fshandler) GetIdFromUrl(url string) types.Uid {
-	return media.GetIdFromUrl(url, fh.serveURL)
+	return media.GetIdFromUrl(url, fh.ServeURL)
 }
 
 // getFileRecord given file ID reads file record from the database.
@@ -155,6 +207,13 @@ func (fh *fshandler) getFileRecord(fid types.Uid) (*types.FileDef, error) {
 		return nil, types.ErrNotFound
 	}
 	return fd, nil
+}
+
+func etagFromPath(path string) string {
+	hasher := fnv.New128()
+	hasher.Write([]byte(path))
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).
+		EncodeToString(hasher.Sum(make([]byte, 0, hasher.Size()))))
 }
 
 func init() {

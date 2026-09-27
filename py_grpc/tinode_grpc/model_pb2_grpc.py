@@ -6,7 +6,7 @@ from . import model_pb2 as model__pb2
 
 
 class NodeStub(object):
-    """This is the single method that needs to be implemented by a gRPC client.
+    """This is the methods that needs to be implemented by a gRPC client.
     """
 
     def __init__(self, channel):
@@ -20,14 +20,38 @@ class NodeStub(object):
                 request_serializer=model__pb2.ClientMsg.SerializeToString,
                 response_deserializer=model__pb2.ServerMsg.FromString,
                 )
+        self.LargeFileReceive = channel.stream_unary(
+                '/pbx.Node/LargeFileReceive',
+                request_serializer=model__pb2.FileUpReq.SerializeToString,
+                response_deserializer=model__pb2.FileUpResp.FromString,
+                )
+        self.LargeFileServe = channel.unary_stream(
+                '/pbx.Node/LargeFileServe',
+                request_serializer=model__pb2.FileDownReq.SerializeToString,
+                response_deserializer=model__pb2.FileDownResp.FromString,
+                )
 
 
 class NodeServicer(object):
-    """This is the single method that needs to be implemented by a gRPC client.
+    """This is the methods that needs to be implemented by a gRPC client.
     """
 
     def MessageLoop(self, request_iterator, context):
         """Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LargeFileReceive(self, request_iterator, context):
+        """Large file upload: a request with a stream of chunks.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LargeFileServe(self, request, context):
+        """Large file file download: a response with a stream of chunks.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -41,6 +65,16 @@ def add_NodeServicer_to_server(servicer, server):
                     request_deserializer=model__pb2.ClientMsg.FromString,
                     response_serializer=model__pb2.ServerMsg.SerializeToString,
             ),
+            'LargeFileReceive': grpc.stream_unary_rpc_method_handler(
+                    servicer.LargeFileReceive,
+                    request_deserializer=model__pb2.FileUpReq.FromString,
+                    response_serializer=model__pb2.FileUpResp.SerializeToString,
+            ),
+            'LargeFileServe': grpc.unary_stream_rpc_method_handler(
+                    servicer.LargeFileServe,
+                    request_deserializer=model__pb2.FileDownReq.FromString,
+                    response_serializer=model__pb2.FileDownResp.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'pbx.Node', rpc_method_handlers)
@@ -49,7 +83,7 @@ def add_NodeServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class Node(object):
-    """This is the single method that needs to be implemented by a gRPC client.
+    """This is the methods that needs to be implemented by a gRPC client.
     """
 
     @staticmethod
@@ -66,6 +100,40 @@ class Node(object):
         return grpc.experimental.stream_stream(request_iterator, target, '/pbx.Node/MessageLoop',
             model__pb2.ClientMsg.SerializeToString,
             model__pb2.ServerMsg.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def LargeFileReceive(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(request_iterator, target, '/pbx.Node/LargeFileReceive',
+            model__pb2.FileUpReq.SerializeToString,
+            model__pb2.FileUpResp.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def LargeFileServe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(request, target, '/pbx.Node/LargeFileServe',
+            model__pb2.FileDownReq.SerializeToString,
+            model__pb2.FileDownResp.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -118,10 +186,8 @@ class PluginServicer(object):
 
     def FireHose(self, request, context):
         """This plugin method is called by Tinode server for every message received from the clients. The
-        method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further
-        processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl
-        and forward it to the client session.
-        ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
+        method returns a ServerResp message. ServerResp.status tells Tinode server what to do next.
+        See possible values for ServerResp.status in RespCode below.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

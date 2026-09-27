@@ -477,26 +477,31 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Extra == nil || msg.Extra.AsUser == "" {
+	authLvl := auth.LevelNone
+	if msg.Extra != nil {
+		authLvl = auth.ParseAuthLevel(msg.Extra.AuthLevel)
+	}
+
+	if msg.Extra == nil || (msg.Extra.AsUser == "" && authLvl == auth.LevelNone) {
 		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
 		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set alternative user ID and auth level values.
 		s.queueOut(ErrPermissionDenied("", "", now))
-		logs.Warn.Println("s.dispatch: non-root asigned msg.from", s.sid)
+		logs.Warn.Println("s.dispatch: non-root assigned asUser", s.sid)
 		return
 	} else if fromUid := types.ParseUserId(msg.Extra.AsUser); fromUid.IsZero() {
 		// Invalid msg.Extra.AsUser.
 		s.queueOut(ErrMalformed("", "", now))
-		logs.Warn.Println("s.dispatch: malformed msg.from: ", msg.Extra.AsUser, s.sid)
+		logs.Warn.Println("s.dispatch: malformed asUser: ", msg.Extra.AsUser, s.sid)
 		return
 	} else {
 		// Use provided msg.Extra.AsUser
 		msg.AsUser = msg.Extra.AsUser
 
 		// Assign auth level, if one is provided. Ignore invalid strings.
-		if authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel); authLvl == auth.LevelNone {
+		if authLvl == auth.LevelNone {
 			// AuthLvl is not set by the caller, assign default LevelAuth.
 			msg.AuthLvl = int(auth.LevelAuth)
 		} else {
@@ -761,6 +766,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"maxFileUploadSize":  globals.maxFileUploadSize,
 			"reqCred":            globals.validatorClientConfig,
 			"linkPreviewEnabled": globals.linkPreviewEnabled,
+			"msgDelAge":          globals.msgDeleteAge.Seconds(),
 		}
 		if len(globals.iceServers) > 0 {
 			params["iceServers"] = globals.iceServers
@@ -798,8 +804,11 @@ func (s *Session) hello(msg *ClientComMessage) {
 		if !s.uid.IsZero() {
 			var err error
 			if msg.Hi.DeviceID == types.NullValue {
+				// User wants to delete device ID.
 				deviceIDUpdate = true
-				err = store.Devices.Delete(s.uid, s.deviceID)
+				if s.deviceID != "" {
+					err = store.Devices.Delete(s.uid, s.deviceID)
+				}
 			} else if msg.Hi.DeviceID != "" && s.deviceID != msg.Hi.DeviceID {
 				deviceIDUpdate = true
 				err = store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
@@ -813,10 +822,17 @@ func (s *Session) hello(msg *ClientComMessage) {
 			}
 
 			if err != nil {
+				s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 				logs.Warn.Println("s.hello:", "device ID", err, s.sid)
-				s.queueOut(ErrUnknown(msg.Id, "", msg.Timestamp))
 				return
 			}
+		} else {
+			// Session is not authenticated, report an error. Otherwise,
+			// the client may think that the device ID was updated successfully,
+			// but it will not be saved in the database.
+			s.queueOut(ErrAuthRequiredReply(msg, msg.Timestamp))
+			logs.Warn.Println("s.hello:", "device ID update requires authentication", s.sid)
+			return
 		}
 	} else {
 		// Version cannot be changed mid-session.
@@ -1151,6 +1167,9 @@ func (s *Session) set(msg *ClientComMessage) {
 	if msg.Set.Cred != nil {
 		msg.MetaWhat |= constMsgMetaCred
 	}
+	if msg.Set.Aux != nil {
+		msg.MetaWhat |= constMsgMetaAux
+	}
 
 	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
@@ -1163,8 +1182,8 @@ func (s *Session) set(msg *ClientComMessage) {
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
-		logs.Warn.Println("s.set: can Set tags/creds for subscribed topics only", msg.MetaWhat)
+	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred|constMsgMetaAux) != 0 {
+		logs.Warn.Println("s.set: setting tags/creds/aux is allowed for subscribed topics only", msg.MetaWhat)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.
@@ -1203,16 +1222,7 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	if sub := s.getSub(msg.RcptTo); sub != nil && msg.MetaWhat != constMsgDelTopic {
-		// Session is attached, deleting subscription or messages. Send to topic.
-		select {
-		case sub.meta <- msg:
-		default:
-			// Reply with a 503 to the user.
-			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
-			logs.Err.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
-		}
-	} else if msg.MetaWhat == constMsgDelTopic {
+	if msg.MetaWhat == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		select {
@@ -1226,6 +1236,15 @@ func (s *Session) del(msg *ClientComMessage) {
 			// Reply with a 503 to the user.
 			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
 			logs.Err.Println("s.del: hub.unreg channel full", s.sid)
+		}
+	} else if sub := s.getSub(msg.RcptTo); sub != nil {
+		// Session is attached, deleting subscription or messages. Send to topic.
+		select {
+		case sub.meta <- msg:
+		default:
+			// Reply with a 503 to the user.
+			s.queueOut(ErrServiceUnavailableReply(msg, msg.Timestamp))
+			logs.Err.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
@@ -1323,6 +1342,8 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		routeTo = msg.AsUser
 	} else if msg.Original == "fnd" {
 		routeTo = types.ParseUserId(msg.AsUser).FndName()
+	} else if msg.Original == "slf" {
+		routeTo = types.ParseUserId(msg.AsUser).SlfName()
 	} else if strings.HasPrefix(msg.Original, "usr") {
 		// p2p topic
 		uid1 := types.ParseUserId(msg.AsUser)

@@ -2,11 +2,15 @@
 package media
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
+
+	"slices"
 
 	"github.com/tinode/chat/server/store/types"
 )
@@ -26,10 +30,10 @@ type Handler interface {
 	// Headers checks if the handler wants to provide additional HTTP headers for the request.
 	// It could be CORS headers, redirect to serve files from another URL, cache-control headers.
 	// It returns headers as a map, HTTP status code to stop processing or 0 to continue, error.
-	Headers(req *http.Request, serve bool) (http.Header, int, error)
+	Headers(method string, url *url.URL, headers http.Header, serve bool) (http.Header, int, error)
 
 	// Upload processes request for file upload. Returns file URL, file size, error.
-	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error)
+	Upload(fdef *types.FileDef, file io.Reader) (string, int64, error)
 
 	// Download processes request for file download.
 	Download(url string) (*types.FileDef, ReadSeekCloser, error)
@@ -39,6 +43,26 @@ type Handler interface {
 
 	// GetIdFromUrl extracts file ID from download URL.
 	GetIdFromUrl(url string) types.Uid
+}
+
+type AllowedOrigin struct {
+	Origin      string
+	URL         url.URL
+	HostParts   []string
+	HasWildcard bool
+}
+
+// IsOriginAllowed reports whether origin is permitted by the given allowlist.
+// An empty allowlist means all origins are allowed.
+// A missing Origin header (empty string) is always allowed (non-browser client).
+func IsOriginAllowed(allowed []AllowedOrigin, origin string) bool {
+	if origin == "" {
+		return true
+	}
+	if len(allowed) == 0 {
+		return true
+	}
+	return matchCORSOrigin(allowed, origin) != ""
 }
 
 var fileNamePattern = regexp.MustCompile(`^[-_A-Za-z0-9]+`)
@@ -54,25 +78,94 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 	return types.ParseUid(fileNamePattern.FindString(fname))
 }
 
-// matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
-func matchCORSOrigin(allowed []string, origin string) string {
-	if origin == "" {
-		// Request has no Origin header.
-		return ""
+// ParseCORSAllow pre-parses allowed origins from the configuration.
+func ParseCORSAllow(allowed []string) ([]AllowedOrigin, error) {
+	if len(allowed) == 0 {
+		return nil, nil
 	}
 
+	result := make([]AllowedOrigin, 0, len(allowed))
+	for _, val := range allowed {
+		parsed := AllowedOrigin{Origin: val}
+		switch val {
+		case "*":
+			if len(allowed) > 1 {
+				return nil, errors.New("wildcard origin '*' must be the only entry")
+			}
+			parsed.HasWildcard = true
+		case "":
+			if len(allowed) > 1 {
+				return nil, errors.New("empty allowed origin '' must be the only entry")
+			}
+			// Empty string means no origin allowed - no URL parsing needed
+			parsed.HasWildcard = false
+		default:
+			u, err := url.ParseRequestURI(val)
+			if err != nil {
+				return nil, err
+			}
+			parsed.HostParts = strings.Split(u.Hostname(), ".")
+			parsed.URL = *u
+			parsed.HasWildcard = strings.Contains(u.Hostname(), "*")
+		}
+		result = append(result, parsed)
+	}
+	return result, nil
+}
+
+// matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
+func matchCORSOrigin(allowed []AllowedOrigin, origin string) string {
 	if len(allowed) == 0 {
 		// Not configured
 		return ""
 	}
 
-	if allowed[0] == "*" {
-		return "*"
+	if origin == "" && allowed[0].Origin != "*" {
+		// Request has no Origin header and "*" (any origin) not allowed.
+		return ""
 	}
 
-	origin = strings.ToLower(origin)
+	if allowed[0].Origin == "*" {
+		if origin == "" {
+			return "*"
+		}
+		return origin
+	}
+
+	// Check for empty string in allowed origins - this means no origin is allowed.
+	if allowed[0].Origin == "" {
+		return ""
+	}
+
+	originUrl, err := url.ParseRequestURI(origin)
+	if err != nil {
+		return ""
+	}
+	originParts := strings.Split(originUrl.Hostname(), ".")
+
 	for _, val := range allowed {
-		if strings.ToLower(val) == origin {
+		if val.Origin == origin {
+			return origin
+		}
+
+		if !val.HasWildcard ||
+			originUrl.Scheme != val.URL.Scheme ||
+			originUrl.Port() != val.URL.Port() ||
+			len(originParts) != len(val.HostParts) {
+			continue
+		}
+
+		matched := true
+		for i, part := range val.HostParts {
+			if part == "*" {
+				continue
+			}
+			if part != originParts[i] {
+				matched = false
+				break
+			}
+		}
+		if matched {
 			return origin
 		}
 	}
@@ -87,33 +180,25 @@ func matchCORSMethod(allowMethods []string, method string) bool {
 		return false
 	}
 
-	method = strings.ToUpper(method)
-	for _, mm := range allowMethods {
-		if mm == method {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(allowMethods, strings.ToUpper(method))
 }
 
 // CORSHandler is the default CORS processor for use by media handlers. It adds CORS headers to
 // preflight OPTIONS requests, Vary & Access-Control-Allow-Origin headers to all responses.
-func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.Header, int) {
-	headers := map[string][]string{
+func CORSHandler(method string, reqHeader http.Header, allowedOrigins []AllowedOrigin, serve bool) (http.Header, int) {
+	respHeader := map[string][]string{
 		// Always add Vary because of possible intermediate caches.
 		"Vary": {"Origin", "Access-Control-Request-Method, Access-Control-Request-Headers"},
 	}
 
-	origin := req.Header.Get("Origin")
+	origin := reqHeader.Get("Origin")
 
 	allowedOrigin := matchCORSOrigin(allowedOrigins, origin)
-	requestMethod := req.Header.Get("Access-Control-Request-Method")
-	if req.Method == http.MethodOptions && requestMethod != "" {
+	if acMethod := reqHeader.Get("Access-Control-Request-Method"); method == http.MethodOptions && acMethod != "" {
 		// Preflight request.
 
 		if allowedOrigin == "" {
-			return headers, http.StatusNoContent
+			return respHeader, http.StatusNoContent
 		}
 
 		var allowMethods []string
@@ -123,26 +208,26 @@ func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.H
 			allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
 		}
 
-		if !matchCORSMethod(allowMethods, requestMethod) {
+		if !matchCORSMethod(allowMethods, acMethod) {
 			// CORS policy does not allow this method.
-			return headers, http.StatusNoContent
+			return respHeader, http.StatusNoContent
 		}
 
-		headers["Access-Control-Allow-Headers"] = []string{"*"}
-		headers["Access-Control-Allow-Credentials"] = []string{"true"}
-		headers["Access-Control-Allow-Methods"] = []string{strings.Join(allowMethods, ", ")}
-		headers["Access-Control-Max-Age"] = []string{"86400"}
-		headers["Access-Control-Allow-Origin"] = []string{allowedOrigin}
+		respHeader["Access-Control-Allow-Headers"] = []string{"*"}
+		respHeader["Access-Control-Allow-Credentials"] = []string{"true"}
+		respHeader["Access-Control-Allow-Methods"] = []string{strings.Join(allowMethods, ", ")}
+		respHeader["Access-Control-Max-Age"] = []string{"86400"}
+		respHeader["Access-Control-Allow-Origin"] = []string{allowedOrigin}
 
-		return headers, http.StatusNoContent
+		return respHeader, http.StatusNoContent
 	}
 
 	// Regular request, not a preflight.
 
 	if allowedOrigin != "" {
 		// Returning Origin from the actual request instead of '*', otherwise there could be an issue with Credentials.
-		headers["Access-Control-Allow-Origin"] = []string{origin}
+		respHeader["Access-Control-Allow-Origin"] = []string{origin}
 	}
 
-	return headers, 0
+	return respHeader, 0
 }

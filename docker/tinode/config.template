@@ -75,11 +75,11 @@
 		"adapters": {
 			"mysql": {
 				"database": "tinode",
-				"dsn": "$MYSQL_DSN?parseTime=true&collation=utf8mb4_unicode_ci"
+				"dsn": "$MYSQL_DSN"
 			},
 			"postgres": {
 				"database": "tinode",
-				"dsn": "$POSTGRES_DSN?sslmode=disable"
+				"dsn": "$POSTGRES_DSN"
 			},
 			"rethinkdb": {
 				"database": "tinode",

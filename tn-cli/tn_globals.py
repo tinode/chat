@@ -41,6 +41,9 @@ DefaultTopic = None
 # Variables: results of command execution
 Variables = {}
 
+# Connection to the server
+Connection = None
+
 # Flag to enable extended logging. Useful for debugging.
 Verbose = False
 

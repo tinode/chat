@@ -11,7 +11,6 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net"
@@ -26,7 +25,6 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/logs"
-	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -64,7 +62,15 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 
 					// This is a second HTTP server listenning on a different port.
 					go func() {
-						if err := http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr)); err != nil && err != http.ErrServerClosed {
+						redirectServer := &http.Server{
+							Addr:              globals.tlsRedirectHTTP,
+							Handler:           tlsRedirect(addr),
+							ReadHeaderTimeout: 10 * time.Second,
+							IdleTimeout:       30 * time.Second,
+							WriteTimeout:      90 * time.Second,
+							MaxHeaderBytes:    1 << 14,
+						}
+						if err := redirectServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 							logs.Info.Println("HTTP redirect failed:", err)
 						}
 					}()
@@ -202,7 +208,7 @@ func (w *errorResponseWriter) Write(p []byte) (n int, err error) {
 	return w.ResponseWriter.Write(p)
 }
 
-// Handler which deploys errorResponseWriter
+// httpErrorHandler to respond with JSON_formatted error message for static content.
 func httpErrorHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -264,25 +270,27 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 //   - X-Frame-Options
 //   - Referrer-Policy
 func optionalHttpHeaders(handler http.Handler) http.Handler {
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Referrer-Policy", "origin")
 		handler.ServeHTTP(w, r)
 	})
 
+	h2 := h1
 	if globals.tlsStrictMaxAge != "" {
-		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h2 = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Strict-Transport-Security", "max-age="+globals.tlsStrictMaxAge)
-			handler.ServeHTTP(w, r)
+			h1.ServeHTTP(w, r)
 		})
 	}
 
+	h3 := h2
 	if globals.xFrameOptions != "-" {
-		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h3 = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Frame-Options", globals.xFrameOptions)
-			handler.ServeHTTP(w, r)
+			h2.ServeHTTP(w, r)
 		})
 	}
-	return handler
+	return h3
 }
 
 // Wrapper for http.Handler which optionally adds a Cache-Control header to the response
@@ -364,37 +372,19 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 	return
 }
 
-// Authenticate non-websocket HTTP request
-func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
-	var uid types.Uid
-	if authMethod, secret := getHttpAuth(req); authMethod != "" {
-		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
-		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
-		if err != nil {
-			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
-			return uid, nil, types.ErrMalformed
-		}
-
-		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
-			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n], getRemoteAddr(req))
-			if err != nil {
-				return uid, nil, err
-			}
-			if challenge != nil {
-				return uid, challenge, nil
-			}
-			uid = rec.Uid
-		} else {
-			logs.Info.Println("media: unknown auth method", authMethod)
-		}
-	} else {
-		// Find the session, make sure it's appropriately authenticated.
-		sess := globals.sessionStore.Get(req.FormValue("sid"))
-		if sess != nil {
-			uid = sess.uid
+// Obtain IP address of the client.
+func getRemoteAddr(req *http.Request) string {
+	var addr string
+	if globals.useXForwardedFor {
+		addr = req.Header.Get("X-Forwarded-For")
+		if !isRoutableIP(addr) {
+			addr = ""
 		}
 	}
-	return uid, nil, nil
+	if addr != "" {
+		return addr
+	}
+	return req.RemoteAddr
 }
 
 // debugSession is session debug info.

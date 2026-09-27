@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,7 +15,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func genDb(data *Data) {
+func genDb(data *Data, p2pDel bool) {
 	var err error
 	var botAccount string
 
@@ -109,9 +109,9 @@ func genDb(data *Data) {
 		nameIndex[uu.Username] = user.Id
 
 		// Add address book as fnd.private
-		if uu.AddressBook != nil && len(uu.AddressBook) > 0 {
+		if len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
-				map[string]interface{}{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
+				map[string]any{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -185,10 +185,14 @@ func genDb(data *Data) {
 		created := getCreatedTime(ss.CreatedAt)
 
 		// Assign default access mode
-		s0want := types.ModeCP2P
-		s0given := types.ModeCP2P
-		s1want := types.ModeCP2P
-		s1given := types.ModeCP2P
+		defaultMode := types.ModeCP2P
+		if p2pDel {
+			defaultMode = types.ModeCP2PD
+		}
+		s0want := defaultMode
+		s0given := defaultMode
+		s1want := defaultMode
+		s1given := defaultMode
 
 		// Check of non-default access mode was provided
 		if ss.Users[0].Want != "" {
@@ -293,7 +297,7 @@ func genDb(data *Data) {
 			// Initial maximum increment of the message sent time in milliseconds
 			increment := 3600 * 1000
 			subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
-			for i := 0; i < toInsert; i++ {
+			for i := range toInsert {
 				// At least 20% of subsequent messages should come from the same user in the same topic.
 				if rand.Intn(5) > 0 {
 					subIdx = rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
@@ -392,7 +396,7 @@ func genDb(data *Data) {
 						ObjHeader: types.ObjHeader{CreatedAt: ts},
 						SeqId:     seqId,
 						Topic:     nameIndex[sub.pair],
-						Head:      types.MessageHeaders{"mime": "text/x-drafty"},
+						Head:      types.KVMap{"mime": "text/x-drafty"},
 						From:      from,
 						Content:   form,
 					}, nil, true); err != nil {
@@ -441,7 +445,7 @@ func parsePublic(public *theCard, path string) *card {
 		if dir == "" {
 			dir = path
 		}
-		photo.Data, err = ioutil.ReadFile(filepath.Join(dir, fname))
+		photo.Data, err = os.ReadFile(filepath.Join(dir, fname))
 		if err != nil {
 			log.Fatal(err)
 		}

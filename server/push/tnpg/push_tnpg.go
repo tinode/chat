@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -31,6 +32,20 @@ const (
 )
 
 var handler Handler
+
+const maxPooledPostBodyCap = 1 << 16
+
+var postBodyPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
+var gzipWriterPool = sync.Pool{
+	New: func() any {
+		return gzip.NewWriter(nil)
+	},
+}
 
 // Handler represents state of TNPG push client.
 type Handler struct {
@@ -154,11 +169,26 @@ func (Handler) Init(jsonconf json.RawMessage) (bool, error) {
 	return true, nil
 }
 
-func postMessage(endpoint string, body interface{}, config *configType) (*batchResponse, error) {
-	buf := new(bytes.Buffer)
-	gzw := gzip.NewWriter(buf)
+func postMessage(endpoint string, body any, config *configType) (*batchResponse, error) {
+	buf := postBodyPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		if cap(buf.Bytes()) > maxPooledPostBodyCap {
+			return
+		}
+		postBodyPool.Put(buf)
+	}()
+
+	gzw := gzipWriterPool.Get().(*gzip.Writer)
+	defer func() {
+		gzw.Reset(nil)
+		gzipWriterPool.Put(gzw)
+	}()
+	gzw.Reset(buf)
 	err := json.NewEncoder(gzw).Encode(body)
-	gzw.Close()
+	if closeErr := gzw.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +225,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 
 	if err != nil {
 		// Just log the error, but don't report it to caller. The push succeeded.
-		logs.Warn.Println("tnpg failed to decode respons:", err)
+		logs.Warn.Println("tnpg failed to decode response:", err)
 	}
 
 	batch.httpCode = resp.StatusCode
@@ -209,11 +239,8 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 
 	n := len(messages)
 	for i := 0; i < n; i += pushBatchSize {
-		upper := i + pushBatchSize
-		if upper > n {
-			upper = n
-		}
-		var payloads []interface{}
+		upper := min(i+pushBatchSize, n)
+		var payloads []any
 		for j := i; j < upper; j++ {
 			payloads = append(payloads, messages[j])
 		}

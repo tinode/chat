@@ -14,6 +14,7 @@ import (
 	"github.com/tinode/chat/server/push/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
+	"maps"
 )
 
 const (
@@ -90,9 +91,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 func clonePayload(src map[string]string) map[string]string {
 	dst := make(map[string]string, len(src))
-	for key, val := range src {
-		dst[key] = val
-	}
+	maps.Copy(dst, src)
 	return dst
 }
 
@@ -361,7 +360,7 @@ func apnsNotificationConfig(what, topic string, data map[string]string, unread i
 		}
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{"aps": apsPayload})
+	payload, err := json.Marshal(map[string]any{"aps": apsPayload})
 	if err != nil {
 		return nil
 	}

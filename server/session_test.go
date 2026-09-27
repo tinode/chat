@@ -81,7 +81,7 @@ func verifyResponseCodes(r *responses, codes []int, t *testing.T) {
 	if len(r.messages) != len(codes) {
 		t.Errorf("responses: expected %d, received %d.", len(codes), len(r.messages))
 	}
-	for i := 0; i < len(codes); i++ {
+	for i := range codes {
 		resp := r.messages[i].(*ServerComMessage)
 		if resp == nil {
 			t.Fatalf("Response %d must be ServerComMessage", i)
@@ -821,7 +821,7 @@ func TestDispatchDelMsg(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}
@@ -892,7 +892,7 @@ func TestDispatchDelMetaChanFull(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}
@@ -920,7 +920,7 @@ func TestDispatchDelUnsubscribedSession(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
+			DelSeq: []MsgRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}

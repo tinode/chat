@@ -38,23 +38,23 @@
 .must $meta get fnd --sub
 
 # Print out Alice's UID.
-.log $meta.sub[0].user_id
+.log $meta.sub[0].topic
 
 # Subscribe to Alice
-.must sub $meta.sub[0].user_id
+.must sub $meta.sub[0].topic
 
 # Send typing notification to Alice (async)
-note $meta.sub[0].user_id
+note $meta.sub[0].topic
 
 # Send a plain text message to Alice (async)
-pub $meta.sub[0].user_id 'Hello, Alice'
+pub $meta.sub[0].topic 'Hello, Alice'
 
 # Create a new group topic Test Group
 .must $group sub new --fn='Test Group' --tags=test,test-group \
   --auth=JRWPA --anon=JR
 
 # Add Alice to the new topic.
-.must set $group.topic --user=$meta.sub[0].user_id
+.must set $group.topic --user=$meta.sub[0].topic
 
 # Publish a drafty-formatted form to the new topic.
 pub $group.topic --drafty='{"txt": "What’s your favorite color?red green none",\

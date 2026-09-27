@@ -12,6 +12,7 @@ package main
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -52,6 +53,15 @@ type userStatusReq struct {
 	state types.ObjState
 }
 
+type userDeleteReq struct {
+	// UID of the user being deleted.
+	forUser types.Uid
+	// Reason for stopping the topic.
+	reason int
+	// Channel for reporting completion of this topic's handling.
+	done chan<- bool
+}
+
 // Hub is the core structure which holds topics.
 type Hub struct {
 
@@ -59,7 +69,7 @@ type Hub struct {
 	topics *sync.Map
 
 	// Current number of loaded topics
-	numTopics int
+	numTopics atomic.Int64
 
 	// Channel for routing client-side messages, buffered at 4096
 	routeCli chan *ClientComMessage
@@ -94,13 +104,16 @@ func (h *Hub) topicGet(name string) *Topic {
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
-	h.numTopics++
+	h.numTopics.Add(1)
 	h.topics.Store(name, t)
 }
 
-func (h *Hub) topicDel(name string) {
-	h.numTopics--
-	h.topics.Delete(name)
+func (h *Hub) topicDel(name string, expected *Topic) bool {
+	if h.topics.CompareAndDelete(name, expected) {
+		h.numTopics.Add(-1)
+		return true
+	}
+	return false
 }
 
 func newHub() *Hub {
@@ -169,19 +182,23 @@ func (h *Hub) run() {
 					name:      join.RcptTo,
 					xoriginal: join.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(join.RcptTo),
-					sessions:  make(map[*Session]perSessionData),
-					clientMsg: make(chan *ClientComMessage, 192),
-					serverMsg: make(chan *ServerComMessage, 64),
-					reg:       make(chan *ClientComMessage, 256),
-					unreg:     make(chan *ClientComMessage, 256),
-					meta:      make(chan *ClientComMessage, 64),
-					perUser:   make(map[types.Uid]perUserData),
-					exit:      make(chan *shutDown, 1),
+					isProxy:     globals.cluster.isRemoteTopic(join.RcptTo),
+					sessions:    make(map[*Session]perSessionData),
+					clientMsg:   make(chan *ClientComMessage, 192),
+					serverMsg:   make(chan *ServerComMessage, 64),
+					reg:         make(chan *ClientComMessage, 256),
+					unreg:       make(chan *ClientComMessage, 256),
+					meta:        make(chan *ClientComMessage, 64),
+					userStatus:  make(chan *userStatusReq, 1),
+					userDelete:  make(chan *userDeleteReq),
+					perUser:     make(map[types.Uid]perUserData),
+					exit:        make(chan *shutDown, 1),
+					done:        make(chan struct{}),
+					initialized: make(chan struct{}),
 				}
 				if globals.cluster != nil {
 					if t.isProxy {
-						t.proxy = make(chan *ClusterResp, 32)
+						t.proxy = make(chan *ClusterResp, 128)
 						t.masterNode = globals.cluster.ring.Get(t.name)
 					} else {
 						// It's a master topic. Make a channel for handling
@@ -327,7 +344,7 @@ func (h *Hub) run() {
 				return true
 			})
 
-			for i := 0; i < topicCount; i++ {
+			for range topicCount {
 				<-topicsdone
 			}
 
@@ -348,16 +365,18 @@ func (h *Hub) run() {
 // * group topics where the given user is the owner.
 // 'me' and fnd' are ignored here because they are direcly tied to the user object.
 func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
-	h.topics.Range(func(name any, t any) bool {
+	status := &userStatusReq{forUser: uid}
+	if suspended {
+		status.state = types.StateSuspended
+	} else {
+		status.state = types.StateOK
+	}
+
+	h.topics.Range(func(_ any, t any) bool {
 		topic := t.(*Topic)
-		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatFnd {
-			return true
-		}
-
-		if _, isMember := topic.perUser[uid]; (topic.cat == types.TopicCatP2P && isMember) || topic.owner == uid {
-			topic.markReadOnly(suspended)
-
-			// Don't send "off" notification on suspension. They will be sent when the user is evicted.
+		select {
+		case topic.userStatus <- status:
+		case <-topic.done:
 		}
 		return true
 	})
@@ -426,7 +445,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					sendPush(pushForChanDelete(t.name, now))
 				}
 
-				h.topicDel(topic)
+				h.topicDel(topic, t)
 				t.markDeleted()
 				t.exit <- &shutDown{reason: StopDeleted}
 				statsInc("LiveTopics", -1)
@@ -544,7 +563,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		// If t is nil, it's not registered, no action is needed
 		if t := h.topicGet(topic); t != nil {
 			t.markDeleted()
-			h.topicDel(topic)
+			h.topicDel(topic, t)
 
 			t.exit <- &shutDown{reason: reason}
 
@@ -563,39 +582,34 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 // Terminate all topics associated with the given user:
 // * all p2p topics with the given user
 // * group topics where the given user is the owner.
-// * user's 'me' and 'fnd' topics.
+// * user's 'me', 'fnd', 'slf' topics.
 func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
-	var done chan bool
-	if alldone != nil {
-		done = make(chan bool, 128)
-	}
+	h.topics.Range(func(_ any, value any) bool {
+		topic := value.(*Topic)
+		if !topic.mayDeleteForUser(uid) {
+			return true
+		}
+		var done chan bool
+		if alldone != nil {
+			done = make(chan bool, 1)
+		}
 
-	count := 0
-	h.topics.Range(func(name any, t any) bool {
-		topic := t.(*Topic)
-		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
-			topic.owner == uid {
-			topic.markDeleted()
-			h.topics.Delete(name)
-
-			// This call is non-blocking unless some other routine tries to stop it at the same time.
-			topic.exit <- &shutDown{reason: reason, done: done}
-
-			// Just send to p2p topics here.
-			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
-				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
+		request := &userDeleteReq{
+			forUser: uid,
+			reason:  reason,
+			done:    done,
+		}
+		select {
+		case topic.userDelete <- request:
+			if done != nil {
+				<-done
 			}
-			count++
+		case <-topic.done:
 		}
 		return true
 	})
 
-	statsInc("LiveTopics", -count)
-
 	if alldone != nil {
-		for i := 0; i < count; i++ {
-			<-done
-		}
 		alldone <- true
 	}
 }
@@ -625,6 +639,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.Public = stopic.Public
 		desc.Trusted = stopic.Trusted
 		desc.IsChan = stopic.UseBt
+		desc.SubCnt = stopic.SubCnt
 		if stopic.Owner == msg.AsUser {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: stopic.Access.Auth.String(),
@@ -633,9 +648,10 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		}
 		// Report appropriate access level. Could be overridden below if subscription exists.
 		desc.Acs = &MsgAccessMode{}
-		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
+		switch sess.authLvl {
+		case auth.LevelAuth, auth.LevelRoot:
 			desc.Acs.Mode = stopic.Access.Auth.String()
-		} else if sess.authLvl == auth.LevelAnon {
+		case auth.LevelAnon:
 			desc.Acs.Mode = stopic.Access.Anon.String()
 		}
 	} else {
@@ -680,9 +696,10 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 
 		// Report appropriate access level. Could be overridden below if subscription exists.
 		desc.Acs = &MsgAccessMode{}
-		if sess.authLvl == auth.LevelAuth || sess.authLvl == auth.LevelRoot {
+		switch sess.authLvl {
+		case auth.LevelAuth, auth.LevelRoot:
 			desc.Acs.Mode = suser.Access.Auth.String()
-		} else if sess.authLvl == auth.LevelAnon {
+		case auth.LevelAnon:
 			desc.Acs.Mode = suser.Access.Anon.String()
 		}
 	}
@@ -829,9 +846,9 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		}
 
 		if types.GetTopicCat(msg.RcptTo) == types.TopicCatP2P {
-			// For P2P topics ignore requests exceeding types.ModeCP2P and do not allow
+			// For P2P topics ignore requests exceeding typesModeCP2P and do not allow
 			// removal of 'A' permission.
-			modeWant = modeWant&types.ModeCP2P | types.ModeApprove
+			modeWant = modeWant&globals.typesModeCP2P | types.ModeApprove
 		}
 
 		if modeWant != sub.ModeWant {

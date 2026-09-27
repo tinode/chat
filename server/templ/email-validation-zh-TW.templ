@@ -1,0 +1,63 @@
+{{/*
+  CHINESE Traditional (Taiwan)
+  繁體中文
+
+  此模板定義發送給用戶的電子郵件內容，用於請求確認註冊電子郵件地址。
+  語法請參見 https://golang.org/pkg/text/template/
+
+  模板必須包含以下部分：
+   - 'subject': 電子郵件的主題行
+   - 以下一個或兩個：
+     - 'body_html': 訊息的 HTML 內容。將添加標頭 "Content-type: text/html"。
+     - 'body_plain': 訊息的純文字內容。將添加標頭 "Content-type: text/plain"。
+
+   如果同時包含 body_html 和 body_plain，兩者都將作為 'multipart/alternative' 訊息的部分發送。
+*/}}
+
+{{define "subject" -}}
+Tinode 註冊：確認電子郵件
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>您好。</p>
+
+<p>您收到此訊息是因為有人使用您的電子郵件在
+<a href="{{.HostUrl}}">Tinode</a> 註冊。</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">點擊確認</a>
+或前往
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+並輸入以下驗證碼：</p>
+<blockquote><big>{{.Code}}</big></blockquote>
+<p>您可能需要輸入登入名稱和密碼。</p>
+
+<p>如果您沒有在 Tinode 註冊，請忽略此訊息。</p>
+
+<p><a href="https://tinode.co/">Tinode 團隊</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+您好。
+
+您收到此訊息是因為有人使用您的電子郵件在 Tinode ({{.HostUrl}}) 註冊。
+
+點擊連結 {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} 進行確認，或前往 {{.HostUrl}}#cred?what=email
+並輸入以下驗證碼：
+
+	{{.Code}}
+
+您可能需要輸入登入名稱和密碼。
+
+如果您沒有在 Tinode 註冊，請忽略此訊息。
+
+Tinode 團隊
+https://tinode.co/
+
+{{- end}}

@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -72,7 +72,7 @@ func (e *InfluxDBExporter) Push() error {
 
 	if resp.StatusCode >= 400 {
 		var body string
-		if rb, err := ioutil.ReadAll(resp.Body); err != nil {
+		if rb, err := io.ReadAll(resp.Body); err != nil {
 			body = err.Error()
 		} else {
 			body = strings.TrimSpace(string(rb))

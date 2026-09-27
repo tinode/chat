@@ -14,6 +14,9 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Default deadline for plugin RPCs when no positive timeout is configured.
+const defaultPluginTimeout = 5 * time.Second
+
 const (
 	plgHi = 1 << iota
 	plgAcc
@@ -48,9 +51,11 @@ const (
 	plgTopicP2P
 	plgTopicGrp
 	plgTopicSys
+	plgTopicSlf
 	plgTopicNew
+	plgTopicNch
 
-	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys
+	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys | plgTopicSlf
 )
 
 const (
@@ -65,7 +70,7 @@ var (
 		"data", "meta", "pres", "info",
 	}
 
-	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "sys", "new"}
+	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "sys", "slf", "new", "nch"}
 )
 
 // PluginFilter is a enum which defines filtering types.
@@ -201,7 +206,7 @@ type pluginConfig struct {
 	Enabled bool `json:"enabled"`
 	// Unique service name
 	Name string `json:"name"`
-	// Microseconds to wait before timeout
+	// Microseconds to wait before timeout. Non-positive values use a 5-second default.
 	Timeout int64 `json:"timeout"`
 	// Filters for RPC calls: when to call vs when to skip the call
 	Filters pluginRPCFilterConfig `json:"filters"`
@@ -262,6 +267,9 @@ func pluginsInit(configString json.RawMessage) {
 			timeout:     time.Duration(conf.Timeout) * time.Microsecond,
 			failureCode: conf.FailureCode,
 			failureText: conf.FailureMessage,
+		}
+		if globals.plugins[count].timeout <= 0 {
+			globals.plugins[count].timeout = defaultPluginTimeout
 		}
 		var err error
 		if globals.plugins[count].filterFireHose, err =
@@ -374,15 +382,10 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			}
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
-		if resp, err := p.client.FireHose(ctx, req); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		resp, err := p.client.FireHose(ctx, req)
+		cancel()
+		if err == nil {
 			respStatus := resp.GetStatus()
 			// CONTINUE means default processing
 			if respStatus == pbx.RespCode_CONTINUE {
@@ -438,15 +441,9 @@ func pluginFind(user types.Uid, query string) (string, []types.Subscription, err
 			continue
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		resp, err := p.client.Find(ctx, find)
+		cancel()
 		if err != nil {
 			logs.Warn.Println("plugins: Find call failed", p.name, err)
 			return "", nil, err
@@ -497,15 +494,10 @@ func pluginAccount(user *types.User, action int) {
 			}
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
-		if _, err := p.client.Account(ctx, event); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		_, err := p.client.Account(ctx, event)
+		cancel()
+		if err != nil {
 			logs.Warn.Println("plugins: Account call failed", p.name, err)
 		}
 	}
@@ -532,15 +524,10 @@ func pluginTopic(topic *Topic, action int) {
 			}
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
-		if _, err := p.client.Topic(ctx, event); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		_, err := p.client.Topic(ctx, event)
+		cancel()
+		if err != nil {
 			logs.Warn.Println("plugins: Topic call failed", p.name, err)
 		}
 	}
@@ -578,15 +565,10 @@ func pluginSubscription(sub *types.Subscription, action int) {
 			}
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
-		if _, err := p.client.Subscription(ctx, event); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		_, err := p.client.Subscription(ctx, event)
+		cancel()
+		if err != nil {
 			logs.Warn.Println("plugins: Subscription call failed", p.name, err)
 		}
 	}
@@ -613,15 +595,10 @@ func pluginMessage(data *MsgServerData, action int) {
 			}
 		}
 
-		var ctx context.Context
-		var cancel context.CancelFunc
-		if p.timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
-			defer cancel()
-		} else {
-			ctx = context.Background()
-		}
-		if _, err := p.client.Message(ctx, event); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		_, err := p.client.Message(ctx, event)
+		cancel()
+		if err != nil {
 			logs.Warn.Println("plugins: Message call failed", p.name, err)
 		}
 	}
@@ -647,8 +624,14 @@ func pluginDoFiltering(filter *PluginFilter, msg *ClientComMessage) bool {
 			return flt&plgTopicP2P != 0
 		case "grp":
 			return flt&plgTopicGrp != 0
+		case "sys":
+			return flt&plgTopicSys != 0
+		case "slf":
+			return flt&plgTopicSlf != 0
 		case "new":
 			return flt&plgTopicNew != 0
+		case "nch":
+			return flt&plgTopicNch != 0
 		}
 		return false
 	}

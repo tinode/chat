@@ -30,10 +30,11 @@
     - [sys Topic](#sys-topic)
   - [Using Server-Issued Message IDs](#using-server-issued-message-ids)
   - [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-  - [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
+  - [Trusted, Public, Private, Auxiliary Fields](#trusted-public-private-auxiliary-fields)
     - [Trusted](#trusted)
     - [Public](#public)
     - [Private](#private)
+    - [Auxiliary](#auxiliary)
   - [Format of Content](#format-of-content)
   - [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
     - [Uploading](#uploading)
@@ -310,13 +311,13 @@ Topic properties independent of the user making the query:
  * `anon`: default access for anonymous users
 * `seq`: integer server-issued sequential ID of the latest `{data}` message sent through the topic
 * `trusted`: an application-defined object issued by the system administrators. Anyone can read it but only administrators can change it.
-* `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
+* `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data, only topic `owner` can change it.
 
 User-dependent topic properties:
 * `acs`: object describing given user's current access permissions; see [Access control](#access-control) for details
  * `want`: access permission requested by this user
  * `given`: access permissions given to this user
-* `private`: an application-defined object that is unique to the current user.
+* `private`: an application-defined object that is unique to the current user (topic subscriber).
 
 Topic usually have subscribers. One of the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
@@ -340,6 +341,14 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` is rejected.
 
+Internally the `me` topics are not persisted separately from the users. The `me` topics don't exist in the `topics` table or collection, they are created in memory from the `users` database record.
+
+### `slf` Topic
+
+Topic `slf` (self) provides mechanism for storing information, like bookmarks or saved messages. Messages sent to `slf` are accessible only by the user who sent them.
+
+This topic is created automatically when the user subscribes to it for the first time.
+
 ### `fnd` and Tags: Finding Users and Topics
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. Users and group topics can be discovered by `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
@@ -359,6 +368,8 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 _CURRENTLY UNSUPPORTED_ When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](../pbx) support `Find` service which can be used to replace default search with a custom one.
+
+Internally the `fnd` topics are not persisted separately from the users. The `fnd` topics don't exist in the `topics` table or collection, they are created in memory from the `users` database record.
 
 #### Query Language
 
@@ -406,6 +417,8 @@ Peer to peer (P2P) topics represent communication channels between strictly two 
 
 A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{pres}` message on `me` topic with updated access permissions.
 
+Internally, P2P topics are stored as `p2p` followed by base64 URL encoded concatenation of two 64-bit user IDs, with the lower numeric value ID first: `p2pm7PvMGmdcx_uVkDRaSTbwA`.
+
 The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 
 The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
@@ -445,13 +458,22 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Trusted, Public, and Private Fields
+## Trusted, Public, Private, Auxiliary Fields
 
-Topics and subscriptions have `trusted`, `public`, and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
+Topics have `trusted`, `public`, `aux` fields, subscriptions have `private` fields. The primary difference between these fields is in access control:
+
+ * `trusted`: writable by `ROOT` users, readable by anyone.
+ * `public`: writable by the `owner` or the user, readable by anyone.
+ * `aux`: writable by topic administrators, readable by subscribers.
+ * `private`: readable and writable only by the user who created the subscription.
+
+Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
+
+Although it's not yet enforced, if a third-party application defines custom keys, the key names should start with an `x-` followed by the application's fully qualified domain name, e.g. `x-example.com-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
 
 ### Trusted
 
-The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The following optional keys are currently defined:
+The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The field is writable by `ROOT` users, readable by anyone who has access to the topic or user. The following optional keys are currently defined:
 ```js
 trusted: {
   verified: true, // boolean, an indicator of a verified/trustworthy user or topic.
@@ -463,26 +485,35 @@ trusted: {
 
 ### Public
 
-The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md).
+The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md). The field is writable by by the user for users, the topic owner for topics. The field is readable by anyone who has access to topic or user.
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
 ### Private
 
-The format of the `private` field in group and peer to peer topics is a set of key-value pairs. The following keys are currently defined:
+The format of the `private` field in group and peer to peer topics is a set of key-value pairs. The field is writable and readable by the user only. The following keys are currently defined:
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
   arch: true, // boolean, indicator that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
-  starred: false,  // boolean, an indicator that the topic is starred or pinned by the user.
-  accepted: "JRWS" // string, 'given' mode accepted by the user.
+  accepted: "JRWS", // string, 'given' mode accepted by the user.
+  tpins: ["grpmiKBkQVXnm3P", "usrIU_LOVwRNsc"] // array of topic IDs to pin to the top of
+              // the contacts list; 'me' topic only.
 }
 ```
 
-Although it's not yet enforced, custom fields should start with an `x-` followed by the application name, e.g. `x-myapp-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
-
 The `fnd` topic expects `private` to be a string representing a [search query](#query-language)).
+
+### Auxiliary
+
+The format of the `aux` field is a set of key-value pairs. The `aux` is writable by topic admins and readable by all topic subscribers. The following keys are currently defined:
+
+```js
+aux: {
+  pins: [1001, 23456] // array of integer message IDs to pin to the top of the message list.
+}
+```
 
 ## Format of Content
 
@@ -812,7 +843,9 @@ sub: {
       val: "alice@example.com", // string, credential to verify such as email or phone
       resp: "178307", // string, verification response, optional
       params: { ... } // parameters, specific to the verification method, optional
-    }
+    },
+
+    aux: { ... } // update auxiliary data.
   },
 
   get: {
@@ -853,7 +886,7 @@ sub: {
 }
 ```
 
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+See [Trusted, Public, and Private Fields](#trusted-public-and-private-fields) for `trusted`, `private`, and `public` format considerations.
 
 #### `{leave}`
 
@@ -881,8 +914,7 @@ pub: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic to publish to, required
   noecho: false, // boolean, suppress echo (see below), optional
-  head: { key: "value", ... }, // set of string key-value pairs,
-               // passed to {data} unchanged, optional
+  head: { key: "value", ... }, // set of string key-value pairs, optional
   content: { ... }  // object, application-defined content to publish
                // to topic subscribers, required
 }
@@ -976,7 +1008,7 @@ If `ims` is specified and data has not been updated, the message will skip `trus
 
 Limited information is available without [attaching](#sub) to topic first.
 
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+See [Trusted, Public, and Private Fields](#trusted-public-and-private-fields) for `trusted`, `private`, and `public` format considerations.
 
 * `{get what="sub"}`
 
@@ -1003,6 +1035,11 @@ Query message deletion history. Server responds with a `{meta}` message containi
 * `{get what="cred"}`
 
 Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported for `me` topic only.
+
+* `{get what="aux"}`
+
+Query auxiliary topic data. Server responds with a `{meta}` message containing an object with auxiliary key-value pairs.
+
 
 #### `{set}`
 
@@ -1042,7 +1079,9 @@ set: {
     val: "alice@example.com", // string, credential to verify such as email or phone
     resp: "178307", // string, verification response, optional
     params: { ... } // parameters, specific to the verification method, optional
-  }
+  },
+
+  aux: { ... } // application-defined key-value pairs
 }
 ```
 
@@ -1105,6 +1144,8 @@ note: {
   seq: 123,   // integer, ID of the message being acknowledged, required for
               // 'recv' & 'read'.
   unread: 10, // integer, client-reported total count of unread messages, optional.
+  event: "ringing", // string, subaction; surrently used only by video/audio calls,
+                    // when what="call".
   payload: {  // object, required payload for 'call' and 'data'.
     ...
   }
@@ -1113,7 +1154,6 @@ note: {
 
 The following actions types are currently defined:
  * call: a video call status update.
- * cala: an audio call status update.
  * data: a generic packet of structured data, usually a form response.
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * kpa: audio message is in the process of recording.
@@ -1211,12 +1251,12 @@ meta: {
     recv: 115, // integer, like 'read', but received, optional
     clear: 12, // integer, in case some messages were deleted, the greatest ID
                // of a deleted message, optional
-    trusted: { ... }, // application-defined payload assigned by the system
-                      // administration
-    public: { ... }, // application-defined data that's available to all topic
-                     // subscribers
-    private: { ...} // application-defined data that's available to the current
-                    // user only
+    trusted: { ... }, // application-defined payload writable by the system
+                      // administration, readable by all
+    public: { ... }, // application-defined data writable by topic owner,
+                     // readable by all
+    private: { ... } // application-defined data that's available to the current
+                     // user only
   }, // object, topic description, optional
   sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
     {
@@ -1269,7 +1309,7 @@ meta: {
     ...
   ],
   tags: [ // array of tags that the topic or user (in case of "me" topic) is indexed by
-    "email:alice@example.com", "tel:+1234567890"
+    "email:alice@example.com", "tel:+1234567890", "flowers"
   ],
   cred: [ // array of user's credentials
     {
@@ -1282,7 +1322,9 @@ meta: {
   del: {
     clear: 3, // ID of the latest applicable 'delete' transaction
     delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages
-  }
+  },
+  aux: { ... } // application-defined key-value pairs writable by topic managers,
+               // readable by topic subscribers.
 }
 ```
 
@@ -1316,6 +1358,7 @@ The following action types are currently defined:
  * ua: user agent changed, for example user was logged in with one client, then logged in with another
  * upd: topic description has changed
  * tags: topic tags have changed
+ * aux: topic aux data has changed
  * acs: access permissions have changed
  * gone: topic is no longer available, for example, it was deleted or you were unsubscribed from it
  * term: subscription to topic has been terminated, you may try to resubscribe
@@ -1337,6 +1380,8 @@ Forwarded client-generated notification `{note}`. Server guarantees that the mes
 ```js
 info: {
   topic: "grp1XUtEhjv6HND", // string, topic affected, always present
+  src: "usrRkDVe0PYDOo",  // string, topic where the even has occurred;
+                          // present only when "topic": "me"
   from: "usr2il9suCbuko", // string, id of the user who published the
                           // message, always present
   what: "read", // string, one of "kp", "recv", "read", "data", see client-side {note},
@@ -1344,5 +1389,7 @@ info: {
   seq: 123, // integer, ID of the message that client has acknowledged,
             // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for recv &
             // read
+  event: "ringing", // string, used by video/audio calls
+  payload: { ... }  // object, arbitrary payload, used by video calls
 }
 ```

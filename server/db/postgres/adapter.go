@@ -13,13 +13,14 @@ import (
 	"log"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db/common"
@@ -46,7 +47,7 @@ type adapter struct {
 }
 
 const (
-	adpVersion  = 113
+	adpVersion  = 116
 	adapterName = "postgres"
 
 	defaultMaxResults = 1024
@@ -77,6 +78,16 @@ type configType struct {
 	MaxIdleConns int `json:"max_idle_conns,omitempty"`
 	// Maximum amount of time a connection may be reused (in seconds).
 	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"`
+
+	// SSL mode determines how SSL connections are handled.
+	// Supported values:
+	//   - "disable": No SSL connection (default)
+	//   - "require": Require SSL connection but don't verify server certificate
+	//   - "verify-ca": Require SSL and verify that the server certificate is issued by a trusted CA
+	//   - "verify-full": Require SSL and verify that the server certificate matches the server hostname
+	//   - "prefer": Try SSL first, fallback to non-SSL if SSL fails
+	//   - "allow": Try non-SSL first, fallback to SSL if non-SSL fails
+	SSLMode string `json:"ssl_mode,omitempty"`
 
 	// DB request timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
@@ -140,39 +151,43 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("postgres adapter failed to parse DSN: " + err.Error())
 	}
 
-	// ConnectConfig creates a new Pool and immediately establishes one connection.
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+	// NewWithConfig only creates a pool object. Ping to validate connectivity.
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
+	if err != nil {
+		return err
+	}
+
+	err = a.db.Ping(ctx)
 	if isMissingDb(err) {
 		// Missing DB is OK if we are initializing the database.
 		// Since tinode DB does not exist, connect without specifying the DB name.
+		a.db.Close()
 		a.poolConfig.ConnConfig.Database = ""
-		a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+		a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
+		if err != nil {
+			return err
+		}
+		err = a.db.Ping(ctx)
 	}
 	if err != nil {
 		return err
 	}
 
-	// Actually opening the network connection if one was not opened earlier.
-	if a.poolConfig.LazyConnect {
-		err = a.db.Ping(ctx)
+	if config.MaxOpenConns > 0 {
+		a.poolConfig.MaxConns = int32(config.MaxOpenConns)
+	}
+	if config.MaxIdleConns > 0 {
+		a.poolConfig.MinConns = int32(config.MaxIdleConns)
+	}
+	if config.ConnMaxLifetime > 0 {
+		a.poolConfig.MaxConnLifetime = time.Duration(config.ConnMaxLifetime) * time.Second
+	}
+	if config.SqlTimeout > 0 {
+		a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
+		// We allocate txTimeoutMultiplier times sqlTimeout for transactions.
+		a.txTimeout = time.Duration(float64(config.SqlTimeout)*txTimeoutMultiplier) * time.Second
 	}
 
-	if err == nil {
-		if config.MaxOpenConns > 0 {
-			a.poolConfig.MaxConns = int32(config.MaxOpenConns)
-		}
-		if config.MaxIdleConns > 0 {
-			a.poolConfig.MinConns = int32(config.MaxIdleConns)
-		}
-		if config.ConnMaxLifetime > 0 {
-			a.poolConfig.MaxConnLifetime = time.Duration(config.ConnMaxLifetime) * time.Second
-		}
-		if config.SqlTimeout > 0 {
-			a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
-			// We allocate txTimeoutMultiplier times sqlTimeout for transactions.
-			a.txTimeout = time.Duration(float64(config.SqlTimeout)*txTimeoutMultiplier) * time.Second
-		}
-	}
 	return err
 }
 
@@ -203,8 +218,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 		defer cancel()
 	}
 	var vers string
-	err := a.db.QueryRow(ctx, "SELECT value FROM kvmeta WHERE key = $1", "version").Scan(&vers)
-
+	err := a.db.QueryRow(ctx, "SELECT value FROM kvmeta WHERE key='version'").Scan(&vers)
 	if err != nil {
 		if isMissingDb(err) || isMissingTable(err) || err == pgx.ErrNoRows {
 			err = errors.New("Database not initialized")
@@ -223,7 +237,7 @@ func (a *adapter) updateDbVersion(v int) error {
 		defer cancel()
 	}
 	a.version = -1
-	if _, err := a.db.Exec(ctx, "UPDATE kvmeta SET value = $1 WHERE key = $2", strconv.Itoa(v), "version"); err != nil {
+	if _, err := a.db.Exec(ctx, `UPDATE kvmeta SET "value"=$1 WHERE "key"='version'`, strconv.Itoa(v)); err != nil {
 		return err
 	}
 	return nil
@@ -292,8 +306,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Create default database name
 	a.poolConfig.ConnConfig.Database = "postgres"
 
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
 	if err != nil {
+		return err
+	}
+	if err = a.db.Ping(ctx); err != nil {
 		return err
 	}
 
@@ -308,8 +325,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	a.poolConfig.ConnConfig.Database = a.dbName
-	a.db, err = pgxpool.ConnectConfig(ctx, a.poolConfig)
+	a.db, err = pgxpool.NewWithConfig(ctx, a.poolConfig)
 	if err != nil {
+		return err
+	}
+	if err = a.db.Ping(ctx); err != nil {
 		return err
 	}
 
@@ -410,14 +430,17 @@ func (a *adapter) CreateDb(reset bool) error {
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
+			subcnt    INT DEFAULT 0,
 			public    JSON,
 			trusted   JSON,
 			tags      JSON,
+			aux				JSON,
 			PRIMARY KEY(id)
 		);
 		CREATE UNIQUE INDEX topics_name ON topics(name);
 		CREATE INDEX topics_owner ON topics(owner);
-		CREATE INDEX topics_state_stateat ON topics(state, stateat);`); err != nil {
+		CREATE INDEX topics_state_stateat ON topics(state, stateat);
+		CREATE INDEX topics_name_state_seqid ON topics(name, state, seqid);`); err != nil {
 		return err
 	}
 
@@ -436,7 +459,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			FOREIGN KEY(topic) REFERENCES topics(name)
 		);
 		CREATE INDEX topictags_tag ON topictags(tag);
-		CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag);`); err != nil {
+		CREATE UNIQUE INDEX topictags_topic_tag ON topictags(topic, tag);`); err != nil {
 		return err
 	}
 
@@ -460,7 +483,8 @@ func (a *adapter) CreateDb(reset bool) error {
 		);
 		CREATE UNIQUE INDEX subscriptions_topic_userid ON subscriptions(topic, userid);
 		CREATE INDEX subscriptions_topic ON subscriptions(topic);
-		CREATE INDEX subscriptions_deletedat ON subscriptions(deletedat);`); err != nil {
+		CREATE INDEX subscriptions_deletedat ON subscriptions(deletedat);
+		CREATE INDEX subscriptions_userid_topic_deletedat ON subscriptions(userid, topic, deletedat);`); err != nil {
 		return err
 	}
 
@@ -525,7 +549,6 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Records of uploaded files.
 	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
-	// Using INDEX rather than FK on topic because it's either 'topics' or 'users' reference.
 	if _, err = tx.Exec(ctx,
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
@@ -535,6 +558,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
+			etag      VARCHAR(128),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id)
 		);
@@ -628,6 +652,53 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
+	if a.version == 113 {
+		// Perform database upgrade from version 113 to version 114.
+
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD COLUMN aux JSON"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec(ctx, "ALTER TABLE fileuploads ADD COLUMN etag VARCHAR(128)"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 114); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 114 {
+		// Perform database upgrade from version 114 to version 115.
+
+		// Find relevant subscriptions for given users efficiently, and use the join key too.
+		if _, err := a.db.Exec(ctx, "CREATE INDEX idx_subs_user_topic_del ON subscriptions(userid, topic, deletedat)"); err != nil {
+			return err
+		}
+
+		// Optimizes join; state filters; seqid supports the SUM operation.
+		if _, err := a.db.Exec(ctx, "CREATE INDEX idx_topics_name_state_seqid ON topics(name, state, seqid)"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 115); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 115 {
+		// Perform database upgrade from version 115 to version 116.
+
+		// Add subscriber count column to the topics table.
+		if _, err := a.db.Exec(ctx, "ALTER TABLE topics ADD subcnt INT DEFAULT 0"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 116); err != nil {
+			return err
+		}
+	}
+
 	if a.version != adpVersion {
 		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
 			". DB is still at " + strconv.Itoa(a.version))
@@ -648,14 +719,14 @@ func addTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal any, 
 		return nil
 	}
 
-	sql := fmt.Sprintf("INSERT INTO %s (%s, tag) VALUES($1,$2)", table, keyName)
-
+	//addTags(ctx, tx, "usertags", "userid", decoded_uid, add, reset == nil)
+	sql := "INSERT INTO " + table + " (" + keyName + ",tag) VALUES($1,$2)"
+	if ignoreDups {
+		sql += " ON CONFLICT DO NOTHING"
+	}
 	for _, tag := range tags {
 		if _, err := tx.Exec(ctx, sql, keyVal, tag); err != nil {
 			if isDupe(err) {
-				if ignoreDups {
-					continue
-				}
 				return t.ErrDuplicate
 			}
 			return err
@@ -670,8 +741,8 @@ func removeTags(ctx context.Context, tx pgx.Tx, table, keyName string, keyVal an
 		return nil
 	}
 
-	sql, args := expandQuery(fmt.Sprintf("DELETE FROM %s WHERE %s=? AND tag = ANY (?)", table, keyName), keyVal, tags)
-	_, err := tx.Exec(ctx, sql, args)
+	sql, args := expandQuery("DELETE FROM "+table+" WHERE "+keyName+"=? AND tag IN (?)", keyVal, tags)
+	_, err := tx.Exec(ctx, sql, args...)
 
 	return err
 }
@@ -702,8 +773,8 @@ func (a *adapter) UserCreate(user *t.User) error {
 		user.UpdatedAt,
 		user.State,
 		user.Access,
-		toJSON(user.Public),
-		toJSON(user.Trusted),
+		common.ToJSON(user.Public),
+		common.ToJSON(user.Trusted),
 		user.Tags); err != nil {
 		return err
 	}
@@ -874,7 +945,6 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 
 	var user t.User
 	var id int64
-
 	row, err := a.db.Query(ctx, "SELECT * FROM users WHERE id=$1 AND state!=$2", store.DecodeUid(uid), t.StateDeleted)
 	if err != nil {
 		return nil, err
@@ -920,12 +990,8 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			users = nil
 			break
 		}
-
-		if user.State == t.StateDeleted {
-			continue
-		}
-
 		user.SetUid(store.EncodeUid(id))
+
 		users = append(users, user)
 	}
 	if err == nil {
@@ -938,6 +1004,20 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 // UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
 // TODO: report when the user is not found.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
+	query := "SELECT name FROM topics WHERE owner=$1"
+	args := []any{store.DecodeUid(uid)}
+	// In case of hard delete, delete all topics, even those which were
+	// soft-deleted previsously.
+	if !hard {
+		query += " AND state!=$2"
+		args = append(args, t.StateDeleted)
+	}
+	// Get a list of topic names owned by the user (as 'grp' and 'chn').
+	ownTopics, err := a.topicNamesForUser(query, false, args...)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -964,7 +1044,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete user's subscriptions in all topics.
-		if err = subsDelForUser(ctx, tx, uid, true); err != nil {
+		if err = subsDelForUser(ctx, tx, decoded_uid, true); err != nil {
 			return err
 		}
 
@@ -978,31 +1058,34 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		// Delete topics where the user is the owner.
 
-		// First delete all messages in those topics.
-		if _, err = tx.Exec(ctx, "DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, "DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
+		if len(ownTopics) > 0 {
+			// First delete all messages in those topics.
+			if _, err = tx.Exec(ctx, "DELETE FROM dellog USING topics WHERE topics.name=dellog.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
 
-		// Delete all subscriptions.
-		if _, err = tx.Exec(ctx, "DELETE FROM subscriptions USING topics WHERE topics.name=subscriptions.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
+			// Deletion of messages will cascade to filemsglinks and so to fileuploads.
+			if _, err = tx.Exec(ctx, "DELETE FROM messages USING topics WHERE topics.name=messages.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
+			// Delete subscriptions for all users where the user is the owner of the topic.
+			sql, args, _ := sqlx.In("DELETE FROM subscriptions AS s WHERE topic IN (?)", ownTopics)
+			if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
+				return err
+			}
 
-		// Delete topic tags.
-		if _, err = tx.Exec(ctx, "DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1",
-			decoded_uid); err != nil {
-			return err
-		}
+			// Delete topic tags.
+			if _, err = tx.Exec(ctx, "DELETE FROM topictags USING topics WHERE topics.name=topictags.topic AND topics.owner=$1",
+				decoded_uid); err != nil {
+				return err
+			}
 
-		// And finally delete the topics.
-		if _, err = tx.Exec(ctx, "DELETE FROM topics WHERE owner=$1", decoded_uid); err != nil {
-			return err
+			// And finally delete the topics.
+			if _, err = tx.Exec(ctx, "DELETE FROM topics WHERE owner=$1", decoded_uid); err != nil {
+				return err
+			}
 		}
 
 		// Delete user's authentication records.
@@ -1024,40 +1107,43 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	} else {
 		// Disable all user's subscriptions. That includes p2p subscriptions. No need to delete them.
-		if err = subsDelForUser(ctx, tx, uid, false); err != nil {
+		if err = subsDelForUser(ctx, tx, decoded_uid, false); err != nil {
 			return err
 		}
 
-		// Disable all subscriptions to topics where the user is the owner.
-		if _, err = tx.Exec(ctx, "UPDATE subscriptions SET updatedat=$1, deletedat=$2 "+
-			"FROM topics WHERE subscriptions.topic=topics.name AND topics.owner=$3",
-			now, now, decoded_uid); err != nil {
-			return err
+		if len(ownTopics) > 0 {
+			// Disable all subscriptions to topics where the user is the owner.
+			sql, args, _ := sqlx.In("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, ownTopics)
+			if _, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...); err != nil {
+				return err
+			}
+
+			// Disable group topics where the user is the owner.
+			if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 WHERE owner=$3",
+				now, t.StateDeleted, decoded_uid); err != nil {
+				return err
+			}
 		}
-		// Disable group topics where the user is the owner.
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1, touchedat=$2, state=$3, stateat=$4 WHERE owner=$5",
-			now, now, t.StateDeleted, now, decoded_uid); err != nil {
-			return err
-		}
+
 		// Disable p2p topics with the user (p2p topic's owner is 0).
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1, touchedat=$2, state=$3, stateat=$4 "+
+		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 "+
 			"FROM subscriptions WHERE topics.name=subscriptions.topic "+
-			"AND topics.owner=0 AND subscriptions.userid=$5",
-			now, now, t.StateDeleted, now, decoded_uid); err != nil {
+			"AND topics.owner=0 AND subscriptions.userid=$3",
+			now, t.StateDeleted, decoded_uid); err != nil {
 			return err
 		}
 
 		// Disable the other user's subscription to a disabled p2p topic.
-		if _, err = tx.Exec(ctx, "UPDATE subscriptions AS s_one SET updatedat=$1, deletedat=$2 "+
+		if _, err = tx.Exec(ctx, "UPDATE subscriptions AS s_one SET updatedat=$1,deletedat=$1 "+
 			"FROM subscriptions AS s_two WHERE s_one.topic=s_two.topic "+
-			"AND s_two.userid=$3 AND s_two.topic LIKE 'p2p%'",
-			now, now, decoded_uid); err != nil {
+			"AND s_two.userid=$2 AND s_two.topic LIKE 'p2p%'",
+			now, decoded_uid); err != nil {
 			return err
 		}
 
 		// Disable user.
-		if _, err = tx.Exec(ctx, "UPDATE users SET updatedat=$1, state=$2, stateat=$3 WHERE id=$4",
-			now, t.StateDeleted, now, decoded_uid); err != nil {
+		if _, err = tx.Exec(ctx, "UPDATE users SET updatedat=$1,state=$2,stateat=$1 WHERE id=$3",
+			now, t.StateDeleted, decoded_uid); err != nil {
 			return err
 		}
 	}
@@ -1066,6 +1152,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 }
 
 // topicStateForUser is called by UserUpdate when the update contains state change.
+// Soft-deleted topics remain soft-deleted.
 func (a *adapter) topicStateForUser(ctx context.Context, tx pgx.Tx, decoded_uid int64, now time.Time, update any) error {
 	var err error
 
@@ -1115,7 +1202,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 		}
 	}()
 
-	cols, args := updateByMap(update)
+	cols, args := common.UpdateByMap(update)
 	decoded_uid := store.DecodeUid(uid)
 	args = append(args, decoded_uid)
 	sql, args := expandQuery("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
@@ -1133,7 +1220,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	}
 
 	// Tags are also stored in a separate table
-	if tags := extractTags(update); tags != nil {
+	if tags := common.ExtractTags(update); tags != nil {
 		// First delete all user tags
 		_, err = tx.Exec(ctx, "DELETE FROM usertags WHERE userid=$1", decoded_uid)
 		if err != nil {
@@ -1147,6 +1234,22 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]any) error {
 	}
 
 	return tx.Commit(ctx)
+}
+
+func tempFetchTags(ctx context.Context, tx pgx.Tx, decoded_uid int64) ([]string, error) {
+	var allTags []string
+	rows, err := tx.Query(ctx, "SELECT tag FROM usertags WHERE userid=$1", decoded_uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tag string
+		rows.Scan(&tag)
+		allTags = append(allTags, tag)
+	}
+	return allTags, nil
 }
 
 // UserUpdateTags adds or resets user's tags
@@ -1195,13 +1298,13 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var tag string
 		rows.Scan(&tag)
 		allTags = append(allTags, tag)
 	}
-	rows.Close()
 
 	_, err = tx.Exec(ctx, "UPDATE users SET tags=$1 WHERE id=$2", t.StringSlice(allTags), decoded_uid)
 	if err != nil {
@@ -1233,6 +1336,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // UserUnreadCount returns the total number of unread messages in all topics with
 // the R permission. If read fails, the counts are still returned with the original
 // user IDs but with the unread count undefined and non-nil error.
+// UserUnreadCount does not count unread messages in channels although it should.
 func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 	uids := make([]any, len(ids))
 	counts := make(map[t.Uid]int, len(ids))
@@ -1242,15 +1346,15 @@ func (a *adapter) UserUnreadCount(ids ...t.Uid) (map[t.Uid]int, error) {
 		counts[id] = 0
 	}
 
-	query, uids := expandQuery("SELECT s.userid, SUM(t.seqid)-SUM(s.readseqid) AS unreadcount FROM topics AS t, subscriptions AS s "+
-		"WHERE s.userid IN (?) AND t.name=s.topic AND s.deletedat IS NULL AND t.state!=? AND "+
-		"POSITION('R' IN s.modewant)>0 AND POSITION('R' IN s.modegiven)>0 GROUP BY s.userid", uids, t.StateDeleted)
-
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
 
+	// FIXME: support channels.
+	query, uids := expandQuery("SELECT s.userid, SUM(t.seqid)-SUM(s.readseqid) AS unreadcount FROM topics AS t, subscriptions AS s "+
+		"WHERE s.userid IN (?) AND t.name=s.topic AND s.deletedat IS NULL AND t.state!=? AND "+
+		"POSITION('R' IN s.modewant)>0 AND POSITION('R' IN s.modegiven)>0 GROUP BY s.userid", uids, t.StateDeleted)
 	rows, err := a.db.Query(ctx, query, uids...)
 	if err != nil {
 		return counts, err
@@ -1311,10 +1415,11 @@ func (a *adapter) UserGetUnvalidated(lastUpdatedBefore time.Time, limit int) ([]
 // *****************************
 
 func (a *adapter) topicCreate(ctx context.Context, tx pgx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec(ctx, "INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,trusted,tags) "+
-		"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+	_, err := tx.Exec(ctx, "INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,trusted,tags,aux) "+
+		"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
 		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id, topic.UseBt,
-		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), toJSON(topic.Trusted), topic.Tags)
+		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, common.ToJSON(topic.Public), common.ToJSON(topic.Trusted),
+		topic.Tags, common.ToJSON(topic.Aux))
 	if err != nil {
 		return err
 	}
@@ -1351,7 +1456,7 @@ func createSubscription(ctx context.Context, tx pgx.Tx, sub *t.Subscription, und
 
 	isOwner := (sub.ModeGiven & sub.ModeWant).IsOwner()
 
-	jpriv := toJSON(sub.Private)
+	jpriv := common.ToJSON(sub.Private)
 	decoded_uid := store.DecodeUid(t.ParseUid(sub.User))
 	_, err2 := tx.Exec(ctx, "SAVEPOINT createSub")
 	if err2 != nil {
@@ -1428,18 +1533,19 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
-	ctx, cancel := a.getContext()
+	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
 	}
+
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	var owner int64
 	err := a.db.QueryRow(ctx,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,subcnt,public,trusted,tags,aux "+
 			"FROM topics WHERE name=$1",
 		topic).Scan(&tt.CreatedAt, &tt.UpdatedAt, &tt.State, &tt.StateAt, &tt.TouchedAt, &tt.Id,
-		&tt.UseBt, &tt.Access, &owner, &tt.SeqId, &tt.DelId, &tt.Public, &tt.Trusted, &tt.Tags)
+		&tt.UseBt, &tt.Access, &owner, &tt.SeqId, &tt.DelId, &tt.SubCnt, &tt.Public, &tt.Trusted, &tt.Tags, &tt.Aux)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			// Nothing found - clear the error
@@ -1448,9 +1554,27 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 
+	if t.GetTopicCat(topic) == t.TopicCatGrp {
+		// Topic found, get subsription count. Try both topic and channel names.
+		var subCnt int
+		if err = a.db.QueryRow(ctx,
+			"SELECT COUNT(*) FROM subscriptions WHERE topic IN ($1,$2) AND deletedat IS NULL", topic, t.GrpToChn(topic)).
+			Scan(&subCnt); err != nil {
+			return nil, err
+		}
+
+		if subCnt != tt.SubCnt {
+			// Update the topic with the correct subscription count.
+			tt.SubCnt = subCnt
+			if _, err = a.db.Exec(ctx, "UPDATE topics SET subcnt=$1 WHERE name=$2", subCnt, topic); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	tt.Owner = store.EncodeUid(owner).String()
 
-	return tt, nil
+	return tt, err
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
@@ -1465,8 +1589,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		// Filter out deleted rows.
 		q += " AND deletedat IS NULL"
 	}
+
 	limit := 0
-	ipg := time.Time{}
+	ims := time.Time{}
 	if opts != nil {
 		if opts.Topic != "" {
 			q += " AND topic=?"
@@ -1482,7 +1607,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				limit = a.maxResults
 			}
 		} else {
-			ipg = *opts.IfModifiedSince
+			ims = *opts.IfModifiedSince
 		}
 	} else {
 		limit = a.maxResults
@@ -1500,11 +1625,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		defer cancel()
 	}
 	rows, err := a.db.Query(ctx, q, args...)
-
 	if err != nil {
-		rows.Close()
 		return nil, err
 	}
+	// Must close rows manually as we will be reusing it.
 
 	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
 	// Prepare a list of separate subscriptions to users vs topics
@@ -1525,7 +1649,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		tcat := t.GetTopicCat(tname)
 
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
-			// One of 'me', 'fnd' subscriptions, skip. Don't skip 'sys' subscription.
+			// One of 'me', 'fnd' subscriptions, skip.
+			// Don't skip 'sys' subscription.
 			continue
 		} else if tcat == t.TopicCatP2P {
 			// P2P subscription, find the other user to get user.Public and user.Trusted.
@@ -1537,16 +1662,14 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				usrq = append(usrq, store.DecodeUid(uid1))
 				sub.SetWith(uid1.UserId())
 			}
-			topq = append(topq, tname)
-		} else {
-			// Group or 'sys' subscription.
-			if tcat == t.TopicCatGrp {
-				// Maybe convert channel name to topic name.
-				tname = t.ChnToGrp(tname)
-			}
-			topq = append(topq, tname)
+		} else if tcat == t.TopicCatGrp {
+			// Maybe convert channel name to topic name.
+			tname = t.ChnToGrp(tname)
 		}
-		sub.Private = fromJSON(sub.Private)
+		// No special handling needed for 'slf', 'sys' subscriptions.
+
+		topq = append(topq, tname)
+		sub.Private = common.FromJSON(sub.Private)
 		join[tname] = sub
 	}
 	if err == nil {
@@ -1565,7 +1688,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch grp topics and join to subscriptions.
 	if len(topq) > 0 {
-		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,trusted,tags " +
+		q = "SELECT updatedat,state,touchedat,name AS id,usebt,access,seqid,delid,subcnt,public,trusted " +
 			"FROM topics WHERE name IN (?)"
 		newargs := []any{topq}
 
@@ -1575,10 +1698,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			newargs = append(newargs, t.StateDeleted)
 		}
 
-		if !ipg.IsZero() {
+		if !ims.IsZero() {
 			// Use cache timestamp if provided: get newer entries only.
 			q += " AND touchedat>?"
-			newargs = append(newargs, ipg)
+			newargs = append(newargs, ims)
 
 			if limit > 0 && limit < len(topq) {
 				// No point in fetching more than the requested limit.
@@ -1594,14 +1717,13 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		rows, err = a.db.Query(ctx2, q, newargs...)
 		if err != nil {
-			rows.Close()
 			return nil, err
 		}
 
 		var top t.Topic
 		for rows.Next() {
-			if err = rows.Scan(&top.CreatedAt, &top.UpdatedAt, &top.State, &top.StateAt, &top.TouchedAt, &top.Id, &top.UseBt,
-				&top.Access, &top.SeqId, &top.DelId, &top.Public, &top.Trusted, &top.Tags); err != nil {
+			if err = rows.Scan(&top.UpdatedAt, &top.State, &top.TouchedAt, &top.Id, &top.UseBt,
+				&top.Access, &top.SeqId, &top.DelId, &top.SubCnt, &top.Public, &top.Trusted); err != nil {
 				break
 			}
 
@@ -1612,6 +1734,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
+				sub.SetSubCnt(top.SubCnt)
 				sub.SetPublic(top.Public)
 				sub.SetTrusted(top.Trusted)
 			}
@@ -1630,10 +1753,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p subscriptions.
 	if len(usrq) > 0 {
-		q = "SELECT id,createdat,updatedat,state,stateat,access,lastseen,useragent,public,trusted,tags " +
+		q = "SELECT id,updatedat,state,access,lastseen,useragent,public,trusted " +
 			"FROM users WHERE id IN (?)"
 		newargs := []any{usrq}
-
 		if !keepDeleted {
 			// Optionally skip deleted users.
 			q += " AND state!=?"
@@ -1648,18 +1770,16 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if cancel3 != nil {
 			defer cancel3()
 		}
-
 		rows, err = a.db.Query(ctx3, q, newargs...)
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
 
 		for rows.Next() {
 			var usr2 t.User
 			var id int64
-			if err = rows.Scan(&id, &usr2.CreatedAt, &usr2.UpdatedAt, &usr2.State, &usr2.StateAt, &usr2.Access,
-				&usr2.LastSeen, &usr2.UserAgent, &usr2.Public, &usr2.Trusted, &usr2.Tags); err != nil {
+			if err = rows.Scan(&id, &usr2.UpdatedAt, &usr2.State, &usr2.Access, &usr2.LastSeen, &usr2.UserAgent,
+				&usr2.Public, &usr2.Trusted); err != nil {
 				break
 			}
 
@@ -1678,6 +1798,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err == nil {
 			err = rows.Err()
 		}
+		rows.Close()
 
 		if err != nil {
 			return nil, err
@@ -1817,24 +1938,30 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 }
 
 // topicNamesForUser reads a slice of strings using provided query.
-func (a *adapter) topicNamesForUser(uid t.Uid, sqlQuery string) ([]string, error) {
+func (a *adapter) topicNamesForUser(sqlQuery string, includeChan bool, args ...any) ([]string, error) {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	rows, err := a.db.Query(ctx, sqlQuery, store.DecodeUid(uid))
+	rows, err := a.db.Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var names []string
-	var name string
 	for rows.Next() {
+		var name string
 		if err = rows.Scan(&name); err != nil {
 			break
 		}
 		names = append(names, name)
+		// If the name is a group topic, also add the channel name if requested.
+		if includeChan {
+			if channel := t.GrpToChn(name); channel != "" {
+				names = append(names, channel)
+			}
+		}
 	}
 	if err == nil {
 		err = rows.Err()
@@ -1845,17 +1972,19 @@ func (a *adapter) topicNamesForUser(uid t.Uid, sqlQuery string) ([]string, error
 
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
-	return a.topicNamesForUser(uid, "SELECT name FROM topics WHERE owner=$1")
+	return a.topicNamesForUser("SELECT name FROM topics WHERE owner=$1 AND state!=$2",
+		false, store.DecodeUid(uid), t.StateDeleted)
 }
 
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
-	return a.topicNamesForUser(uid,
-		"SELECT topic FROM subscriptions WHERE userid=$1 AND topic LIKE 'chn%' "+
-			"AND POSITION('P' IN modewant)>0 AND POSITION('P' IN modegiven)>0 AND deletedat IS NULL")
+	return a.topicNamesForUser("SELECT topic FROM subscriptions WHERE userid=$1 AND topic LIKE 'chn%' "+
+		"AND POSITION('P' IN modewant)>0 AND POSITION('P' IN modegiven)>0 AND deletedat IS NULL",
+		false, store.DecodeUid(uid))
 }
 
-func (a *adapter) TopicShare(shares []*t.Subscription) error {
+// TopicShare creates topic subscriptions and increments the topic's subcnt.
+func (a *adapter) TopicShare(topic string, shares []*t.Subscription) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -1877,10 +2006,16 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 		}
 	}
 
+	if topic != "" {
+		if _, err = tx.Exec(ctx, "UPDATE topics SET subcnt=subcnt+$1 WHERE name=$2", len(shares), topic); err != nil {
+			return err
+		}
+	}
+
 	return tx.Commit(ctx)
 }
 
-// TopicDelete deletes specified topic.
+// TopicDelete deletes topic, subscriptions, messages.
 func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
@@ -1906,7 +2041,6 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 	if hard {
 		// Delete subscriptions. If this is a channel, delete both group subscriptions and channel subscriptions.
 		q, args := expandQuery("DELETE FROM subscriptions WHERE topic IN (?)", args)
-
 		if _, err = tx.Exec(ctx, q, args...); err != nil {
 			return err
 		}
@@ -1924,14 +2058,14 @@ func (a *adapter) TopicDelete(topic string, isChan, hard bool) error {
 		}
 	} else {
 		now := t.TimeNow()
-		q, args := expandQuery("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, args)
 
-		if _, err = tx.Exec(ctx, q, args); err != nil {
+		q, args := expandQuery("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic IN (?)", now, now, args)
+		if _, err = tx.Exec(ctx, q, args...); err != nil {
 			return err
 		}
 
-		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$2,state=$3,stateat=$4 WHERE name=$5",
-			now, now, t.StateDeleted, now, topic); err != nil {
+		if _, err = tx.Exec(ctx, "UPDATE topics SET updatedat=$1,touchedat=$1,state=$2,stateat=$1 WHERE name=$3",
+			now, t.StateDeleted, topic); err != nil {
 			return err
 		}
 	}
@@ -1945,6 +2079,18 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	}
 	_, err := a.db.Exec(ctx, "UPDATE topics SET seqid=$1,touchedat=$2 WHERE name=$3", msg.SeqId, msg.CreatedAt, topic)
 
+	return err
+}
+
+// TopicUpdateSubCnt updates subscriber count denormalized in topic.
+func (a *adapter) TopicUpdateSubCnt(topic string) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	_, err := a.db.Exec(ctx,
+		"UPDATE topics SET subcnt=(SELECT COUNT(*) FROM subscriptions WHERE topic IN ($1,$2) AND deletedat IS NULL) WHERE name=$1",
+		topic, t.GrpToChn(topic))
 	return err
 }
 
@@ -1967,7 +2113,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]any) error {
 	if t, u := update["TouchedAt"], update["UpdatedAt"]; t == nil && u != nil {
 		update["TouchedAt"] = u
 	}
-	cols, args := updateByMap(update)
+	cols, args := common.UpdateByMap(update)
 	q, args := expandQuery("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args, topic)
 	_, err = tx.Exec(ctx, q, args...)
 	if err != nil {
@@ -1975,7 +2121,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]any) error {
 	}
 
 	// Tags are also stored in a separate table
-	if tags := extractTags(update); tags != nil {
+	if tags := common.ExtractTags(update); tags != nil {
 		// First delete all user tags
 		_, err = tx.Exec(ctx, "DELETE FROM topictags WHERE topic=$1", topic)
 		if err != nil {
@@ -2006,12 +2152,15 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 	if cancel != nil {
 		defer cancel()
 	}
+	query := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=$1 AND userid=$2`
+	if !keepDeleted {
+		query += " AND deletedat IS NULL"
+	}
 	var sub t.Subscription
 	var userId int64
 	var modeWant, modeGiven []byte
-	err := a.db.QueryRow(ctx, `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
-		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=$1 AND userid=$2`,
-		topic, store.DecodeUid(user)).Scan(&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt, &userId,
+	err := a.db.QueryRow(ctx, query, topic, store.DecodeUid(user)).Scan(&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt, &userId,
 		&sub.Topic, &sub.DelId, &sub.RecvSeqId, &sub.ReadSeqId, &modeWant, &modeGiven, &sub.Private)
 
 	if err != nil {
@@ -2020,10 +2169,6 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid, keepDeleted bool) (*
 			err = nil
 		}
 		return nil, err
-	}
-
-	if !keepDeleted && sub.DeletedAt != nil {
-		return nil, nil
 	}
 
 	sub.User = store.EncodeUid(userId).String()
@@ -2080,7 +2225,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
 
 	args := []any{topic}
-
 	if !keepDeleted {
 		// Filter out deleted rows.
 		q += " AND deletedat IS NULL"
@@ -2152,13 +2296,13 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]any) er
 		}
 	}()
 
-	cols, args := updateByMap(update)
-	args = append(args, topic)
+	cols, args := common.UpdateByMap(update)
 	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
+	args = append(args, topic)
 	if !user.IsZero() {
 		// Update just one topic subscription
-		args = append(args, store.DecodeUid(user))
 		q += " AND userid=?"
+		args = append(args, store.DecodeUid(user))
 	}
 	q, args = expandQuery(q, args...)
 
@@ -2169,7 +2313,7 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]any) er
 	return tx.Commit(ctx)
 }
 
-// SubsDelete marks subscription as deleted.
+// SubsDelete marks at most one subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -2203,24 +2347,67 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		return err
 	}
 
-	// Remove records of messages soft-deleted by this user.
-	_, err = tx.Exec(ctx, "DELETE FROM dellog WHERE topic=$1 AND deletedfor=$2", topic, decoded_id)
-	if err != nil {
-		return err
+	// Channel readers cannot delete messages.
+	if !t.IsChannel(topic) {
+		// Remove records of messages soft-deleted by this user.
+		_, err = tx.Exec(ctx, "DELETE FROM dellog WHERE topic=$1 AND deletedfor=$2", topic, decoded_id)
+		if err != nil {
+			return err
+		}
+	}
+
+	if t.GetTopicCat(topic) == t.TopicCatGrp {
+		// Decrement topic subscription count (only one subscription is	deleted).
+		_, err = tx.Exec(ctx, "UPDATE topics SET subcnt=subcnt-1 WHERE name=$1", topic)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit(ctx)
 }
 
 // subsDelForUser marks user's subscriptions as deleted.
-func subsDelForUser(ctx context.Context, tx pgx.Tx, user t.Uid, hard bool) error {
-	var err error
+func subsDelForUser(ctx context.Context, tx pgx.Tx, decoded_uid int64, hard bool) error {
+	// Decrement subscription count for all topics the user is subscribed to.
+	rows, err := tx.Query(ctx, "SELECT topic FROM subscriptions WHERE userid=$1 AND deletedat IS NULL", decoded_uid)
+	if err != nil {
+		return err
+	}
+	var topics []any
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			break
+		}
+		if t.IsChannel(name) {
+			// Convert channel name to group name.
+			name = t.ChnToGrp(name)
+		}
+		topics = append(topics, name)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(topics) > 0 {
+		sql, args, _ := sqlx.In("UPDATE topics SET subcnt=subcnt-1 WHERE name IN (?)", topics)
+		_, err = tx.Exec(ctx, sqlx.Rebind(sqlx.DOLLAR, sql), args...)
+		if err != nil {
+			return err
+		}
+	}
+
 	if hard {
-		_, err = tx.Exec(ctx, "DELETE FROM subscriptions WHERE userid=$1;", store.DecodeUid(user))
+		// Hard delete: remove all subscriptions for the user.
+		_, err = tx.Exec(ctx, "DELETE FROM subscriptions WHERE userid=$1", decoded_uid)
 	} else {
 		now := t.TimeNow()
 		_, err = tx.Exec(ctx, "UPDATE subscriptions SET updatedat=$1,deletedat=$2 WHERE userid=$3 AND deletedat IS NULL;",
-			now, now, store.DecodeUid(user))
+			now, now, decoded_uid)
 	}
 	return err
 }
@@ -2243,7 +2430,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		}
 	}()
 
-	if err = subsDelForUser(ctx, tx, user, hard); err != nil {
+	if err = subsDelForUser(ctx, tx, store.DecodeUid(user), hard); err != nil {
 		return err
 	}
 
@@ -2251,48 +2438,72 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 }
 
-// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
-// Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
+// Find returns a list of users and group topics which match the given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+func (a *adapter) Find(caller, promoPrefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []any
-	stateConstraint := ""
-	if activeOnly {
-		args = append(args, t.StateOK)
-		stateConstraint = "u.state=? AND "
-	}
+	constraint := ""
 	allReq := t.FlattenDoubleSlice(req)
-	allTags := append(allReq, opt...)
-	for _, tag := range allTags {
+	for _, tag := range append(allReq, opt...) {
+		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
-	args = append(args, allTags)
-
-	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
-		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE " + stateConstraint + "t.tag IN (?) GROUP BY u.id,u.createdat,u.updatedat"
-	if len(allReq) > 0 {
-		query += " HAVING"
-		first := true
-		for _, reqDisjunction := range req {
-			if len(reqDisjunction) > 0 {
-				if !first {
-					query += " AND"
-				} else {
-					first = false
-				}
-				// At least one of the tags must be present.
-				query += " COUNT(t.tag IN (?) OR NULL)>=1"
-				args = append(args, reqDisjunction)
-			}
-		}
+	if len(args) == 0 {
+		// Nothing to search for.
+		return nil, nil
 	}
-	query, args = expandQuery(query+" ORDER BY matches DESC LIMIT ?", args, a.maxResults)
+	constraint += "tg.tag IN (?) "
+	constraint, args, err := sqlx.In(constraint, args)
+	if err != nil {
+		return nil, err
+	}
+	if activeOnly {
+		args = append(args, t.StateOK)
+		constraint += "AND state=? "
+	}
+	constraint = sqlx.Rebind(sqlx.DOLLAR, constraint)
+
+	var matcher string
+	if promoPrefix != "" {
+		// The max number of tags is 16. Using 20 to make sure one prefix match is greater than all non-prefix matches.
+		matcher = "SUM(CASE WHEN POSITION('" + promoPrefix + "' IN tg.tag)=1 THEN 20 ELSE 1 END)"
+	} else {
+		matcher = "COUNT(*)"
+	}
+
+	query := "SELECT CAST(u.id AS VARCHAR) AS topic,u.createdat,u.updatedat,FALSE,u.access::jsonb,0 AS subcnt,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb," +
+		matcher + " AS matches " +
+		"FROM users AS u JOIN usertags AS tg ON tg.userid=u.id " +
+		"WHERE " + constraint +
+		"GROUP BY u.id,u.createdat,u.updatedat,u.access::jsonb,u.public::jsonb,u.trusted::jsonb,u.tags::jsonb "
+
+	having := ""
+	if len(allReq) > 0 {
+		var a []any
+		having, a = common.DisjunctionSql(req, "tg.tag")
+		having = rebindWithStart(having, len(args)+1)
+		query += having
+		args = append(args, a...)
+	}
+
+	query += "UNION ALL "
+
+	query += "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.subcnt,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb," +
+		matcher + " AS matches " +
+		"FROM topics AS t JOIN topictags AS tg ON t.name=tg.topic " +
+		"WHERE " + constraint +
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access::jsonb,t.subcnt,t.public::jsonb,t.trusted::jsonb,t.tags::jsonb "
+	if having != "" {
+		query += having
+	}
+	args = append(args, a.maxResults)
+	query += "ORDER BY matches DESC, subcnt DESC LIMIT $" + strconv.Itoa(len(args))
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
+
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
@@ -2300,38 +2511,46 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 	}
 	defer rows.Close()
 
-	var userId int64
+	// Fetch subscriptions
 	var public, trusted any
 	var access t.DefaultAccess
-	var userTags t.StringSlice
+	var subcnt int
+	var setTags t.StringSlice
 	var ignored int
+	var isChan bool
 	var sub t.Subscription
 	var subs []t.Subscription
-	thisUser := store.DecodeUid(user)
 	for rows.Next() {
-		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access,
-			&public, &trusted, &userTags, &ignored); err != nil {
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access, &subcnt,
+			&public, &trusted, &setTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
 
-		if userId == thisUser {
-			// Skip the callee
-			continue
+		if id, err := strconv.ParseInt(sub.Topic, 10, 64); err == nil {
+			sub.Topic = store.EncodeUid(id).UserId()
+			if sub.Topic == caller {
+				// Skip the caller.
+				continue
+			}
 		}
-		sub.User = store.EncodeUid(userId).String()
+
+		if isChan {
+			// This is a channel, convert grp to chn name.
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
+
+		sub.SetSubCnt(subcnt)
 		sub.SetPublic(public)
 		sub.SetTrusted(trusted)
 		sub.SetDefaultAccess(access.Auth, access.Anon)
-		foundTags := make([]string, 0, 1)
-		for _, tag := range userTags {
-			if _, ok := index[tag]; ok {
-				foundTags = append(foundTags, tag)
-			}
-		}
-		sub.Private = foundTags
+		// Indicating that the mode is not set, not 'N'.
+		sub.ModeGiven = t.ModeUnset
+		sub.ModeWant = t.ModeUnset
+		sub.Private = common.FilterFoundTags(setTags, index)
 		subs = append(subs, sub)
 	}
+
 	if err == nil {
 		err = rows.Err()
 	}
@@ -2340,93 +2559,51 @@ func (a *adapter) FindUsers(user t.Uid, req [][]string, opt []string, activeOnly
 
 }
 
-// Returns a list of topics with matching tags.
-// Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error) {
-	index := make(map[string]struct{})
+// FindOne returns topic or user which matches the given tag.
+func (a *adapter) FindOne(tag string) (string, error) {
 	var args []any
-	stateConstraint := ""
-	if activeOnly {
-		args = append(args, t.StateOK)
-		stateConstraint = "t.state=? AND "
-	}
-	allReq := t.FlattenDoubleSlice(req)
-	allTags := append(allReq, opt...)
-	for _, tag := range allTags {
-		index[tag] = struct{}{}
-	}
-	args = append(args, allTags)
+	query := "SELECT t.name AS topic FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE tt.tag=?"
+	args = append(args, tag)
 
-	query := "SELECT t.id,t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
-		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE " + stateConstraint + "tt.tag IN (?) GROUP BY t.id,t.name,t.createdat,t.updatedat,t.usebt"
-	if len(allReq) > 0 {
-		query += " HAVING"
-		first := true
-		for _, reqDisjunction := range req {
-			if len(reqDisjunction) > 0 {
-				if !first {
-					query += " AND"
-				} else {
-					first = false
-				}
-				// At least one of the tags must be present.
-				query += " COUNT(tt.tag IN (?) OR NULL)>=1"
-				args = append(args, reqDisjunction)
-			}
-		}
-	}
-	query, args = expandQuery(query+" ORDER BY matches DESC LIMIT ?", args, a.maxResults)
+	query += " UNION ALL "
+
+	query += "SELECT CAST(u.id AS VARCHAR) AS topic FROM users AS u LEFT JOIN usertags AS ut ON ut.userid=u.id " +
+		"WHERE ut.tag=?"
+	args = append(args, tag)
+
+	// LIMIT is applied to all resultant rows.
+	query += " LIMIT 1"
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
+
+	query, args = expandQuery(query, args)
 	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer rows.Close()
 
-	var access t.DefaultAccess
-	var public, trusted any
-	var topicTags t.StringSlice
-	var id int
-	var ignored int
-	var isChan bool
-	var sub t.Subscription
-	var subs []t.Subscription
-	for rows.Next() {
-		if err = rows.Scan(&id, &sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
-			&public, &trusted, &topicTags, &ignored); err != nil {
-			subs = nil
-			break
+	var found string
+	if rows.Next() {
+		if err = rows.Scan(&found); err != nil {
+			return "", err
 		}
 
-		if isChan {
-			sub.Topic = t.GrpToChn(sub.Topic)
+		// Check if the found value is a topic name or a user ID.
+		// User IDs are returned as decoded decimal strings.
+		if id, err := strconv.ParseInt(found, 10, 64); err == nil {
+			found = store.EncodeUid(id).UserId()
 		}
-		sub.SetPublic(public)
-		sub.SetTrusted(trusted)
-		sub.SetDefaultAccess(access.Auth, access.Anon)
-		foundTags := make([]string, 0, 1)
-		for _, tag := range topicTags {
-			if _, ok := index[tag]; ok {
-				foundTags = append(foundTags, tag)
-			}
-		}
-		sub.Private = foundTags
-		subs = append(subs, sub)
 	}
 	if err == nil {
 		err = rows.Err()
 	}
 
-	if err != nil {
-		return nil, err
-	}
-	return subs, nil
-
+	return found, err
 }
 
 // Messages
@@ -2441,7 +2618,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	err := a.db.QueryRow(ctx,
 		`INSERT INTO messages(createdAt,updatedAt,seqid,topic,"from",head,content) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
-		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content)).Scan(&id)
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, common.ToJSON(msg.Content)).Scan(&id)
 	if err == nil {
 		// Replacing ID given by store by ID given by the DB.
 		msg.SetUid(t.Uid(id))
@@ -2451,16 +2628,28 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = a.maxMessageResults
-	var lower = 0
-	var upper = 1<<31 - 1
 
+	args := []any{store.DecodeUid(forUser), topic}
+	seqIdConstraint := ""
 	if opts != nil {
-		if opts.Since > 0 {
-			lower = opts.Since
-		}
-		if opts.Before > 0 {
-			// MySQL BETWEEN is inclusive-inclusive, Tinode API requires inclusive-exclusive, thus -1
-			upper = opts.Before - 1
+		seqIdConstraint = "AND m.seqid "
+		if len(opts.IdRanges) > 0 {
+			constr, newargs := common.RangesToSql(opts.IdRanges)
+			seqIdConstraint += constr
+			args = append(args, newargs...)
+		} else {
+			seqIdConstraint += "BETWEEN ? AND ?"
+			if opts.Since > 0 {
+				args = append(args, opts.Since)
+			} else {
+				args = append(args, 0)
+			}
+			if opts.Before > 0 {
+				// BETWEEN is inclusive-inclusive, Tinode API requires inclusive-exclusive, thus -1
+				args = append(args, opts.Before-1)
+			} else {
+				args = append(args, 1<<31-1)
+			}
 		}
 
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -2468,21 +2657,19 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		}
 	}
 
-	unum := store.DecodeUid(forUser)
+	args = append(args, limit)
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
 
-	rows, err := a.db.Query(
-		ctx,
-		`SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m."from",m.head,m.content`+
-			" FROM messages AS m LEFT JOIN dellog AS d"+
-			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=$1"+
-			" WHERE m.delid=0 AND m.topic=$2 AND m.seqid BETWEEN $3 AND $4 AND d.deletedfor IS NULL"+
-			" ORDER BY m.seqid DESC LIMIT $5",
-		unum, topic, lower, upper, limit)
+	query, args := expandQuery(`SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m."from",m.head,m.content`+
+		" FROM messages AS m LEFT JOIN dellog AS d"+
+		" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
+		" WHERE m.delid=0 AND m.topic=? "+seqIdConstraint+" AND d.deletedfor IS NULL"+
+		" ORDER BY m.seqid DESC LIMIT ?", args...)
+	rows, err := a.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -2587,6 +2774,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 
 func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.DelMessage) error {
 	var err error
+
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
 		_, err = tx.Exec(ctx, "DELETE FROM dellog WHERE topic=$1", topic)
@@ -2594,69 +2782,105 @@ func messageDeleteList(ctx context.Context, tx pgx.Tx, topic string, toDel *t.De
 			_, err = tx.Exec(ctx, "DELETE FROM messages WHERE topic=$1", topic)
 		}
 		// filemsglinks will be deleted because of ON DELETE CASCADE
+		return err
+	}
 
-	} else {
-		// Only some messages are being deleted
-		// Start with making log entries
-		forUser := decodeUidString(toDel.DeletedFor)
+	// Only some messages are being deleted
 
-		// Counter of deleted messages
-		for _, rng := range toDel.SeqIdRanges {
-			if rng.Hi == 0 {
-				// Dellog must contain valid Low and *Hi*.
-				rng.Hi = rng.Low + 1
-			}
-			if _, err = tx.Exec(ctx,
-				"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES($1,$2,$3,$4,$5)",
-				topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
-				break
-			}
+	delRanges := toDel.SeqIdRanges
+
+	if toDel.DeletedFor == "" {
+		// Hard-deleting messages requires updates to the messages table.
+		where := "m.topic=? "
+		args := []any{topic}
+
+		if len(delRanges) > 0 {
+			rSql, rArgs := common.RangesToSql(delRanges)
+			where += " AND m.seqid " + rSql
+			args = append(args, rArgs...)
 		}
 
-		if err == nil && toDel.DeletedFor == "" {
-			// Hard-deleting messages requires updates to the messages table
-			where := "m.topic=? AND "
-			args := []any{topic}
-			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
-				seqRange := []int{}
-				for _, r := range toDel.SeqIdRanges {
-					if r.Hi == 0 {
-						seqRange = append(seqRange, r.Low)
-					} else {
-						for i := r.Low; i < r.Hi; i++ {
-							seqRange = append(seqRange, i)
-						}
-					}
-				}
-				args = append(args, seqRange)
-				where += "m.seqid IN (?)"
+		where += " AND m.deletedat IS NULL"
 
-			} else {
-				// Optimizing for a special case of single range low..hi.
-				where += "m.seqid BETWEEN ? AND ?"
-				// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
-				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
-			}
-			where += " AND m.deletedAt IS NULL"
-			query, newargs := expandQuery("DELETE FROM filemsglinks AS fml USING messages AS m WHERE m.id=fml.msgid AND "+
-				where, args...)
+		// We are asked to delete messages no older than newerThan.
+		if newerThan := toDel.GetNewerThan(); newerThan != nil {
+			where += " AND m.createdat>?"
+			args = append(args, newerThan)
+		}
 
-			_, err = tx.Exec(ctx, query, newargs...)
-			if err != nil {
+		// Find the actual IDs still present in the database.
+		var seqIDs []int
+		query, newargs := expandQuery("SELECT seqid FROM messages AS m WHERE "+where, args)
+		rows, err := tx.Query(ctx, query, newargs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var seqID int
+			if err := rows.Scan(&seqID); err != nil {
 				return err
 			}
+			seqIDs = append(seqIDs, seqID)
+		}
+		if err = rows.Err(); err != nil {
+			return err
+		}
 
-			query, newargs = expandQuery("UPDATE messages AS m SET deletedat=?,delid=?,head=NULL,content=NULL WHERE "+
-				where, t.TimeNow(), toDel.DelId, args)
+		if len(seqIDs) == 0 {
+			// Nothing to delete. No need to make a log entry. All done.
+			return nil
+		}
 
-			_, err = tx.Exec(ctx, query, newargs...)
+		// Recalculate the actual ranges to delete.
+		sort.Ints(seqIDs)
+		delRanges = t.SliceToRanges(seqIDs)
+
+		// Compose a new query with the new ranges.
+		where = "m.topic=?"
+		args = []any{topic}
+		rSql, rArgs := common.RangesToSql(delRanges)
+		where += " AND m.seqid " + rSql
+		args = append(args, rArgs...)
+
+		// No need to add anything else: deletedat etc is already accounted for.
+
+		query, newargs = expandQuery("DELETE FROM filemsglinks AS fml USING messages AS m WHERE m.id=fml.msgid AND "+
+			where, args...)
+		_, err = tx.Exec(ctx, query, newargs...)
+		if err != nil {
+			return err
+		}
+
+		query, newargs = expandQuery(`UPDATE messages AS m SET deletedat=?,delid=?,"from"=0,head=NULL,content=NULL WHERE `+
+			where, t.TimeNow(), toDel.DelId, args)
+		_, err = tx.Exec(ctx, query, newargs...)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Now make log entries. Needed for both hard- and soft-deleting.
+
+	// Prepare statement is not needed because the driver prepares the statement on first use then caches it.
+	forUser := common.DecodeUidString(toDel.DeletedFor)
+	for _, rng := range toDel.SeqIdRanges {
+		if rng.Hi == 0 {
+			// Dellog must contain valid Low and *Hi*.
+			rng.Hi = rng.Low + 1
+		}
+
+		if _, err = tx.Exec(ctx, "INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES($1,$2,$3,$4,$5)",
+			topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
+			break
 		}
 	}
 
 	return err
 }
 
-// MessageDeleteList deletes messages in the given topic with seqIds from the list
+// MessageDeleteList deletes messages in the given topic with seqIds from the list.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
@@ -2723,18 +2947,17 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 }
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
-	var unupg []any
+	var unums []any
 	for _, uid := range uids {
-		unupg = append(unupg, store.DecodeUid(uid))
+		unums = append(unums, store.DecodeUid(uid))
 	}
 
-	query, unupg := expandQuery("SELECT userid,deviceid,platform,lastseen,lang FROM devices WHERE userid IN (?)", unupg)
-
+	query, unums := expandQuery("SELECT userid,deviceid,platform,lastseen,lang FROM devices WHERE userid IN (?)", unums)
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	rows, err := a.db.Query(ctx, query, unupg...)
+	rows, err := a.db.Query(ctx, query, unums...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2842,7 +3065,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}()
 
 	now := t.TimeNow()
-	userId := decodeUidString(cred.User)
+	userId := common.DecodeUidString(cred.User)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
@@ -2934,7 +3157,7 @@ func credDel(ctx context.Context, tx pgx.Tx, uid t.Uid, method, value string) er
 	}
 
 	// Case 2.1
-	res, err = tx.Exec(ctx, "DELETE FROM credentials"+where+" AND (done=true OR retries=0)", args...)
+	res, err = tx.Exec(ctx, "DELETE FROM credentials"+where+" AND (done=TRUE OR retries=0)", args...)
 	if err != nil {
 		return err
 	}
@@ -2988,7 +3211,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	}
 	res, err := a.db.Exec(
 		ctx,
-		"UPDATE credentials SET updatedat=$1,done=true,synthetic=CONCAT(method,':',value) "+
+		"UPDATE credentials SET updatedat=$1,done=TRUE,synthetic=CONCAT(method,':',value) "+
 			"WHERE userid=$2 AND method=$3 AND deletedat IS NULL AND done=FALSE",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	if err != nil {
@@ -3025,14 +3248,12 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	err := a.db.QueryRow(ctx, "SELECT createdat,updatedat,method,value,resp,done,retries "+
 		"FROM credentials WHERE userid=$1 AND deletedat IS NULL AND method=$2 AND done=FALSE",
 		store.DecodeUid(uid), method).Scan(&cred.CreatedAt, &cred.UpdatedAt, &cred.Method, &cred.Value, &cred.Resp, &cred.Done, &cred.Retries)
-
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			err = nil
 		}
 		return nil, err
 	}
-
 	cred.User = uid.String()
 
 	return &cred, nil
@@ -3092,10 +3313,10 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 		user = store.DecodeUid(t.ParseUid(fd.User))
 	}
 	_, err := a.db.Exec(ctx,
-		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+
-			"VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,etag,location) "+
+			"VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
-		fd.Status, fd.MimeType, fd.Size, fd.Location)
+		fd.Status, fd.MimeType, fd.Size, fd.ETag, fd.Location)
 	return err
 }
 
@@ -3117,8 +3338,8 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 
 	now := t.TimeNow()
 	if success {
-		_, err = tx.Exec(ctx, "UPDATE fileuploads SET updatedat=$1,status=$2,size=$3 WHERE id=$4",
-			now, t.UploadCompleted, size, store.DecodeUid(fd.Uid()))
+		_, err = tx.Exec(ctx, "UPDATE fileuploads SET updatedat=$1,status=$2,size=$3,etag=$4,location=$5 WHERE id=$6",
+			now, t.UploadCompleted, size, fd.ETag, fd.Location, store.DecodeUid(fd.Uid()))
 		if err != nil {
 			return nil, err
 		}
@@ -3154,8 +3375,9 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	var fd t.FileDef
 	var ID int64
 	var userId int64
-	err := a.db.QueryRow(ctx, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
-		"FROM fileuploads WHERE id=$1", store.DecodeUid(id)).Scan(&ID, &fd.CreatedAt, &fd.UpdatedAt, &userId, &fd.Status, &fd.MimeType, &fd.Size, &fd.Location)
+	err := a.db.QueryRow(ctx, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,etag,location "+
+		"FROM fileuploads WHERE id=$1", store.DecodeUid(id)).Scan(&ID, &fd.CreatedAt, &fd.UpdatedAt, &userId, &fd.Status,
+		&fd.MimeType, &fd.Size, &fd.ETag, &fd.Location)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -3163,11 +3385,10 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		return nil, err
 	}
 
-	fd.SetUid(store.EncodeUid(ID))
+	fd.Id = common.EncodeUidString(fd.Id).String()
 	fd.User = store.EncodeUid(userId).String()
 
 	return &fd, nil
-
 }
 
 // FileDeleteUnused deletes file upload records.
@@ -3190,7 +3411,6 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
 		"WHERE fml.id IS NULL"
 	var args []any
-
 	if !olderThan.IsZero() {
 		query += " AND fu.updatedat<?"
 		args = append(args, olderThan)
@@ -3205,6 +3425,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var locations []string
 	var ids []any
@@ -3222,7 +3443,6 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	if err == nil {
 		err = rows.Err()
 	}
-	rows.Close()
 
 	if err != nil {
 		return nil, err
@@ -3304,7 +3524,6 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 
 	query, args := expandQuery("INSERT INTO filemsglinks(createdat,fileid,"+linkBy+") VALUES (?,?,?)"+
 		strings.Repeat(",(?,?,?)", len(dids)-1), args...)
-
 	_, err = tx.Exec(ctx, query, args...)
 	if err != nil {
 		return err
@@ -3343,13 +3562,12 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	}
 
 	var action string
-	if failOnDuplicate {
-		action = "INSERT"
-	} else {
-		action = "REPLACE"
+	if !failOnDuplicate {
+		action = ` ON CONFLICT ("key") DO UPDATE SET createdat=$2,"value"=$3`
 	}
 
-	_, err := a.db.Exec(ctx, action+` INTO kvmeta("key",createdat,"value") VALUES($1,$2,$3)`, key, t.TimeNow(), value)
+	_, err := a.db.Exec(ctx, `INSERT INTO kvmeta("key",createdat,"value") VALUES($1,$2,$3)`+action,
+		key, t.TimeNow(), value)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -3382,6 +3600,11 @@ func (a *adapter) PCacheExpire(keyPrefix string, olderThan time.Time) error {
 	return err
 }
 
+// GetTestDB returns a currently open database connection.
+func (a *adapter) GetTestDB() any {
+	return a.db
+}
+
 // Helper functions
 
 // Check if MySQL error is a Error Code: 1062. Duplicate entry ... for key ...
@@ -3412,101 +3635,44 @@ func isMissingDb(err error) bool {
 	return strings.Contains(msg, "SQLSTATE 3D000")
 }
 
-// Convert to JSON before storing to JSON field.
-func toJSON(src any) []byte {
-	if src == nil {
-		return nil
-	}
-
-	jval, _ := json.Marshal(src)
-	return jval
-}
-
-// Deserialize JSON data from DB.
-func fromJSON(src any) any {
-	if src == nil {
-		return nil
-	}
-	if bb, ok := src.([]byte); ok {
-		var out any
-		json.Unmarshal(bb, &out)
-		return out
-	}
-	return nil
-}
-
-// UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
-func encodeUidString(str string) t.Uid {
-	unum, _ := strconv.ParseInt(str, 10, 64)
-	return store.EncodeUid(unum)
-}
-
-func decodeUidString(str string) int64 {
-	uid := t.ParseUid(str)
-	return store.DecodeUid(uid)
-}
-
-// Convert update to a list of columns and arguments.
-func updateByMap(update map[string]any) (cols []string, args []any) {
-	for col, arg := range update {
-		col = strings.ToLower(col)
-		if col == "public" || col == "trusted" || col == "private" {
-			arg = toJSON(arg)
-		}
-		cols = append(cols, col+"=?")
-		args = append(args, arg)
-	}
-	return
-}
-
-// If Tags field is updated, get the tags so tags table cab be updated too.
-func extractTags(update map[string]any) []string {
-	var tags []string
-
-	if val := update["Tags"]; val != nil {
-		tags, _ = val.(t.StringSlice)
-	}
-
-	return []string(tags)
-}
-
-// Converting a structure with data to enter a connection string
+// setConnStr converts a config structure to a DSN connection string.
 func setConnStr(c configType) (string, error) {
+	// Default to disable SSL mode.
+	sslMode := "disable"
+	if c.SSLMode != "" {
+		sslMode = c.SSLMode
+	}
+
 	if c.User == "" || c.Passwd == "" || c.Host == "" || c.Port == "" || c.DBName == "" {
 		return "", errors.New("adapter postgres invalid config value")
 	}
-	connStr := fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable&connect_timeout=%d",
-		"postgres",
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d",
 		c.User,
 		c.Passwd,
 		c.Host,
 		c.Port,
 		c.DBName,
+		sslMode,
 		c.SqlTimeout)
 
 	return connStr, nil
 }
 
+// expandQuery replaces the placeholders in the query with the actual values and returns
+// the expanded query and the arguments to be used in the query.
 func expandQuery(query string, args ...any) (string, []any) {
 	var expandedArgs []any
 	var expandedQuery string
 
 	if len(args) != strings.Count(query, "?") {
-		args = flatMap(args)
+		args = flattenSlice(args)
 	}
-
 	expandedQuery, expandedArgs, _ = sqlx.In(query, args...)
-
-	placeholders := make([]string, len(expandedArgs))
-	for i := range expandedArgs {
-		placeholders[i] = "$" + strconv.Itoa(i+1)
-		expandedQuery = strings.Replace(expandedQuery, "?", placeholders[i], 1)
-	}
-
-	return expandedQuery, expandedArgs
+	return sqlx.Rebind(sqlx.DOLLAR, expandedQuery), expandedArgs
 }
 
-func flatMap(slice []any) []any {
+// flatMap converts a slice of mixed values/slices into a flat slice.
+func flattenSlice(slice []any) []any {
 	var result []any
 	for _, v := range slice {
 		switch reflect.TypeOf(v).Kind() {
@@ -3522,10 +3688,31 @@ func flatMap(slice []any) []any {
 	return result
 }
 
-func init() {
-	store.RegisterAdapter(&adapter{})
+// Rebind a query from ? to the target $ with custom initial value.
+func rebindWithStart(query string, startAt int) string {
+	// Add space enough for 10 params before we have to allocate
+	rqb := make([]byte, 0, len(query)+10)
+
+	var i, j = 0, startAt
+
+	for i = strings.Index(query, "?"); i != -1; i = strings.Index(query, "?") {
+		rqb = append(rqb, query[:i]...)
+		rqb = append(rqb, '$')
+
+		rqb = strconv.AppendInt(rqb, int64(j), 10)
+		j++
+
+		query = query[i+1:]
+	}
+
+	return string(append(rqb, query...))
 }
 
-func (a *adapter) GetTopicsLastMsgWriter(subs []t.Subscription) []t.Subscription {
-	return subs
+// GetTestAdapter returns an adapter object. Useful for running tests.
+func GetTestAdapter() *adapter {
+	return &adapter{}
+}
+
+func init() {
+	store.RegisterAdapter(&adapter{})
 }

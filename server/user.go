@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"time"
 
+	"slices"
+
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
@@ -69,7 +71,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Ensure tags are unique and not restricted.
-	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
+	if tags := normalizeTags(msg.Acc.Tags, globals.maxTagCount); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 			logs.Warn.Println("create user: attempt to directly assign restricted tags, sid=", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.Timestamp)
@@ -105,14 +107,14 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		if msg.Acc.Desc.DefaultAcs != nil {
 			if msg.Acc.Desc.DefaultAcs.Auth != "" {
 				user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))
-				user.Access.Auth &= types.ModeCP2P
+				user.Access.Auth &= globals.typesModeCP2P
 				if user.Access.Auth != types.ModeNone {
 					user.Access.Auth |= types.ModeApprove
 				}
 			}
 			if msg.Acc.Desc.DefaultAcs.Anon != "" {
 				user.Access.Anon.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Anon))
-				user.Access.Anon &= types.ModeCP2P
+				user.Access.Anon &= globals.typesModeCP2P
 				if user.Access.Anon != types.ModeNone {
 					user.Access.Anon |= types.ModeApprove
 				}
@@ -137,11 +139,12 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret, s.remoteAddr)
 	if err != nil {
 		logs.Warn.Println("create user: add auth record failed", err, "sid=", s.sid)
+		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
+
 		// Attempt to delete incomplete user record
 		if err = store.Users.Delete(user.Uid(), true); err != nil {
 			logs.Warn.Println("create user: failed to delete incomplete user record", err, "sid=", s.sid)
 		}
-		s.queueOut(decodeStoreError(err, msg.Id, msg.Timestamp, nil))
 		return
 	}
 
@@ -150,13 +153,14 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
 		logs.Warn.Println("create user: missing credentials; have:", creds, "want:",
 			globals.authValidators[rec.AuthLevel], s.sid)
+		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
+		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, msg.Timestamp,
+			map[string]any{"creds": missing}))
+
 		// Attempt to delete incomplete user record
 		if err = store.Users.Delete(user.Uid(), true); err != nil {
 			logs.Warn.Println("create user: failed to delete incomplete user record", err, "sid=", s.sid)
 		}
-		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
-		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, msg.Timestamp,
-			map[string]any{"creds": missing}))
 		return
 	}
 
@@ -294,7 +298,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		})
 		_, _, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
 		if err == nil {
-			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err != nil {
+			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err == nil {
 				var validated []string
 				for i := range allCreds {
 					validated = append(validated, allCreds[i].Method)
@@ -329,7 +333,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 }
 
 // Authentication update
-func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec, remoteAddr string) error {
+func updateUserAuth(msg *ClientComMessage, user *types.User, _ *auth.Rec, remoteAddr string) error {
 	authhdl := store.Store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl != nil {
 		// Request to update auth of an existing account. Only basic & rest auth are currently supported
@@ -487,13 +491,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	}
 
 	// Is this a required credential for this validation level?
-	var isRequired bool
-	for _, method := range globals.authValidators[authLvl] {
-		if method == cred.Method {
-			isRequired = true
-			break
-		}
-	}
+	isRequired := slices.Contains(globals.authValidators[authLvl], cred.Method)
 
 	// If credential is required, make sure the method remains validated even after this credential is deleted.
 	if isRequired {

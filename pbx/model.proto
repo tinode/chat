@@ -2,19 +2,23 @@ syntax = "proto3";
 package pbx;
 option go_package = "github.com/tinode/chat/pbx";
 
-// This is the single method that needs to be implemented by a gRPC client.
+// This is the methods that needs to be implemented by a gRPC client.
 service Node {
 	// Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
-  	rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+  rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+
+	// Large file upload: a request with a stream of chunks.
+	rpc LargeFileReceive(stream FileUpReq) returns (FileUpResp) {}
+
+	// Large file file download: a response with a stream of chunks.
+	rpc LargeFileServe(FileDownReq) returns (stream FileDownResp) {}
 }
 
 // Plugin interface.
 service Plugin {
 	// This plugin method is called by Tinode server for every message received from the clients. The
-	// method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further
-	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl
-	// and forward it to the client session.
-	// ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
+	// method returns a ServerResp message. ServerResp.status tells Tinode server what to do next.
+	// See possible values for ServerResp.status in RespCode below.
 	rpc FireHose(ClientReq) returns (ServerResp) {}
 
 	// An alteranative user and topic discovery mechanism.
@@ -95,6 +99,11 @@ message SetDesc {
 	bytes trusted = 4;
 }
 
+message SeqRange {
+	int32 low = 1;
+	int32 hi = 2;
+}
+
 message GetOpts {
 	// Timestamp in milliseconds since epoch 01/01/1970
 	int64 if_modified_since = 1;
@@ -108,6 +117,8 @@ message GetOpts {
 	int32 before_id = 5;
 	// Maximum number of results to return
 	int32 limit = 6;
+	// Load messages by id or ranges of ids
+	repeated SeqRange ranges = 7;
 }
 
 message GetQuery {
@@ -130,11 +141,8 @@ message SetQuery {
 	repeated string tags = 3;
 	// Credential being updated.
 	ClientCred cred = 4;
-}
-
-message SeqRange {
-	int32 low = 1;
-	int32 hi = 2;
+	// Auxiliary data.
+	map<string, bytes> aux = 5;
 }
 
 // Client handshake
@@ -436,6 +444,7 @@ message ServerPres {
 		RECV = 10;
 		DEL = 11;
 		TAGS = 12;
+		AUX = 13;
 	}
 	What what = 3;
 	string user_agent = 4;
@@ -457,6 +466,7 @@ message ServerMeta {
 	DelValues del = 5;
 	repeated string tags = 6;
 	repeated ServerCred cred = 7;
+	map<string, bytes> aux = 8;
 }
 
 // {info} message: server-side copy of ClientNote with From and optional Src added.
@@ -490,10 +500,11 @@ enum RespCode {
 	CONTINUE = 0;
 	// Drop the request as if the client did not send it
 	DROP = 1;
-	// Send the the provided response to the client.
+	// Send the the provided srvmsg response to the client. ServerResp must contain non-zero
+	// srvmsg.
 	RESPOND = 2;
-	// Replace client's original request with the provided request then continue with
-	// processing.
+	// Replace client's original request with the provided clmsg request then continue with
+	// processing. ServerResp must contain non-zero clmsg.
 	REPLACE = 3;
 }
 
@@ -576,4 +587,73 @@ message SubscriptionEvent {
 message MessageEvent {
 	Crud action = 1;
 	ServerData msg = 2;
+}
+
+// Large file handling.
+
+message Auth {
+	string scheme = 1;
+	string secret = 2;
+}
+
+// File description.
+message FileMeta {
+	string name = 1;
+	string mime_type = 2;
+	string etag = 3;
+	int64 size = 4;
+}
+
+// File upload request.
+message FileUpReq {
+	// Request ID.
+	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
+	// The topic this upload belongs to.
+	string topic = 3;
+	// Uploaded metadata.
+	FileMeta meta = 4;
+	// File bytes being uploaded.
+	bytes content = 5;
+}
+
+// Response to file upload.
+message FileUpResp {
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// New upload location.
+	string redir_url = 5;
+}
+
+// File download request.
+message FileDownReq {
+	// Request ID
+	string id = 1;
+	// Request authentication credentials.
+	Auth auth = 2;
+	// File URI to download.
+	string uri = 3;
+	// ETag
+	string if_modified = 4;
+}
+
+// Response to file download.
+message FileDownResp {
+	// Response ID.
+	string id = 1;
+	// Response code.
+	int32 code = 2;
+	// Response text.
+	string text = 3;
+	FileMeta meta = 4;
+	// File location.
+	string redir_url = 5;
+	// File bytes.
+	bytes content = 6;
 }

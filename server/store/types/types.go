@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -183,6 +184,11 @@ func (uid Uid) FndName() string {
 	return uid.PrefixId("fnd")
 }
 
+// SlfName generates 'slf' topic name for the given Uid.
+func (uid Uid) SlfName() string {
+	return uid.PrefixId("slf")
+}
+
 // PrefixId converts Uid to string prefixed with the given prefix.
 func (uid Uid) PrefixId(prefix string) string {
 	if uid.IsZero() {
@@ -201,6 +207,8 @@ func ParseUserId(s string) Uid {
 }
 
 // GrpToChn converts group topic name to corresponding channel name.
+// If it's a non-group channel topic, the name is returned unchanged.
+// If it's neither, an empty string is returned.
 func GrpToChn(grp string) string {
 	if strings.HasPrefix(grp, "grp") {
 		return strings.Replace(grp, "grp", "chn", 1)
@@ -221,6 +229,7 @@ func IsChannel(name string) bool {
 
 // ChnToGrp gets group topic name from channel name.
 // If it's a non-channel group topic, the name is returned unchanged.
+// If it's neither, an empty string is returned.
 func ChnToGrp(chn string) string {
 	if strings.HasPrefix(chn, "chn") {
 		return strings.Replace(chn, "chn", "grp", 1)
@@ -271,7 +280,7 @@ func (us *UidSlice) Rem(uid Uid) bool {
 	if idx == len(*us)-1 {
 		*us = (*us)[:idx]
 	} else {
-		*us = append((*us)[:idx], (*us)[idx+1:]...)
+		*us = slices.Delete((*us), idx, idx+1)
 	}
 	return true
 }
@@ -399,7 +408,7 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 type StringSlice []string
 
 // Scan implements sql.Scanner interface.
-func (ss *StringSlice) Scan(val interface{}) error {
+func (ss *StringSlice) Scan(val any) error {
 	if val == nil {
 		return nil
 	}
@@ -477,7 +486,7 @@ func (os *ObjState) UnmarshalJSON(b []byte) error {
 
 // Scan is an implementation of sql.Scanner interface. It expects the
 // value to be a byte slice representation of an ASCII string.
-func (os *ObjState) Scan(val interface{}) error {
+func (os *ObjState) Scan(val any) error {
 	switch intval := val.(type) {
 	case int64:
 		*os = ObjState(intval)
@@ -508,8 +517,8 @@ type User struct {
 	// User agent provided when accessing the topic last time
 	UserAgent string
 
-	Public  interface{}
-	Trusted interface{}
+	Public  any
+	Trusted any
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
@@ -541,11 +550,15 @@ const (
 	// Normal user's access to a topic ("JRWPS", 47, 0x2F).
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
 	// User's subscription to 'me' and 'fnd' ("JPS", 41, 0x29).
-	ModeCSelf AccessMode = ModeJoin | ModePres | ModeShare
+	ModeCMeFnd AccessMode = ModeJoin | ModePres | ModeShare
+	// User's  subscription to 'slf' topic ("JRWDO", 199, 0xC7).
+	ModeCSelf = ModeJoin | ModeRead | ModeWrite | ModeDelete | ModeOwner
 	// Owner's subscription to a generic topic ("JRWPASDO", 255, 0xFF).
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode ("JRWPA", 31, 0x1F).
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
+	// P2P acess mode when hard-deleting messages is enabled ("JRWPAD", 95, 0x5F)
+	ModeCP2PD AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeDelete
 	// Default Auth access mode for a user ("JRWPAS", 63, 0x3F).
 	ModeCAuth AccessMode = ModeCP2P | ModeCPublic
 	// Read-only access to topic ("JR", 3).
@@ -594,7 +607,7 @@ func ParseAcs(b []byte) (AccessMode, error) {
 	m0 := ModeUnset
 
 Loop:
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		switch b[i] {
 		case 'J', 'j':
 			m0 |= ModeJoin
@@ -670,7 +683,7 @@ func (m *AccessMode) UnmarshalJSON(b []byte) error {
 
 // Scan is an implementation of sql.Scanner interface. It expects the
 // value to be a byte slice representation of an ASCII string.
-func (m *AccessMode) Scan(val interface{}) error {
+func (m *AccessMode) Scan(val any) error {
 	if bb, ok := val.([]byte); ok {
 		return m.UnmarshalText(bb)
 	}
@@ -842,7 +855,7 @@ type DefaultAccess struct {
 
 // Scan is an implementation of Scanner interface so the value can be read from SQL DBs
 // It assumes the value is serialized and stored as JSON
-func (da *DefaultAccess) Scan(val interface{}) error {
+func (da *DefaultAccess) Scan(val any) error {
 	return json.Unmarshal(val.([]byte), da)
 }
 
@@ -899,21 +912,24 @@ type Subscription struct {
 	// Access mode granted to this user
 	ModeGiven AccessMode
 	// User's private data associated with the subscription to topic
-	Private interface{}
+	Private any
 
 	// Deserialized ephemeral values
 
 	// Deserialized public value from topic or user (depends on context)
 	// In case of P2P topics this is the Public value of the other user.
-	public interface{}
+	public any
 	// In case of P2P topics this is the Trusted value of the other user.
-	trusted interface{}
+	trusted any
 	// deserialized SeqID from user or topic
 	seqId int
 	// Deserialized TouchedAt from topic
 	touchedAt time.Time
 	// Timestamp & user agent of when the user was last online.
 	lastSeenUA *LastSeenUA
+
+	// Count of subscribers.
+	subCnt int
 
 	// P2P only. ID of the other user
 	with string
@@ -928,22 +944,22 @@ type Subscription struct {
 }
 
 // SetPublic assigns a value to `public`, otherwise not accessible from outside the package.
-func (s *Subscription) SetPublic(pub interface{}) {
+func (s *Subscription) SetPublic(pub any) {
 	s.public = pub
 }
 
 // GetPublic reads value of `public`.
-func (s *Subscription) GetPublic() interface{} {
+func (s *Subscription) GetPublic() any {
 	return s.public
 }
 
 // SetTrusted assigns a value to `trusted`, otherwise not accessible from outside the package.
-func (s *Subscription) SetTrusted(tstd interface{}) {
+func (s *Subscription) SetTrusted(tstd any) {
 	s.trusted = tstd
 }
 
 // GetTrusted reads value of `trusted`.
-func (s *Subscription) GetTrusted() interface{} {
+func (s *Subscription) GetTrusted() any {
 	return s.trusted
 }
 
@@ -985,6 +1001,16 @@ func (s *Subscription) GetSeqId() int {
 // SetSeqId sets seqId field.
 func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
+}
+
+// GetSubCnt returns subCnt (subscriber count).
+func (s *Subscription) GetSubCnt() int {
+	return s.subCnt
+}
+
+// SetSubCnt sets subCnt (subscriber count).
+func (s *Subscription) SetSubCnt(cnt int) {
+	s.subCnt = cnt
 }
 
 // GetLastSeen returns lastSeen.
@@ -1051,13 +1077,30 @@ type Contact struct {
 	MatchOn  []string
 	Access   DefaultAccess
 	LastSeen time.Time
-	Public   interface{}
+	Public   any
 }
 
 type perUserData struct {
-	private interface{}
+	private any
 	want    AccessMode
 	given   AccessMode
+}
+
+// MessageHeaders is needed to attach Scan() to.
+type KVMap map[string]any
+
+// Scan implements sql.Scanner interface.
+func (kvm *KVMap) Scan(val any) error {
+	if val == nil {
+		kvm = nil
+		return nil
+	}
+	return json.Unmarshal(val.([]byte), kvm)
+}
+
+// Value implements sql's driver.Valuer interface.
+func (kvm KVMap) Value() (driver.Value, error) {
+	return json.Marshal(kvm)
 }
 
 // Topic stored in database. Topic's name is Id
@@ -1085,11 +1128,17 @@ type Topic struct {
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
 
-	Public  interface{}
-	Trusted interface{}
+	// Count of topic subscribers.
+	SubCnt int
+
+	Public  any
+	Trusted any
 
 	// Indexed tags for finding this topic.
 	Tags StringSlice
+
+	// Auxiliary set of key-value pairs.
+	Aux KVMap `json:"Aux,omitempty" bson:",omitempty"`
 
 	// Deserialized ephemeral params
 	perUser map[Uid]*perUserData // deserialized from Subscription
@@ -1116,7 +1165,7 @@ func (t *Topic) GiveAccess(uid Uid, want, given AccessMode) {
 }
 
 // SetPrivate updates private value for the given user.
-func (t *Topic) SetPrivate(uid Uid, private interface{}) {
+func (t *Topic) SetPrivate(uid Uid, private any) {
 	if t.perUser == nil {
 		t.perUser = make(map[Uid]*perUserData, 1)
 	}
@@ -1129,7 +1178,7 @@ func (t *Topic) SetPrivate(uid Uid, private interface{}) {
 }
 
 // GetPrivate returns given user's private value.
-func (t *Topic) GetPrivate(uid Uid) (private interface{}) {
+func (t *Topic) GetPrivate(uid Uid) (private any) {
 	if t.perUser == nil {
 		return
 	}
@@ -1160,19 +1209,6 @@ type SoftDelete struct {
 	DelId int
 }
 
-// MessageHeaders is needed to attach Scan() to.
-type MessageHeaders map[string]interface{}
-
-// Scan implements sql.Scanner interface.
-func (mh *MessageHeaders) Scan(val interface{}) error {
-	return json.Unmarshal(val.([]byte), mh)
-}
-
-// Value implements sql's driver.Valuer interface.
-func (mh MessageHeaders) Value() (driver.Value, error) {
-	return json.Marshal(mh)
-}
-
 // Message is a stored {data} message
 type Message struct {
 	ObjHeader `bson:",inline"`
@@ -1186,8 +1222,8 @@ type Message struct {
 	Topic      string
 	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
-	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
-	Content interface{}
+	Head    KVMap `json:"Head,omitempty" bson:",omitempty"`
+	Content any
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).
@@ -1251,6 +1287,34 @@ func (rs RangeSorter) Normalize() RangeSorter {
 	return rs
 }
 
+// Convert a slice of int values to a slice of ranges.
+// The int slice must be sorted low -> high.
+func SliceToRanges(in []int) []Range {
+	if len(in) == 0 {
+		return nil
+	}
+
+	var out []Range
+	for _, id := range in {
+		size := len(out)
+
+		if size == 0 {
+			out = append(out, Range{Low: id})
+			continue
+		}
+
+		prev := &out[size-1]
+		if (prev.Hi == 0 && (id != prev.Low+1)) || (id > prev.Hi) {
+			// New range.
+			out = append(out, Range{Low: id})
+		} else {
+			// Expand existing range.
+			prev.Hi = id + 1
+		}
+	}
+	return out
+}
+
 // DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
 	ObjHeader   `bson:",inline"`
@@ -1258,6 +1322,19 @@ type DelMessage struct {
 	DeletedFor  string
 	DelId       int
 	SeqIdRanges []Range
+
+	// Delete messages newer than this value. Not serialized.
+	newerThan *time.Time
+}
+
+// GetNewerThan returns a newerThan delete query parameter.
+func (dm *DelMessage) GetNewerThan() *time.Time {
+	return dm.newerThan
+}
+
+// SetNewerThan sets a newerThan delete query parameter.
+func (dm *DelMessage) SetNewerThan(t time.Time) {
+	dm.newerThan = &t
 }
 
 // QueryOpt is options of a query, [since, before] - both ends inclusive (closed)
@@ -1271,6 +1348,8 @@ type QueryOpt struct {
 	Before int
 	// Common parameter
 	Limit int
+	// Ranges of IDs.
+	IdRanges []Range
 }
 
 // TopicCat is an enum of topic categories.
@@ -1287,6 +1366,8 @@ const (
 	TopicCatGrp
 	// TopicCatSys is a constant indicating a system topic.
 	TopicCatSys
+	// TopicCatSlf si a constant indicating a 'self' topic, i.e. topic for saved messages and notes.
+	TopicCatSlf
 )
 
 // GetTopicCat given topic name returns topic category.
@@ -1302,9 +1383,18 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatFnd
 	case "sys":
 		return TopicCatSys
+	case "slf":
+		return TopicCatSlf
 	default:
 		panic("invalid topic type for name '" + name + "'")
 	}
+}
+
+// IsEphemeralTopic checks if the topic is ephemeral, i.e. it's a reference to the user,
+// it's not stored in the 'topics' table like 'me' or 'fnd' topics.
+func IsEphemeralTopic(topic string) bool {
+	cat := GetTopicCat(topic)
+	return cat == TopicCatMe || cat == TopicCatFnd
 }
 
 // DeviceDef is the data provided by connected device. Used primarily for
@@ -1345,6 +1435,8 @@ type FileDef struct {
 	Size int64
 	// Internal file location, i.e. path on disk or an S3 blob address.
 	Location string
+	// ETag generated by the file server.
+	ETag string
 }
 
 // FlattenDoubleSlice turns 2d slice into a 1d slice.

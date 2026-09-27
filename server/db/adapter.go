@@ -115,16 +115,19 @@ type Adapter interface {
 	OwnTopics(uid t.Uid) ([]string, error)
 	// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 	ChannelsForUser(uid t.Uid) ([]string, error)
-	// TopicShare creates topc subscriptions
-	TopicShare(subs []*t.Subscription) error
-	// TopicDelete deletes topic, subscription, messages
+	// TopicShare creates topic subscriptions.
+	TopicShare(topic string, subs []*t.Subscription) error
+	// TopicDelete deletes topic, subscriptions, messages.
 	TopicDelete(topic string, isChan, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
+	// TopicUpdateSubCnt refreshes denormalized topic subscriber count.
+	TopicUpdateSubCnt(topic string) error
 	// TopicUpdate updates topic record.
 	TopicUpdate(topic string, update map[string]any) error
 	// TopicOwnerChange updates topic's owner
 	TopicOwnerChange(topic string, newOwner t.Uid) error
+
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
@@ -141,10 +144,16 @@ type Adapter interface {
 
 	// Search
 
-	// FindUsers searches for new contacts given a list of tags.
-	FindUsers(user t.Uid, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
-	// FindTopics searches for group topics given a list of tags.
-	FindTopics(req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
+	// Find searches for users or topics given a list of tags.
+	// - caller is the user or topic who is doing the searching, it will be skipped from results.
+	// - prefix if present will cause match rank highest in the results.
+	// - req is a list of required tag sets. Each set is a list of tags. The search will return
+	//   all users/topics which have at least one tag from each set.
+	// - opt is a list of optional tags; if present the result will rank higher.
+	// - activeOnly if true will return only active subscriptions.
+	Find(caller, prefix string, req [][]string, opt []string, activeOnly bool) ([]t.Subscription, error)
+	// FindOne returns topic or user which matches the given tag.
+	FindOne(tag string) (string, error)
 
 	// Messages
 
@@ -153,7 +162,7 @@ type Adapter interface {
 	// MessageGetAll returns messages matching the query
 	MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error)
 	// MessageDeleteList marks messages as deleted.
-	// Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
+	// Soft- or Hard- is defined by forUser value: forUser.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
@@ -192,4 +201,9 @@ type Adapter interface {
 	PCacheDelete(key string) error
 	// PCacheExpire expires older entries with the specified key prefix.
 	PCacheExpire(keyPrefix string, olderThan time.Time) error
+
+	// Testing
+
+	// GetTestDB returns a currently open database connection.
+	GetTestDB() any
 }

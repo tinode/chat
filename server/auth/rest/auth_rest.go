@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -18,6 +18,9 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// defaultTimeout is the HTTP client timeout used when no timeout is set in config.
+const defaultTimeout = 5 * time.Second
+
 // authenticator is the type to map authentication methods to.
 type authenticator struct {
 	// Logical name of this authenticator
@@ -28,6 +31,8 @@ type authenticator struct {
 	allowNewAccounts bool
 	// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
 	useSeparateEndpoints bool
+	// HTTP client with a timeout for calls to the auth server.
+	httpClient *http.Client
 	// Cache of restricted tag prefixes (namespaces).
 	rTagNS []string
 	// Optional regex pattern for checking tokens.
@@ -49,11 +54,11 @@ type newAccount struct {
 	Auth string `json:"auth,omitempty"`
 	Anon string `json:"anon,omitempty"`
 	// User's Public data
-	Public interface{} `json:"public,omitempty"`
+	Public any `json:"public,omitempty"`
 	// User's Trusted data
-	Trusted interface{} `json:"trusted,omitempty"`
+	Trusted any `json:"trusted,omitempty"`
 	// Per-subscription private data
-	Private interface{} `json:"private,omitempty"`
+	Private any `json:"private,omitempty"`
 }
 
 // Response from the server.
@@ -91,6 +96,8 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 		AllowNewAccounts bool `json:"allow_new_accounts"`
 		// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
 		UseSeparateEndpoints bool `json:"use_separate_endpoints"`
+		// Timeout for requests to the auth server in seconds. Default is 5.
+		Timeout int `json:"timeout"`
 	}
 
 	var config configType
@@ -112,6 +119,12 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	a.serverUrl = serverUrl.String()
 	a.allowNewAccounts = config.AllowNewAccounts
 	a.useSeparateEndpoints = config.UseSeparateEndpoints
+
+	timeout := defaultTimeout
+	if config.Timeout > 0 {
+		timeout = time.Duration(config.Timeout) * time.Second
+	}
+	a.httpClient = &http.Client{Timeout: timeout}
 
 	return nil
 }
@@ -137,8 +150,8 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 		urlToCall = epUrl.String()
 	}
 
-	// Send payload to server using default HTTP client.
-	post, err := http.Post(urlToCall, "application/json", bytes.NewBuffer(content))
+	// Send payload to server using client with a configured timeout.
+	post, err := a.httpClient.Post(urlToCall, "application/json", bytes.NewBuffer(content))
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +163,7 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 	}
 
 	// Read response.
-	body, err := ioutil.ReadAll(post.Body)
+	body, err := io.ReadAll(post.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -200,32 +213,37 @@ func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Re
 	}
 
 	// Check if server provided a user ID. If not, create a new account in the local database.
-	if resp.Record.Uid.IsZero() && a.allowNewAccounts {
-		if resp.NewAcc == nil {
+	if resp.Record.Uid.IsZero() {
+		if a.allowNewAccounts {
+			if resp.NewAcc == nil {
+				return nil, nil, types.ErrNotFound
+			}
+
+			// Create account, get UID, report UID back to the server.
+
+			user := types.User{
+				State:   resp.Record.State,
+				Public:  resp.NewAcc.Public,
+				Trusted: resp.NewAcc.Trusted,
+				Tags:    resp.Record.Tags,
+			}
+			user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
+			user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
+			_, err = store.Users.Create(&user, resp.NewAcc.Private)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// Report the new UID to the server.
+			resp.Record.Uid = user.Uid()
+			_, err = a.callEndpoint("link", resp.Record, secret, "")
+			if err != nil {
+				store.Users.Delete(resp.Record.Uid, true)
+				return nil, nil, err
+			}
+		} else {
+			// The external service has no linked account and local account creation is disabled.
 			return nil, nil, types.ErrNotFound
-		}
-
-		// Create account, get UID, report UID back to the server.
-
-		user := types.User{
-			State:   resp.Record.State,
-			Public:  resp.NewAcc.Public,
-			Trusted: resp.NewAcc.Trusted,
-			Tags:    resp.Record.Tags,
-		}
-		user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
-		user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
-		_, err = store.Users.Create(&user, resp.NewAcc.Private)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Report the new UID to the server.
-		resp.Record.Uid = user.Uid()
-		_, err = a.callEndpoint("link", resp.Record, secret, "")
-		if err != nil {
-			store.Users.Delete(resp.Record.Uid, true)
-			return nil, nil, err
 		}
 	}
 
@@ -302,7 +320,7 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 
 // GetResetParams returns authenticator parameters passed to password reset handler
 // (none for rest).
-func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+func (authenticator) GetResetParams(uid types.Uid) (map[string]any, error) {
 	// TODO: route request to the server.
 	return nil, nil
 }

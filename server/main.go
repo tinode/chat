@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
@@ -33,6 +32,7 @@ import (
 	_ "github.com/tinode/chat/server/auth/code"
 	_ "github.com/tinode/chat/server/auth/rest"
 	_ "github.com/tinode/chat/server/auth/token"
+	"github.com/tinode/chat/server/store/types"
 
 	// Database backends
 	_ "github.com/tinode/chat/server/db/mongodb"
@@ -48,6 +48,7 @@ import (
 	_ "github.com/tinode/chat/server/push/stdout"
 	_ "github.com/tinode/chat/server/push/tnpg"
 
+	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
 
 	// Credential validators
@@ -62,9 +63,9 @@ import (
 
 const (
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.23"
+	currentVersion = "0.25"
 	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.19"
+	minSupportedVersion = "0.20"
 
 	// idleSessionTimeout defines duration of being idle before terminating a session.
 	idleSessionTimeout = time.Second * 55
@@ -165,6 +166,8 @@ var globals struct {
 	// Tag namespaces which are immutable on User and partially mutable on Topic:
 	// user can only mutate tags he owns.
 	maskedTagNS map[string]bool
+	// Na,espace used for unique user and topic aliases.
+	aliasTagNS string
 
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
@@ -204,11 +207,22 @@ var globals struct {
 	wsCompression bool
 
 	// URL of the main endpoint.
-	// TODO: implement file-serving API for gRPC and remove this feature.
+	// DEPRECTATED: use file-serving gRPC API instead. This feature will be removed.
 	servingAt string
 
 	// Indicator if link preview generator is enabled.
 	linkPreviewEnabled bool
+
+	// P2P auth access mode. With or without the D permission depending on P2PDeleteAge.
+	typesModeCP2P types.AccessMode
+
+	// Maximum age of messages which can be deleted with 'D' permission.
+	msgDeleteAge time.Duration
+
+	// allowedOrigins is the list of HTTP Origins permitted for WebSocket and long-poll
+	// connections. Supports exact matches and wildcards (e.g. https://*.example.com).
+	// An empty slice means all origins are allowed (backward-compatible default).
+	allowedOrigins []media.AllowedOrigin
 }
 
 // Credential validator config.
@@ -279,8 +293,10 @@ type configType struct {
 	MaxMessageSize int `json:"max_message_size"`
 	// Maximum number of group topic subscribers.
 	MaxSubscriberCount int `json:"max_subscriber_count"`
-	// Masked tags: tags immutable on User (mask), mutable on Topic only within the mask.
+	// Masked tags namespaces: tags immutable on User (mask), mutable on Topic only within the mask.
 	MaskedTagNamespaces []string `json:"masked_tags"`
+	// Tag namespace used for unique user and topic aliases.
+	AliasTagNamespace string `json:"alias_tag"`
 	// Maximum number of indexable tags.
 	MaxTagCount int `json:"max_tag_count"`
 	// If true, ordinary users cannot delete their accounts.
@@ -303,6 +319,22 @@ type configType struct {
 	// /v0/urlpreview?url=https%3A%2F%2Ftinode.co visit the URL, parse HTML, and return JSON like
 	// {"title": "Page title", description: "This is a demo page", image_url: "https://tinode.co/img/logo.png"}.
 	LinkPreviewEnabled bool `json:"link_preview_enabled"`
+
+	// Permit hard-deleting messages in p2p topics for both participants.
+	// If it's set to 'false' then the message is only deleted for the peer who issued the command.
+	// If it's 'true' then the message is deleted completely by either participant.
+	// Changing the value affects the ability to hard-delete (the added or removed the D permission)
+	// only for new topics going forward.
+	P2PDeleteEnabled bool `json:"p2p_delete_enabled"`
+	// The maximum age of a message in seconds when it can be deleted by users with the 'D' permission.
+	// E.g. 600 means messages up to 10 minutes old can be deleted, older than that cannot be deleted.
+	// Missing or 0 means no age limit.
+	// Does not affect topic owners: owners can delete any message.
+	MsgDeleteAge int `json:"msg_delete_age"`
+
+	// AllowedOrigins is the list of HTTP Origins permitted for WebSocket and long-poll
+	// connections. An empty list allows all origins (default, backward compatible).
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -392,9 +424,6 @@ func main() {
 		decVersion = base10Version(parseVersion(currentVersion))
 	}
 	statsSet("Version", decVersion)
-
-	// Initialize random state
-	rand.Seed(time.Now().UnixNano())
 
 	// Initialize serving debug profiles (optional).
 	servePprof(mux, *pprofUrl)
@@ -530,6 +559,16 @@ func main() {
 		globals.maskedTagNS[tag] = true
 	}
 
+	// Alias namespace.
+	config.AliasTagNamespace = strings.TrimSpace(config.AliasTagNamespace)
+	if config.AliasTagNamespace != "" {
+		if prefix, _ := validateTag(config.AliasTagNamespace + ":testing"); prefix == "" {
+			logs.Err.Fatal("alias_tag namespace should contain only alphanumeric characters and '_'",
+				config.AliasTagNamespace)
+		}
+		globals.aliasTagNS = config.AliasTagNamespace
+	}
+
 	var tags []string
 	for tag := range globals.immutableTagNS {
 		tags = append(tags, "'"+tag+"'")
@@ -544,12 +583,26 @@ func main() {
 	if len(tags) > 0 {
 		logs.Info.Println("Masked tags:", tags)
 	}
+	if len(globals.aliasTagNS) > 0 {
+		logs.Info.Println("Alias tag:", globals.aliasTagNS)
+	}
 
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
 		globals.maxMessageSize = defaultMaxMessageSize
 	}
+
+	// Allowed origins for WebSocket and long-poll connections.
+	if len(config.AllowedOrigins) > 0 {
+		var err error
+		globals.allowedOrigins, err = media.ParseCORSAllow(config.AllowedOrigins)
+		if err != nil {
+			logs.Err.Fatal("Invalid allowed_origins:", err)
+		}
+		logs.Info.Println("Allowed origins:", config.AllowedOrigins)
+	}
+
 	// Maximum number of group topic subscribers
 	globals.maxSubscriberCount = config.MaxSubscriberCount
 	if globals.maxSubscriberCount <= 1 {
@@ -567,6 +620,16 @@ func main() {
 	globals.defaultCountryCode = config.DefaultCountryCode
 	if globals.defaultCountryCode == "" {
 		globals.defaultCountryCode = defaultCountryCode
+	}
+
+	// Default access mode for P2P: with/without the D permission.
+	globals.typesModeCP2P = types.ModeCP2P
+	if config.P2PDeleteEnabled {
+		globals.typesModeCP2P = types.ModeCP2PD
+	}
+
+	if config.MsgDeleteAge > 0 {
+		globals.msgDeleteAge = time.Duration(config.MsgDeleteAge) * time.Second
 	}
 
 	// Configuration of X-Frame-Options header.
@@ -732,7 +795,7 @@ func main() {
 	}
 
 	sspath := *serverStatusPath
-	if sspath == "" || sspath == "-" {
+	if sspath == "" {
 		sspath = config.ServerStatusPath
 	}
 	if sspath != "" && sspath != "-" {
@@ -746,9 +809,9 @@ func main() {
 	mux.Handle(config.ApiPath+"v0/channels/lp", gh.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	if config.Media != nil {
 		// Handle uploads of large files.
-		mux.Handle(config.ApiPath+"v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileReceive)))
+		mux.Handle(config.ApiPath+"v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileReceiveHTTP)))
 		// Serve large files.
-		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
+		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServeHTTP)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
 

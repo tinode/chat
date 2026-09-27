@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"strings"
@@ -200,12 +201,18 @@ func main() {
 
 			w.Write([]byte(`<html><head><title>Tinode Push</title></head><body>
 <h1>Tinode Push</h1>
-<pre>` + msg + `</pre>
+<pre>` + html.EscapeString(msg) + `</pre>
 </body></html>`))
 		})
 	}
 
 	log.Println("Reading Tinode expvar from", *tinodeAddr)
 	log.Printf("Exporter running at %s. Server type %s", *listenAt, serverTypeString)
-	log.Fatalln(http.ListenAndServe(*listenAt, nil))
+	exporterServer := &http.Server{
+		Addr:              *listenAt,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		WriteTimeout:      90 * time.Second,
+	}
+	log.Fatalln(exporterServer.ListenAndServe())
 }

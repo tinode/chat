@@ -10,7 +10,7 @@
 
 DROP DATABASE IF EXISTS tinode;
 
-CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 USE tinode;
 
@@ -100,13 +100,17 @@ CREATE TABLE topics(
 	access		JSON,
 	seqid		INT NOT NULL DEFAULT 0,
 	delid		INT DEFAULT 0,
-	public		JSON,
+	subcnt  INT DEFAULT 0,
+	public	JSON,
+	trusted	JSON,
 	tags		JSON, -- Denormalized array of tags
+	aux			JSON,
 
 	PRIMARY KEY(id),
 	UNIQUE INDEX topics_name (name),
 	INDEX topics_owner(owner),
-	INDEX topics_state_stateat(state, stateat)
+	INDEX topics_state_stateat(state, stateat),
+	INDEX topics_name_state_seqid ON topics(name, state, seqid)
 );
 
 # Indexed topic tags.
@@ -118,7 +122,7 @@ CREATE TABLE topictags(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	INDEX topictags_tag (tag),
-	UNIQUE INDEX topictags_userid_tag(topic, tag)
+	UNIQUE INDEX topictags_topic_tag(topic, tag)
 );
 
 # Subscriptions
@@ -140,7 +144,8 @@ CREATE TABLE subscriptions(
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX subscriptions_topic_userid(topic, userid),
 	INDEX subscriptions_topic(topic),
-	INDEX subscriptions_deletedat(deletedat)
+	INDEX subscriptions_deletedat(deletedat),
+	INDEX subscriptions_user_topic_deletedat ON subscriptions(userid, topic, deletedat)
 );
 
 # Messages
@@ -201,14 +206,15 @@ CREATE TABLE credentials(
 
 # Records of uploaded files. Files themselves are stored elsewhere.
 CREATE TABLE fileuploads(
-	id			BIGINT NOT NULL,
+	id				BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
 	updatedat	DATETIME(3) NOT NULL,
 	userid		BIGINT,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
-	size		BIGINT NOT NULL,
+	size			BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
+	etag			VARCHAR(128),
 
 	PRIMARY KEY(id),
 	INDEX fileuploads_status(status)
