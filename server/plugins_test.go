@@ -45,7 +45,7 @@ func TestPluginRPCDeadlines(t *testing.T) {
 	} {
 		for _, rpc := range calls {
 			t.Run(config.name+"/"+rpc.name, func(t *testing.T) {
-				pluginsInit([]byte(fmt.Sprintf(`[{"enabled":true,"name":"test","service_addr":"tcp://localhost:1","timeout":%d}]`, config.timeout.Microseconds())))
+				pluginsInit(fmt.Appendf(nil, `[{"enabled":true,"name":"test","service_addr":"tcp://localhost:1","timeout":%d}]`, config.timeout.Microseconds()))
 				// RPCs below use the fake client; close the initialization connection.
 				globals.plugins[0].conn.Close()
 				timeout := globals.plugins[0].timeout
