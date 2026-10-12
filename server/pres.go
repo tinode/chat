@@ -208,7 +208,10 @@ func (t *Topic) procPresReq(fromUserID, what string, wantReply bool) string {
 	// A[online, B:off] to B[online, A:off]: {pres A on}
 	// B[online, A:on] to A[online, B:off]: {pres B on}
 	// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-	if (onlineUpdate || reqReply) && wantReply {
+	// Incognito user must not reveal being online in a reply: it would reach contacts which came online
+	// later or started a new conversation, i.e. never received the "+dis" sent when the user went incognito.
+	hideOnline := replyAs == "on" && t.isIncognito()
+	if (onlineUpdate || reqReply) && wantReply && !hideOnline {
 		globals.hub.routeSrv <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
@@ -361,6 +364,22 @@ func (t *Topic) userIsPresencer(uid types.Uid) bool {
 		given = pud.modeGiven
 	}
 	return (want & given).IsPresencer()
+}
+
+// isIncognito returns true if the owner of this 'me' topic has removed the P permission from
+// the 'me' subscription (incognito mode). Such user must not be reported online to contacts.
+// The mode is persistent, unlike the "+dis" state which contacts keep in memory only and lose
+// when their 'me' topic is reloaded, so it must be checked whenever the user's status is announced.
+func (t *Topic) isIncognito() bool {
+	if t.cat != types.TopicCatMe {
+		return false
+	}
+	pud, ok := t.perUser[types.ParseUserId(t.name)]
+	if !ok {
+		// Subscription to 'me' is not loaded: don't hide the user by mistake.
+		return false
+	}
+	return !(pud.modeWant & pud.modeGiven).IsPresencer()
 }
 
 // Send notification to attached sessions directly, without routing though topic.
