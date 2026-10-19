@@ -456,6 +456,8 @@ A user is reported as being online when one or more of user's sessions are attac
  * When multiple user sessions are attached to `me`, the _user agent_ of the session where the most recent action has happened is reported in `{pres what="ua" ua="..."}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more frequently than once a minute.
  * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
 
+**Incognito mode.** A user who has the `P` permission removed from their `me` subscription (either `want` or `given`) is in _incognito mode_: the user is never reported as online to contacts. In this mode the server does not send `{pres what="on"}`, `{pres what="ua"}` or `{pres what="off"}` for the user, does not reply to presence requests from contacts with `{pres what="on"}`, and does not update the user's last seen timestamp and user agent. The mode is stored with the subscription, so it persists across reconnects, server restarts, and new P2P conversations.
+
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
 ## Trusted, Public, Private, Auxiliary Fields

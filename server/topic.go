@@ -610,7 +610,10 @@ func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNoti
 	switch t.cat {
 	case types.TopicCatMe:
 		uaTimer.Stop()
-		t.presUsersOfInterest("off", currentUA)
+		// Incognito user was never reported online: "off" would reveal that the user was active.
+		if !t.isIncognito() {
+			t.presUsersOfInterest("off", currentUA)
+		}
 	case types.TopicCatGrp:
 		t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 	}

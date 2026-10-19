@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/tinode/chat/server/store"
@@ -219,5 +220,43 @@ func TestUnregisterSessionIncognitoKeepsLastSeen(t *testing.T) {
 	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusOK})
 	if online := helper.topic.perUser[uid].online; online != 1 {
 		t.Errorf("online sessions: expected 1, found %d", online)
+	}
+}
+
+func TestHandleTopicTimeoutIncognito(t *testing.T) {
+	contact := types.Uid(2).UserId()
+	tests := []struct {
+		name      string
+		ownerWant types.AccessMode
+		wantOff   bool
+	}{
+		{"visible", types.ModeCMeFnd, true},
+		{"incognito", modeMeIncognito, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			topic, routeSrv := newMeTopicForPresTest(t, tc.ownerWant)
+			topic.perSubs[contact] = perSubsData{online: true, enabled: true}
+			unreg := make(chan *topicUnreg, 1)
+			globals.hub.unreg = unreg
+			uaTimer := time.NewTimer(time.Hour)
+			notifTimer := time.NewTimer(time.Hour)
+
+			topic.handleTopicTimeout(globals.hub, "ua", uaTimer, notifTimer)
+
+			if len(unreg) != 1 {
+				t.Error("topic is expected to be unregistered")
+			}
+			msgs := drainRouted(routeSrv)
+			if !tc.wantOff {
+				if len(msgs) != 0 {
+					t.Fatalf("expected no notifications, got %d: %+v", len(msgs), msgs[0].Pres)
+				}
+				return
+			}
+			if len(msgs) != 1 || msgs[0].RcptTo != contact || msgs[0].Pres.What != "off" {
+				t.Fatalf("expected a single 'off' to %s, got %d messages", contact, len(msgs))
+			}
+		})
 	}
 }
