@@ -105,7 +105,7 @@ func TestFileAuthenticationChecksStoredAccountState(t *testing.T) {
 func TestFileAuthenticationPreservesSignupAndChallenges(t *testing.T) {
 	oldStore, oldSessions := store.Store, globals.sessionStore
 	t.Cleanup(func() { store.Store, globals.sessionStore = oldStore, oldSessions })
-	globals.sessionStore = nil
+	globals.sessionStore = &SessionStore{sessCache: make(map[string]*Session)}
 	if uid, _, err := authFileRequest("", "", "", ""); !uid.IsZero() || err != nil {
 		t.Fatalf("signup rejected: %v", err)
 	}
