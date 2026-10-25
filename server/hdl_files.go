@@ -362,8 +362,8 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	msgID := req.GetId()
 
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -387,8 +387,12 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	// Check if media handler redirects or adds headers.
 	mh := store.Store.GetMediaHandler()
-	url, _ := url.Parse(req.Uri)
-	headers, statusCode, err := mh.Headers(http.MethodGet, url, http.Header{}, true)
+	fileURL, err := url.Parse(req.GetUri())
+	if err != nil {
+		writeResponse(ErrMalformed(msgID, "", now), err)
+		return nil
+	}
+	headers, statusCode, err := mh.Headers(http.MethodGet, fileURL, http.Header{}, true)
 	if err != nil {
 		writeResponse(decodeStoreError(err, "", now, nil), err)
 		return nil
@@ -466,8 +470,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	msgID := req.GetId()
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -562,7 +566,7 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 		err = <-done
 	}
 	if err != nil {
-		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
+		logs.Info.Println("media upload: failed", req.GetMeta().GetName(), "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
 		writeResponse(decodeStoreError(err, msgID, now, nil), nil)
 		return nil
