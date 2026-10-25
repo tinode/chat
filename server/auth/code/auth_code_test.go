@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/tinode/chat/server/auth"
+	_ "github.com/tinode/chat/server/auth/token"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/mock_store"
@@ -179,10 +180,10 @@ func TestCodeRetriesPreserveExpiration(t *testing.T) {
 
 // TestCodeAuthenticationLifetimeAfterDeletion checks the post-storage deadline boundary.
 func TestCodeAuthenticationLifetimeAfterDeletion(t *testing.T) {
-	for _, delay := range []time.Duration{30 * time.Second, time.Minute, time.Minute + time.Nanosecond} {
+	for _, delay := range []time.Duration{30 * time.Second, 59 * time.Second, 59500 * time.Millisecond, time.Minute, time.Minute + time.Nanosecond} {
 		t.Run(delay.String(), func(t *testing.T) {
 			ca, _ := setupCodeTest(t)
-			now := time.Now()
+			now := time.Now().Truncate(time.Second)
 			ca.now = func() time.Time { return now }
 			expiry := now.Add(time.Minute)
 			value := "123456:0:" + types.Uid(123).String() + ":" + strconv.FormatInt(expiry.UnixNano(), 10)
@@ -195,12 +196,86 @@ func TestCodeAuthenticationLifetimeAfterDeletion(t *testing.T) {
 					return true, nil
 				})
 			rec, _, err := ca.Authenticate([]byte("123456:email:alice@example.com"), "")
-			if delay < time.Minute {
+			if delay < 59*time.Second {
 				if err != nil || rec == nil || rec.Lifetime != auth.Duration(time.Minute-delay) {
 					t.Fatalf("incorrect remaining lifetime: %+v, %v", rec, err)
 				}
 			} else if rec != nil || !errors.Is(err, types.ErrExpired) {
 				t.Fatalf("expired code produced an auth record: %+v, %v", rec, err)
+			}
+		})
+	}
+}
+
+// TestCodeAuthenticationMatchesTokenPrecision checks fractional-second validity boundaries.
+func TestCodeAuthenticationMatchesTokenPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		fraction, lifetime time.Duration
+		wantLifetime       time.Duration
+	}{
+		{name: "half a second", fraction: 750 * time.Millisecond, lifetime: 500 * time.Millisecond},
+		{name: "whole second lost to truncation", fraction: 750 * time.Millisecond, lifetime: 1100 * time.Millisecond},
+		{name: "exact minimum", lifetime: time.Second},
+		{name: "fraction below next whole second", lifetime: 1999 * time.Millisecond},
+		{name: "usable fractional window", fraction: 750 * time.Millisecond, lifetime: 1250 * time.Millisecond, wantLifetime: 1250 * time.Millisecond},
+		{name: "two whole seconds", lifetime: 2 * time.Second, wantLifetime: 2 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ca, cache := setupCodeTest(t)
+			now := time.Unix(1700000000, 0).Add(tc.fraction)
+			ca.now = func() time.Time { return now }
+			expiry := now.Add(tc.lifetime)
+			cache.values["code_email:alice@example.com"] = "123456:0:" + types.Uid(123).String() + ":" + strconv.FormatInt(expiry.UnixNano(), 10)
+			rec, _, err := ca.Authenticate([]byte("123456:email:alice@example.com"), "")
+			if tc.wantLifetime == 0 {
+				if rec != nil || !errors.Is(err, types.ErrExpired) {
+					t.Fatalf("unusable token window accepted: %+v, %v", rec, err)
+				}
+			} else if err != nil || rec == nil || rec.Lifetime != auth.Duration(tc.wantLifetime) {
+				t.Fatalf("incorrect usable lifetime: %+v, %v", rec, err)
+			}
+		})
+	}
+}
+
+// TestCodeToTokenFlow checks redemption against the real token generator and validator.
+func TestCodeToTokenFlow(t *testing.T) {
+	tokenHandler := store.Store.GetAuthHandler("token")
+	if !tokenHandler.IsInitialized() {
+		if err := tokenHandler.Init([]byte("{\"key\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"serial_num\":1,\"expire_in\":3600}"), "token"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, lifetime := range []time.Duration{500 * time.Millisecond, time.Minute} {
+		t.Run(lifetime.String(), func(t *testing.T) {
+			ca, cache := setupCodeTest(t)
+			// A scheduling delay must not make the near-expiry regression pass
+			// merely because the code expired before redemption began.
+			now := time.Now()
+			ca.now = func() time.Time { return now }
+			expiry := now.Add(lifetime)
+			cache.values["code_email:alice@example.com"] = "123456:0:" + types.Uid(123).String() + ":" + strconv.FormatInt(expiry.UnixNano(), 10)
+			rec, _, err := ca.Authenticate([]byte("123456:email:alice@example.com"), "")
+			if lifetime < time.Second {
+				if rec != nil || !errors.Is(err, types.ErrExpired) {
+					t.Fatalf("near-expiry code reported success: %+v, %v", rec, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			secret, _, err := tokenHandler.GenSecret(rec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			redeemed, _, err := tokenHandler.Authenticate(secret, "")
+			if err != nil {
+				t.Fatalf("successful code redemption produced unusable token: %v", err)
+			}
+			if redeemed.Uid != rec.Uid || redeemed.Features&auth.FeatureNoLogin == 0 {
+				t.Fatalf("incorrect reset token: %+v", redeemed)
 			}
 		})
 	}

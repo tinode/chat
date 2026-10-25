@@ -145,10 +145,10 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 	if !deleted {
 		return nil, nil, types.ErrFailed
 	}
-	// Storage may block until after the deadline. Never report successful
-	// authentication with a zero or negative temporary-token lifetime.
-	remaining := expires.Sub(ca.now())
-	if remaining <= 0 {
+	// Tokens store expiration in whole seconds and require a full second of
+	// remaining validity. Check that window after potentially blocking storage.
+	remaining := expires.Truncate(time.Second).Sub(ca.now())
+	if remaining <= time.Second {
 		return nil, nil, types.ErrExpired
 	}
 
