@@ -621,29 +621,26 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 			return uid, nil, types.ErrMalformed
 		}
 
-		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
-			var challenge []byte
-			rec, challenge, err = authhdl.Authenticate(decodedSecret[:n], remoteAddr)
-			if err != nil {
-				return uid, nil, err
-			}
-			if challenge != nil {
-				return uid, challenge, nil
-			}
-		} else {
+		authhdl := store.Store.GetLogicalAuthHandler(authMethod)
+		if authhdl == nil {
 			logs.Info.Println("media: unknown auth method", authMethod)
 			return uid, nil, types.ErrMalformed
 		}
-	} else {
-		// Find the session, make sure it's appropriately authenticated.
-		if sess := globals.sessionStore.Get(sid); sess != nil && !sess.uid.IsZero() {
-			rec = &auth.Rec{Uid: sess.uid, AuthLevel: sess.authLvl,
-				Features: auth.FeatureValidated, State: types.StateUndefined}
-		} else {
-			// Signup uploads may proceed without an authenticated user. The caller
-			// decides whether its operation permits an empty UID.
-			return uid, nil, nil
+		var challenge []byte
+		rec, challenge, err = authhdl.Authenticate(decodedSecret[:n], remoteAddr)
+		if err != nil {
+			return uid, nil, err
 		}
+		if challenge != nil {
+			return uid, challenge, nil
+		}
+	} else if sess := globals.sessionStore.Get(sid); sess != nil && !sess.uid.IsZero() {
+		rec = &auth.Rec{Uid: sess.uid, AuthLevel: sess.authLvl,
+			Features: auth.FeatureValidated, State: types.StateUndefined}
+	} else {
+		// Signup uploads may proceed without an authenticated user. The caller
+		// decides whether its operation permits an empty UID.
+		return uid, nil, nil
 	}
 	if rec == nil || rec.Uid.IsZero() || rec.AuthLevel <= auth.LevelNone ||
 		rec.AuthLevel > auth.LevelRoot || rec.Features&auth.FeatureNoLogin != 0 {
@@ -660,7 +657,7 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 	if state != types.StateOK {
 		return uid, nil, types.ErrPermissionDenied
 	}
-	if rec.Features&auth.FeatureValidated == 0 && len(globals.authValidators[rec.AuthLevel]) > 0 {
+	if required := globals.authValidators[rec.AuthLevel]; rec.Features&auth.FeatureValidated == 0 && len(required) > 0 {
 		creds, err := store.Users.GetAllCreds(rec.Uid, "", true)
 		if err != nil {
 			return uid, nil, err
@@ -669,7 +666,7 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		for _, cred := range creds {
 			validated = append(validated, cred.Method)
 		}
-		if _, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated); len(missing) > 0 {
+		if _, missing, _ := stringSliceDelta(required, validated); len(missing) > 0 {
 			return uid, nil, types.ErrPermissionDenied
 		}
 	}
