@@ -103,10 +103,19 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 		return nil, nil, err
 	}
 
-	// code:count:uid
+	// code:count:uid:expires (Unix nanoseconds). Legacy entries have no
+	// expiration and must not be accepted after upgrading.
 	parts = strings.Split(value, ":")
-	if len(parts) != 3 {
-		return nil, nil, types.ErrInternal
+	if len(parts) != 4 {
+		return nil, nil, types.ErrFailed
+	}
+	expiresAt, err := strconv.ParseInt(parts[3], 10, 64)
+	if err != nil {
+		return nil, nil, types.ErrFailed
+	}
+	expires := time.Unix(0, expiresAt)
+	if !time.Now().Before(expires) {
+		return nil, nil, types.ErrExpired
 	}
 
 	count, err := strconv.Atoi(parts[1])
@@ -120,7 +129,7 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 
 	if parts[0] != code {
 		// Update count of attempts. If the update fails, the error is ignored.
-		store.PCache.Upsert(key, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2], false)
+		store.PCache.Upsert(key, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2]+":"+parts[3], false)
 		return nil, nil, types.ErrFailed
 	}
 
@@ -132,7 +141,7 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 	return &auth.Rec{
 		Uid:        types.ParseUid(parts[2]),
 		AuthLevel:  auth.LevelNone,
-		Lifetime:   auth.Duration(ca.lifetime),
+		Lifetime:   auth.Duration(time.Until(expires)),
 		Features:   auth.FeatureNoLogin,
 		State:      types.StateUndefined,
 		Credential: cred}, nil, nil
@@ -159,12 +168,13 @@ func (ca *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 		return nil, time.Time{}, types.ErrExpired
 	}
 
-	// Save "code:counter:uid" to the database. The key is code_<credential>.
-	if err = store.PCache.Upsert(sanitizeKey(realName+"_"+rec.Credential), resp+":0:"+rec.Uid.String(), true); err != nil {
+	expires := time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
+	// Persist the deadline independently of cache cleanup and retry updates.
+	// The key is code_<credential>, value is code:counter:uid:expires.
+	value := resp + ":0:" + rec.Uid.String() + ":" + strconv.FormatInt(expires.UnixNano(), 10)
+	if err = store.PCache.Upsert(sanitizeKey(realName+"_"+rec.Credential), value, true); err != nil {
 		return nil, time.Time{}, err
 	}
-
-	expires := time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
 
 	return []byte(resp), expires, nil
 }
