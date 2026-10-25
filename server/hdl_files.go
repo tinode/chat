@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/pbx"
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -611,6 +612,7 @@ func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- b
 // Authenticate non-websocket HTTP request
 func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []byte, error) {
 	var uid types.Uid
+	var rec *auth.Rec
 	if authMethod != "" {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
@@ -620,24 +622,59 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		}
 
 		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
-			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n], remoteAddr)
+			var challenge []byte
+			rec, challenge, err = authhdl.Authenticate(decodedSecret[:n], remoteAddr)
 			if err != nil {
 				return uid, nil, err
 			}
 			if challenge != nil {
 				return uid, challenge, nil
 			}
-			uid = rec.Uid
 		} else {
 			logs.Info.Println("media: unknown auth method", authMethod)
 			return uid, nil, types.ErrMalformed
 		}
 	} else {
 		// Find the session, make sure it's appropriately authenticated.
-		sess := globals.sessionStore.Get(sid)
-		if sess != nil {
-			uid = sess.uid
+		if globals.sessionStore != nil {
+			if sess := globals.sessionStore.Get(sid); sess != nil && !sess.uid.IsZero() {
+				rec = &auth.Rec{Uid: sess.uid, AuthLevel: sess.authLvl,
+					Features: auth.FeatureValidated, State: types.StateUndefined}
+			}
+		}
+		// Signup uploads may proceed without an authenticated user. The caller
+		// decides whether its operation permits an empty UID.
+		if rec == nil {
+			return uid, nil, nil
 		}
 	}
-	return uid, nil, nil
+	if rec == nil || rec.Uid.IsZero() || rec.AuthLevel <= auth.LevelNone ||
+		rec.AuthLevel > auth.LevelRoot || rec.Features&auth.FeatureNoLogin != 0 {
+		return uid, nil, types.ErrPermissionDenied
+	}
+	state := rec.State
+	if state == types.StateUndefined {
+		var err error
+		state, err = userGetState(rec.Uid)
+		if err != nil {
+			return uid, nil, err
+		}
+	}
+	if state != types.StateOK {
+		return uid, nil, types.ErrPermissionDenied
+	}
+	if rec.Features&auth.FeatureValidated == 0 && len(globals.authValidators[rec.AuthLevel]) > 0 {
+		creds, err := store.Users.GetAllCreds(rec.Uid, "", true)
+		if err != nil {
+			return uid, nil, err
+		}
+		validated := make([]string, 0, len(creds))
+		for _, cred := range creds {
+			validated = append(validated, cred.Method)
+		}
+		if _, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated); len(missing) > 0 {
+			return uid, nil, types.ErrPermissionDenied
+		}
+	}
+	return rec.Uid, nil, nil
 }
