@@ -448,8 +448,8 @@ func (s *Session) dispatchRaw(raw []byte) {
 	logs.Info.Printf("in: bytes=%d sid='%s' uid='%s'", len(raw), s.sid, s.uid)
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		// Malformed message
-		logs.Warn.Println("s.dispatch", err, s.sid)
+		// Decoder errors can include private payload values.
+		logs.Warn.Println("s.dispatch: malformed JSON", s.sid)
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}

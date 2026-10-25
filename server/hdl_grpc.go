@@ -59,7 +59,10 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 			logs.Err.Println("grpc: recv", sess.sid, err)
 			return err
 		}
-		sess.dispatchGrpc(in)
+		// Log metadata only: protobuf text includes authentication secrets.
+		logs.Info.Printf("grpc in: bytes=%d sid='%s'", proto.Size(in), sess.sid)
+		statsInc("IncomingMessagesGrpcTotal", 1)
+		sess.dispatch(pbCliDeserialize(in))
 
 		sess.lock.Lock()
 		if sess.grpcnode == nil {
@@ -70,13 +73,6 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	}
 
 	return nil
-}
-
-func (sess *Session) dispatchGrpc(in *pbx.ClientMsg) {
-	// Log metadata only: protobuf text includes authentication secrets.
-	logs.Info.Printf("grpc in: bytes=%d sid='%s'", proto.Size(in), sess.sid)
-	statsInc("IncomingMessagesGrpcTotal", 1)
-	sess.dispatch(pbCliDeserialize(in))
 }
 
 func (sess *Session) sendMessageGrpc(msg any) bool {
