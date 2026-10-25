@@ -642,8 +642,7 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		// decides whether its operation permits an empty UID.
 		return uid, nil, nil
 	}
-	if rec == nil || rec.Uid.IsZero() || rec.AuthLevel <= auth.LevelNone ||
-		rec.AuthLevel > auth.LevelRoot || rec.Features&auth.FeatureNoLogin != 0 {
+	if rec.AuthLevel == auth.LevelNone || rec.Features&auth.FeatureNoLogin != 0 {
 		return uid, nil, types.ErrPermissionDenied
 	}
 	state := rec.State
