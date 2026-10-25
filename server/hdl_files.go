@@ -639,10 +639,9 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		if sess := globals.sessionStore.Get(sid); sess != nil && !sess.uid.IsZero() {
 			rec = &auth.Rec{Uid: sess.uid, AuthLevel: sess.authLvl,
 				Features: auth.FeatureValidated, State: types.StateUndefined}
-		}
-		// Signup uploads may proceed without an authenticated user. The caller
-		// decides whether its operation permits an empty UID.
-		if rec == nil {
+		} else {
+			// Signup uploads may proceed without an authenticated user. The caller
+			// decides whether its operation permits an empty UID.
 			return uid, nil, nil
 		}
 	}
