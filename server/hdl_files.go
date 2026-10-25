@@ -615,7 +615,7 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
 		if err != nil {
-			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
+			logs.Info.Println("media: invalid auth secret", authMethod)
 			return uid, nil, types.ErrMalformed
 		}
 
