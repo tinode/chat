@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/proto"
 )
 
 type grpcNodeServer struct {
@@ -58,7 +59,8 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 			logs.Err.Println("grpc: recv", sess.sid, err)
 			return err
 		}
-		logs.Info.Println("grpc in:", truncateStringIfTooLong(in.String()), sess.sid)
+		// Log metadata only: protobuf text includes authentication secrets.
+		logs.Info.Printf("grpc in: bytes=%d sid='%s'", proto.Size(in), sess.sid)
 		statsInc("IncomingMessagesGrpcTotal", 1)
 		sess.dispatch(pbCliDeserialize(in))
 

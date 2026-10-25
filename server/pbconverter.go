@@ -535,7 +535,8 @@ func bytesToInterface(in []byte) any {
 	if len(in) > 0 {
 		err := json.Unmarshal(in, &out)
 		if err != nil {
-			logs.Warn.Println("pbx: failed to parse bytes", string(in), err)
+			// Neither the input nor decoder errors are safe to log.
+			logs.Warn.Println("pbx: malformed JSON content")
 		}
 	}
 	return out
