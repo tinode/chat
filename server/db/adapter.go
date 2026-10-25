@@ -197,6 +197,10 @@ type Adapter interface {
 	PCacheGet(key string) (string, error)
 	// PCacheUpsert creates or updates a persistent cache entry.
 	PCacheUpsert(key string, value string, failOnDuplicate bool) error
+	// PCacheCompareAndSwap atomically replaces a matching cache value.
+	PCacheCompareAndSwap(key, oldValue, newValue string) (bool, error)
+	// PCacheCompareAndDelete atomically deletes a matching cache value.
+	PCacheCompareAndDelete(key, value string) (bool, error)
 	// PCacheDelete deletes a single persistent cache entry.
 	PCacheDelete(key string) error
 	// PCacheExpire expires older entries with the specified key prefix.

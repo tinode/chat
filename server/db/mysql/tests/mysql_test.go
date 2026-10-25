@@ -51,7 +51,14 @@ func TestCreateDb(t *testing.T) {
 	if err := adp.CreateDb(config.Reset); err != nil {
 		t.Fatal(err)
 	}
-	// Saved db is closed, get a fresh one.
+	// Reconnect using the configured DSN so every pooled connection selects
+	// the new database, including connections opened by concurrent tests.
+	if err := adp.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := adp.Open(config.Adapters[adp.GetName()]); err != nil {
+		t.Fatal(err)
+	}
 	db = adp.GetTestDB().(*sqlx.DB)
 }
 
@@ -1010,6 +1017,11 @@ func TestDeviceDelete(t *testing.T) {
 	if count != 0 {
 		t.Error("Device not deleted:", count)
 	}
+}
+
+// TestPCacheAtomicOperations checks conditional cache mutations and concurrent replacements.
+func TestPCacheAtomicOperations(t *testing.T) {
+	test_data.CheckPCacheAtomicOperations(t, adp)
 }
 
 // ================== Persistent Cache tests ======================

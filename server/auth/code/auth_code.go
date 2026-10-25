@@ -23,6 +23,8 @@ type authenticator struct {
 	maxCodeValue *big.Int
 	lifetime     time.Duration
 	maxRetries   int
+	// now supplies the clock, allowing deterministic tests at expiration boundaries.
+	now func() time.Time
 }
 
 // Init initializes the authenticator: parses the config and sets internal state.
@@ -65,6 +67,7 @@ func (ca *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	ca.maxCodeValue = big.NewInt(0).Exp(big.NewInt(10), big.NewInt(int64(ca.codeLength)), nil)
 	ca.lifetime = time.Duration(config.ExpireIn) * time.Second
 	ca.maxRetries = config.MaxRetries
+	ca.now = time.Now
 
 	return nil
 }
@@ -114,7 +117,7 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 		return nil, nil, types.ErrFailed
 	}
 	expires := time.Unix(0, expiresAt)
-	if !time.Now().Before(expires) {
+	if !ca.now().Before(expires) {
 		return nil, nil, types.ErrExpired
 	}
 
@@ -128,20 +131,31 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 	}
 
 	if parts[0] != code {
-		// Update count of attempts. If the update fails, the error is ignored.
-		store.PCache.Upsert(key, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2]+":"+parts[3], false)
+		// A late retry must not overwrite a replacement issued in the meantime.
+		store.PCache.CompareAndSwap(key, value, parts[0]+":"+strconv.Itoa(count+1)+":"+parts[2]+":"+parts[3])
 		return nil, nil, types.ErrFailed
 	}
 
-	// Success. Remove no longer needed entry. The error is ignored here.
-	if err = store.PCache.Delete(key); err != nil {
+	// Consume only the record checked above; a replacement belongs to another request.
+	deleted, err := store.PCache.CompareAndDelete(key, value)
+	if err != nil {
 		logs.Warn.Println("code_auth: error deleting key", key, err)
+		return nil, nil, err
+	}
+	if !deleted {
+		return nil, nil, types.ErrFailed
+	}
+	// Storage may block until after the deadline. Never report successful
+	// authentication with a zero or negative temporary-token lifetime.
+	remaining := expires.Sub(ca.now())
+	if remaining <= 0 {
+		return nil, nil, types.ErrExpired
 	}
 
 	return &auth.Rec{
 		Uid:        types.ParseUid(parts[2]),
 		AuthLevel:  auth.LevelNone,
-		Lifetime:   auth.Duration(time.Until(expires)),
+		Lifetime:   auth.Duration(remaining),
 		Features:   auth.FeatureNoLogin,
 		State:      types.StateUndefined,
 		Credential: cred}, nil, nil
@@ -150,7 +164,7 @@ func (ca *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.R
 // GenSecret generates a new code.
 func (ca *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	// Run garbage collection.
-	store.PCache.Expire(realName+"_", time.Now().UTC().Add(-ca.lifetime))
+	store.PCache.Expire(realName+"_", ca.now().UTC().Add(-ca.lifetime))
 
 	// Generate random code.
 	code, err := rand.Int(rand.Reader, ca.maxCodeValue)
@@ -168,15 +182,43 @@ func (ca *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 		return nil, time.Time{}, types.ErrExpired
 	}
 
-	expires := time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
+	expires := ca.now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
 	// Persist the deadline independently of cache cleanup and retry updates.
 	// The key is code_<credential>, value is code:counter:uid:expires.
 	value := resp + ":0:" + rec.Uid.String() + ":" + strconv.FormatInt(expires.UnixNano(), 10)
-	if err = store.PCache.Upsert(sanitizeKey(realName+"_"+rec.Credential), value, true); err != nil {
+	key := sanitizeKey(realName + "_" + rec.Credential)
+	if err = store.PCache.Upsert(key, value, true); err == types.ErrDuplicate {
+		// Reclaim rejected records by their stored deadline, not their cache age.
+		// An atomic replacement preserves a valid code issued after this read.
+		oldValue, readErr := store.PCache.Get(key)
+		if readErr == types.ErrNotFound {
+			// The record was consumed between the duplicate result and the read.
+			err = store.PCache.Upsert(key, value, true)
+		} else if readErr != nil {
+			err = readErr
+		} else if codeRecordExpired(oldValue, ca.now()) {
+			var replaced bool
+			replaced, err = store.PCache.CompareAndSwap(key, oldValue, value)
+			if err == nil && !replaced {
+				err = types.ErrDuplicate
+			}
+		}
+	}
+	if err != nil {
 		return nil, time.Time{}, err
 	}
 
 	return []byte(resp), expires, nil
+}
+
+// codeRecordExpired reports whether a record is expired or lacks a valid deadline.
+func codeRecordExpired(value string, now time.Time) bool {
+	parts := strings.Split(value, ":")
+	if len(parts) != 4 {
+		return true
+	}
+	deadline, err := strconv.ParseInt(parts[3], 10, 64)
+	return err != nil || !now.Before(time.Unix(0, deadline))
 }
 
 // AsTag is not supported, will produce an empty string.

@@ -3038,6 +3038,26 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	return res.Err()
 }
 
+// PCacheCompareAndSwap atomically replaces a matching cache value.
+func (a *adapter) PCacheCompareAndSwap(key, oldValue, newValue string) (bool, error) {
+	result, err := a.db.Collection("kvmeta").UpdateOne(a.ctx,
+		b.M{"_id": key, "value": oldValue},
+		b.M{"$set": b.M{"value": newValue, "createdat": t.TimeNow()}})
+	if err != nil {
+		return false, err
+	}
+	return result.MatchedCount > 0, nil
+}
+
+// PCacheCompareAndDelete atomically deletes a matching cache value.
+func (a *adapter) PCacheCompareAndDelete(key, value string) (bool, error) {
+	result, err := a.db.Collection("kvmeta").DeleteOne(a.ctx, b.M{"_id": key, "value": value})
+	if err != nil {
+		return false, err
+	}
+	return result.DeletedCount > 0, nil
+}
+
 // PCacheDelete deletes one persistent cache entry.
 func (a *adapter) PCacheDelete(key string) error {
 	_, err := a.db.Collection("kvmeta").DeleteOne(a.ctx, b.M{"_id": key})

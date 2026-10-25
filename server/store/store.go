@@ -1083,6 +1083,10 @@ type PersistentCacheInterface interface {
 	Get(key string) (string, error)
 	// Upsert creates or updates a persistent cache entry.
 	Upsert(key string, value string, failOnDuplicate bool) error
+	// CompareAndSwap atomically replaces a matching cache value.
+	CompareAndSwap(key, oldValue, newValue string) (bool, error)
+	// CompareAndDelete atomically deletes a matching cache value.
+	CompareAndDelete(key, value string) (bool, error)
 	// Delete deletes a single persistent cache entry.
 	Delete(key string) error
 	// Expire expires older entries with the specified key prefix.
@@ -1102,6 +1106,16 @@ func (pcacheMapper) Get(key string) (string, error) {
 // Upsert creates or updates a persistent cache entry.
 func (pcacheMapper) Upsert(key string, value string, failOnDuplicate bool) error {
 	return adp.PCacheUpsert(key, value, failOnDuplicate)
+}
+
+// CompareAndSwap atomically replaces a matching cache value.
+func (pcacheMapper) CompareAndSwap(key, oldValue, newValue string) (bool, error) {
+	return adp.PCacheCompareAndSwap(key, oldValue, newValue)
+}
+
+// CompareAndDelete atomically deletes a matching cache value.
+func (pcacheMapper) CompareAndDelete(key, value string) (bool, error) {
+	return adp.PCacheCompareAndDelete(key, value)
 }
 
 // Delete deletes a single persistent cache entry.

@@ -3018,12 +3018,15 @@ func (a *adapter) PCacheGet(key string) (string, error) {
 		return "", t.ErrNotFound
 	}
 
-	var result map[string]string
+	// Ignore metadata such as CreatedAt, which is a timestamp rather than a string.
+	var result struct {
+		Value string `rethinkdb:"value"`
+	}
 	if err = cursor.One(&result); err != nil {
 		return "", err
 	}
 
-	return result["value"], nil
+	return result.Value, nil
 }
 
 // PCacheUpsert creates or updates a persistent cache entry.
@@ -3052,6 +3055,27 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	}
 
 	return err
+}
+
+// PCacheCompareAndSwap atomically replaces a matching cache value.
+func (a *adapter) PCacheCompareAndSwap(key, oldValue, newValue string) (bool, error) {
+	result, err := rdb.DB(a.dbName).Table("kvmeta").Get(key).
+		Update(func(row rdb.Term) any {
+			return rdb.Branch(row.Field("value").Eq(oldValue),
+				map[string]any{"value": newValue, "CreatedAt": t.TimeNow()}, nil)
+		}).RunWrite(a.conn)
+	return result.Replaced > 0, err
+}
+
+// PCacheCompareAndDelete atomically deletes a matching cache value.
+func (a *adapter) PCacheCompareAndDelete(key, value string) (bool, error) {
+	result, err := rdb.DB(a.dbName).Table("kvmeta").Get(key).
+		Replace(func(row rdb.Term) any {
+			// Preserve missing rows and changed values; only delete the value read.
+			return rdb.Branch(row.Eq(nil), nil,
+				rdb.Branch(row.Field("value").Eq(value), nil, row))
+		}).RunWrite(a.conn)
+	return result.Deleted > 0, err
 }
 
 // PCacheDelete deletes one persistent cache entry.
