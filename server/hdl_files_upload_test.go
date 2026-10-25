@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// sizeTestUploadStream supplies queued upload requests and records the final response.
 type sizeTestUploadStream struct {
 	grpc.ServerStream
 	requests []*pbx.FileUpReq
@@ -27,7 +28,10 @@ type sizeTestUploadStream struct {
 	recvErr  error
 }
 
+// Context returns a context without cancellation for upload tests.
 func (s *sizeTestUploadStream) Context() context.Context { return context.Background() }
+
+// Recv returns the next queued request, then the configured error or io.EOF.
 func (s *sizeTestUploadStream) Recv() (*pbx.FileUpReq, error) {
 	if len(s.requests) == 0 {
 		if s.recvErr != nil {
@@ -39,11 +43,14 @@ func (s *sizeTestUploadStream) Recv() (*pbx.FileUpReq, error) {
 	s.requests = s.requests[1:]
 	return req, nil
 }
+
+// SendAndClose records the response sent by the upload handler.
 func (s *sizeTestUploadStream) SendAndClose(resp *pbx.FileUpResp) error {
 	s.response = resp
 	return nil
 }
 
+// TestGrpcUploadReaderSizeLimits checks boundaries across initial and subsequent chunks.
 func TestGrpcUploadReaderSizeLimits(t *testing.T) {
 	for _, tc := range []struct {
 		name, first string
@@ -93,6 +100,7 @@ func TestGrpcUploadReaderSizeLimits(t *testing.T) {
 	}
 }
 
+// TestGrpcUploadReaderPropagatesReceiveError checks that stream failures reach storage.
 func TestGrpcUploadReaderPropagatesReceiveError(t *testing.T) {
 	want := errors.New("disconnected")
 	reader := &grpcUploadReader{stream: &sizeTestUploadStream{recvErr: want}}
@@ -101,20 +109,25 @@ func TestGrpcUploadReaderPropagatesReceiveError(t *testing.T) {
 	}
 }
 
+// sizeTestMedia captures bytes delivered to storage by the upload handler.
 type sizeTestMedia struct {
 	media.Handler
 	content []byte
 }
 
+// Headers allows the upload handler to proceed without a redirect.
 func (m *sizeTestMedia) Headers(string, *url.URL, http.Header, bool) (http.Header, int, error) {
 	return nil, 0, nil
 }
+
+// Upload captures the supplied bytes and propagates any reader error.
 func (m *sizeTestMedia) Upload(_ *types.FileDef, reader io.Reader) (string, int64, error) {
 	data, err := io.ReadAll(reader)
 	m.content = data
 	return "/file", int64(len(data)), err
 }
 
+// TestGrpcUploadEnforcesConfiguredTotalSize checks RPC responses and failed-record cleanup.
 func TestGrpcUploadEnforcesConfiguredTotalSize(t *testing.T) {
 	for _, oversized := range []bool{false, true} {
 		t.Run(map[bool]string{false: "exact limit", true: "oversized"}[oversized], func(t *testing.T) {

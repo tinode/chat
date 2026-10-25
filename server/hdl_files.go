@@ -446,13 +446,20 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 // grpcUploadReader streams chunks on demand and bounds the total file size,
 // including any content sent with the initial metadata request.
 type grpcUploadReader struct {
-	stream  pbx.Node_LargeFileReceiveServer
+	stream pbx.Node_LargeFileReceiveServer
+	// content holds the unread bytes of the current chunk.
 	content []byte
+	// maxSize is the total file size limit; nonpositive values disable it.
 	maxSize int64
-	read    int64
-	err     error
+	// read counts bytes already returned to the storage handler.
+	read int64
+	// err preserves the terminal stream or size-limit error for subsequent reads.
+	err error
 }
 
+// Read copies file content from successive stream requests into p.
+// It returns a *http.MaxBytesError before exposing a chunk that would exceed
+// maxSize, or the stream's error when no more content can be received.
 func (r *grpcUploadReader) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -460,6 +467,7 @@ func (r *grpcUploadReader) Read(p []byte) (int, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
+	// Skip metadata-only and empty requests until file bytes are available.
 	for len(r.content) == 0 {
 		req, err := r.stream.Recv()
 		if err != nil {
@@ -468,6 +476,8 @@ func (r *grpcUploadReader) Read(p []byte) (int, error) {
 		}
 		r.content = req.GetContent()
 	}
+	// Check the whole unread chunk before passing any of it to storage.
+	// Subtracting the consumed size avoids overflowing a cumulative sum.
 	if r.maxSize > 0 && int64(len(r.content)) > r.maxSize-r.read {
 		r.err = &http.MaxBytesError{Limit: r.maxSize}
 		return 0, r.err
@@ -478,7 +488,8 @@ func (r *grpcUploadReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// LargeFileReceive is the gRPC equivalent of LargeFileReceiveHTTP.
+// LargeFileReceive accepts a file upload over gRPC and enforces the configured
+// total file size limit across all requests in the stream.
 func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) error {
 	now := types.TimeNow()
 	mh := store.Store.GetMediaHandler()
@@ -569,6 +580,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 	fdef.InitTimes()
 
+	// Receive chunks as storage consumes them, so a storage error does not leave
+	// a background goroutine blocked waiting for more client data.
 	reader := &grpcUploadReader{stream: stream, content: req.GetContent(), maxSize: globals.maxFileUploadSize}
 	url, size, err := mh.Upload(fdef, reader)
 	if err != nil {
