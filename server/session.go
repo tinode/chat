@@ -1073,9 +1073,14 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		}
 	}
 	rec.Features = features
+	deadline := rec.ExpiresAt
 	token, expires, err := store.Store.GetLogicalAuthHandler("token").GenSecret(rec)
 	if err != nil {
 		return decodeStoreError(err, msgID, timestamp, nil)
+	}
+	// Enforce the bound for every logical token provider before changing session state.
+	if !deadline.IsZero() && (expires.After(deadline) || !expires.After(time.Now().Add(time.Second))) {
+		return decodeStoreError(types.ErrExpired, msgID, timestamp, nil)
 	}
 	params["token"], params["expires"] = token, expires
 

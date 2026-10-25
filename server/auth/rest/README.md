@@ -273,6 +273,15 @@ If accounts are managed by the server, the server should respond with an error `
 
 ### `gen` Generate authentication secret.
 
+When `rec.expires_at` is present, it is an absolute RFC 3339 deadline (with optional
+fractional seconds). The provider must cap the token's actual expiration at this
+deadline, even when `rec.lifetime` is absent or zero. Return that actual expiration
+in `ts`; do not merely cap the response timestamp while issuing a longer-lived token.
+Tinode rejects responses with a missing expiration, an expiration after the deadline,
+or no more than one second of remaining validity. Providers which cannot enforce
+this bound must return `{"err":"unsupported"}`. Requests without `expires_at` retain
+the usual lifetime behavior.
+
 If accounts are managed by the server, the server should respond with an error `"unsupported"`.
 
 #### Sample request

@@ -276,9 +276,18 @@ func (a *authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error)
 
 // GenSecret generates a new secret, if appropriate.
 func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
+	deadline := rec.ExpiresAt
+	if !deadline.IsZero() && !deadline.After(time.Now().Add(time.Second)) {
+		return nil, time.Time{}, types.ErrExpired
+	}
 	resp, err := a.callEndpoint("gen", rec, nil, "")
 	if err != nil {
 		return nil, time.Time{}, err
+	}
+	// Older providers may ignore expires_at. Never return their token unless
+	// its reported expiration honors the deadline and is still usable.
+	if !deadline.IsZero() && (resp.TimeVal.After(deadline) || !resp.TimeVal.After(time.Now().Add(time.Second))) {
+		return nil, time.Time{}, types.ErrExpired
 	}
 
 	return resp.ByteVal, resp.TimeVal, err
