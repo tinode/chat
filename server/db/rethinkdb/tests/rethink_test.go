@@ -1179,7 +1179,10 @@ func TestDeviceDelete(t *testing.T) {
 	}
 }
 
-// ================== Persistent Cache tests ======================
+// TestPCacheAtomicOperations checks conditional cache mutations and concurrent replacements.
+func TestPCacheAtomicOperations(t *testing.T) {
+	test_data.CheckPCacheAtomicOperations(t, adp)
+}
 func TestPCacheUpsert(t *testing.T) {
 	err := adp.PCacheUpsert("test_key", "test_value", false)
 	if err != nil {

@@ -3607,6 +3607,36 @@ func (a *adapter) PCacheUpsert(key string, value string, failOnDuplicate bool) e
 	return err
 }
 
+// PCacheCompareAndSwap atomically replaces a matching cache value.
+func (a *adapter) PCacheCompareAndSwap(key, oldValue, newValue string) (bool, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	// Cache values include case-sensitive IDs; do not use the table's collation.
+	result, err := a.db.ExecContext(ctx, "UPDATE kvmeta SET createdat=?, `value`=? WHERE `key`=? AND BINARY `value`=?",
+		t.TimeNow(), newValue, key, oldValue)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count > 0, err
+}
+
+// PCacheCompareAndDelete atomically deletes a matching cache value.
+func (a *adapter) PCacheCompareAndDelete(key, value string) (bool, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	result, err := a.db.ExecContext(ctx, "DELETE FROM kvmeta WHERE `key`=? AND BINARY `value`=?", key, value)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count > 0, err
+}
+
 // PCacheDelete deletes one persistent cache entry.
 func (a *adapter) PCacheDelete(key string) error {
 	ctx, cancel := a.getContext()

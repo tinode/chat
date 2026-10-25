@@ -136,19 +136,33 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		Uid:       types.Uid(tl.Uid),
 		AuthLevel: auth.Level(tl.AuthLevel),
 		Lifetime:  auth.Duration(time.Until(expires)),
+		ExpiresAt: expires,
 		Features:  auth.Feature(tl.Features),
 		State:     types.StateUndefined}, nil, nil
 }
 
 // GenSecret generates a new token.
 func (ta *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
+	return ta.genSecretAt(rec, time.Now())
+}
+
+// genSecretAt applies the absolute deadline at issuance, after any login storage work.
+func (ta *authenticator) genSecretAt(rec *auth.Rec, now time.Time) ([]byte, time.Time, error) {
 
 	if rec.Lifetime == 0 {
 		rec.Lifetime = auth.Duration(ta.lifetime)
 	} else if rec.Lifetime < 0 {
 		return nil, time.Time{}, types.ErrExpired
 	}
-	expires := time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
+	expires := now.Add(time.Duration(rec.Lifetime))
+	if !rec.ExpiresAt.IsZero() && rec.ExpiresAt.Before(expires) {
+		expires = rec.ExpiresAt
+	}
+	// Match the encoded precision and the validator's minimum usable window.
+	expires = expires.UTC().Truncate(time.Second)
+	if !expires.After(now.Add(time.Second)) {
+		return nil, time.Time{}, types.ErrExpired
+	}
 
 	tl := tokenLayout{
 		Uid:          uint64(rec.Uid),

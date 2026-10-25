@@ -1065,6 +1065,20 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		"user":    rec.Uid.UserId(),
 		"authlvl": rec.AuthLevel.String(),
 	}
+	if len(missing) == 0 {
+		features |= auth.FeatureValidated
+		if features&auth.FeatureNoLogin == 0 {
+			rec.Lifetime = 0
+			rec.ExpiresAt = time.Time{}
+		}
+	}
+	rec.Features = features
+	token, expires, err := store.Store.GetLogicalAuthHandler("token").GenSecret(rec)
+	if err != nil {
+		return decodeStoreError(err, msgID, timestamp, nil)
+	}
+	params["token"], params["expires"] = token, expires
+
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgID, timestamp)
@@ -1080,10 +1094,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 			// Authenticate the session.
 			s.uid = rec.Uid
 			s.authLvl = rec.AuthLevel
-			// Reset expiration time.
-			rec.Lifetime = 0
 		}
-		features |= auth.FeatureValidated
 
 		// Record deviceId used in this session
 		if s.deviceID != "" {
@@ -1098,11 +1109,12 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		}
 	}
 
-	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
-	// otherwise login would have failed earlier.
-	rec.Features = features
-	params["token"], params["expires"], _ = store.Store.GetLogicalAuthHandler("token").GenSecret(rec)
-
+	// A reset token may become unusable while login performs storage work.
+	// Check immediately before replying, using the token authenticator's precision
+	// and minimum validity window.
+	if features&auth.FeatureNoLogin != 0 && !expires.Truncate(time.Second).After(time.Now().Add(time.Second)) {
+		return decodeStoreError(types.ErrExpired, msgID, timestamp, nil)
+	}
 	reply.Ctrl.Params = params
 	return reply
 }

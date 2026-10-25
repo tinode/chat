@@ -1292,6 +1292,36 @@ func (m *MockPersistentCacheInterface) EXPECT() *MockPersistentCacheInterfaceMoc
 	return m.recorder
 }
 
+// CompareAndDelete mocks base method.
+func (m *MockPersistentCacheInterface) CompareAndDelete(key, value string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompareAndDelete", key, value)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompareAndDelete indicates an expected call of CompareAndDelete.
+func (mr *MockPersistentCacheInterfaceMockRecorder) CompareAndDelete(key, value interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompareAndDelete", reflect.TypeOf((*MockPersistentCacheInterface)(nil).CompareAndDelete), key, value)
+}
+
+// CompareAndSwap mocks base method.
+func (m *MockPersistentCacheInterface) CompareAndSwap(key, oldValue, newValue string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompareAndSwap", key, oldValue, newValue)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompareAndSwap indicates an expected call of CompareAndSwap.
+func (mr *MockPersistentCacheInterfaceMockRecorder) CompareAndSwap(key, oldValue, newValue interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompareAndSwap", reflect.TypeOf((*MockPersistentCacheInterface)(nil).CompareAndSwap), key, oldValue, newValue)
+}
+
 // Delete mocks base method.
 func (m *MockPersistentCacheInterface) Delete(key string) error {
 	m.ctrl.T.Helper()
