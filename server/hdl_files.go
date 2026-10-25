@@ -443,6 +443,41 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 	return err
 }
 
+// grpcUploadReader streams chunks on demand and bounds the total file size,
+// including any content sent with the initial metadata request.
+type grpcUploadReader struct {
+	stream  pbx.Node_LargeFileReceiveServer
+	content []byte
+	maxSize int64
+	read    int64
+	err     error
+}
+
+func (r *grpcUploadReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if r.err != nil {
+		return 0, r.err
+	}
+	for len(r.content) == 0 {
+		req, err := r.stream.Recv()
+		if err != nil {
+			r.err = err
+			return 0, err
+		}
+		r.content = req.GetContent()
+	}
+	if r.maxSize > 0 && int64(len(r.content)) > r.maxSize-r.read {
+		r.err = &http.MaxBytesError{Limit: r.maxSize}
+		return 0, r.err
+	}
+	n := copy(p, r.content)
+	r.content = r.content[n:]
+	r.read += int64(n)
+	return n, nil
+}
+
 // LargeFileReceive is the gRPC equivalent of LargeFileReceiveHTTP.
 func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) error {
 	now := types.TimeNow()
@@ -534,37 +569,17 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 	fdef.InitTimes()
 
-	reader, writer := io.Pipe()
-	// Create a non-blocking channel to collect errors from the inbound IO process.
-	done := make(chan error, 1)
-	go func() {
-		defer writer.Close()
-		for {
-			if req, err := stream.Recv(); err == nil {
-				chunk := req.GetContent()
-				if _, err := writer.Write(chunk); err != nil {
-					done <- err
-					break
-				}
-			} else {
-				if err == io.EOF {
-					err = nil
-				}
-				done <- err
-				break
-			}
-		}
-	}()
-
+	reader := &grpcUploadReader{stream: stream, content: req.GetContent(), maxSize: globals.maxFileUploadSize}
 	url, size, err := mh.Upload(fdef, reader)
-	if err == nil {
-		// No outbound IO error. Maybe we have an inbound one?
-		err = <-done
-	}
 	if err != nil {
-		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
+		logs.Info.Println("media upload: failed", req.GetMeta().GetName(), "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
-		writeResponse(decodeStoreError(err, msgID, now, nil), nil)
+		var sizeErr *http.MaxBytesError
+		if errors.As(err, &sizeErr) {
+			writeResponse(ErrTooLarge(msgID, "", now), err)
+		} else {
+			writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		}
 		return nil
 	}
 
