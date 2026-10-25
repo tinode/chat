@@ -194,8 +194,9 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		// Process user's login request.
 		_, missing, _ := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		reply = s.onLogin(msg.Id, msg.Timestamp, rec, missing)
-		if reply.Ctrl.Code >= 400 {
-			// The account exists, but login failed and has no success parameters.
+		if params, ok := reply.Ctrl.Params.(map[string]any); !ok || params == nil {
+			// Issuance errors can return 300 as well as 4xx/5xx. Only successful
+			// login or credential-validation replies have account parameters.
 			s.queueOut(reply)
 			pluginAccount(&user, plgActCreate)
 			return
