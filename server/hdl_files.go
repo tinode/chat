@@ -362,12 +362,8 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	msgID := req.GetId()
 
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	if req.GetAuth().GetScheme() == "" || req.GetAuth().GetSecret() == "" {
-		writeResponse(ErrAuthRequired(msgID, "", now, now), nil)
-		return nil
-	}
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -474,12 +470,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	msgID := req.GetId()
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	if req.GetAuth().GetScheme() == "" || req.GetAuth().GetSecret() == "" {
-		writeResponse(ErrAuthRequired(msgID, "", now, now), nil)
-		return nil
-	}
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
