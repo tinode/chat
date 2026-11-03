@@ -786,6 +786,8 @@ func main() {
 		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServeHTTP)))
 		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
+	// Handle avatar changes reported by CoS, authenticated as a root user.
+	mux.HandleFunc(config.ApiPath+"v0/internal/avatar-updated", serveAvatarUpdated)
 
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
