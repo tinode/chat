@@ -162,8 +162,7 @@ func announceAvatarUpdated(uid types.Uid, payload json.RawMessage) {
 }
 
 // avatarUpdateRecipients returns everyone who sees the user in a p2p or group chat. Both the user
-// and the recipient need the R and P permissions in that chat, which also leaves out users who
-// blocked one another: a block takes P away from the blocked side.
+// and the recipient must be allowed to see each other in that chat, see seesAvatarUpdates.
 func avatarUpdateRecipients(uid types.Uid) (map[types.Uid]bool, error) {
 	recipients := make(map[types.Uid]bool)
 
@@ -199,9 +198,10 @@ func avatarUpdateRecipients(uid types.Uid) (map[types.Uid]bool, error) {
 	return recipients, nil
 }
 
-// seesAvatarUpdates checks the R and P permissions of a subscription, the same ones
-// {info} notifications on 'me' require.
+// seesAvatarUpdates checks that a subscription can read the chat and was not blocked in it.
+// A block takes P away from what the blocked side is given, so P is checked on the given mode
+// only: a user mutes a chat by taking P out of their own wanted mode, and muted chats still
+// get avatar updates.
 func seesAvatarUpdates(sub *types.Subscription) bool {
-	mode := sub.ModeGiven & sub.ModeWant
-	return mode.IsReader() && mode.IsPresencer()
+	return (sub.ModeGiven & sub.ModeWant).IsReader() && sub.ModeGiven.IsPresencer()
 }

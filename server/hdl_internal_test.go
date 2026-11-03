@@ -121,6 +121,12 @@ func subscription(t *testing.T, user types.Uid, topic, given string) types.Subsc
 	}
 }
 
+// muted takes P out of the subscription's wanted mode, which is how the app mutes a chat.
+func muted(sub types.Subscription) types.Subscription {
+	sub.ModeWant &^= types.ModePres
+	return sub
+}
+
 func avatarUpdateBody(chatID string, userID int64, version int) string {
 	return fmt.Sprintf(`{"chat_id":%q,"user_id":%d,"avatar_version":%d}`, chatID, userID, version)
 }
@@ -229,12 +235,14 @@ func TestAnnounceAvatarUpdatedReachesPeersAndGroupMembers(t *testing.T) {
 
 	user, peer, blockedPeer, blockingPeer := types.Uid(1), types.Uid(2), types.Uid(3), types.Uid(4)
 	member, bannedMember := types.Uid(5), types.Uid(6)
+	mutingPeer, mutingMember, mutedGroupMember := types.Uid(7), types.Uid(8), types.Uid(9)
 
 	p2p := user.P2PName(peer)
 	p2pBlocked := user.P2PName(blockedPeer)
 	p2pBlocking := user.P2PName(blockingPeer)
+	p2pMuting := user.P2PName(mutingPeer)
 	// Hotspot group chats give members RWP.
-	group, failingGroup, channel := "grpHotspot", "grpFailing", "chnNews"
+	group, mutedGroup, failingGroup, channel := "grpHotspot", "grpMuted", "grpFailing", "chnNews"
 
 	helper.uu.EXPECT().GetSubs(user).Return([]types.Subscription{
 		subscription(t, user, user.UserId(), "JRWPA"),
@@ -243,9 +251,20 @@ func TestAnnounceAvatarUpdatedReachesPeersAndGroupMembers(t *testing.T) {
 		subscription(t, user, p2pBlocked, "JRWPA"),
 		// The peer blocked the user: the user's own subscription keeps only JR.
 		subscription(t, user, p2pBlocking, "JR"),
+		subscription(t, user, p2pMuting, "JRWPA"),
 		subscription(t, user, group, "RWP"),
+		// The user muted this group, its members still see the user's avatar.
+		muted(subscription(t, user, mutedGroup, "RWP")),
 		subscription(t, user, failingGroup, "RWP"),
 		subscription(t, user, channel, "JRWPA"),
+	}, nil)
+	helper.tt.EXPECT().GetSubs(p2pMuting, nil).Return([]types.Subscription{
+		subscription(t, user, p2pMuting, "JRWPA"),
+		muted(subscription(t, mutingPeer, p2pMuting, "JRWPA")),
+	}, nil)
+	helper.tt.EXPECT().GetSubs(mutedGroup, nil).Return([]types.Subscription{
+		muted(subscription(t, user, mutedGroup, "RWP")),
+		subscription(t, mutedGroupMember, mutedGroup, "RWP"),
 	}, nil)
 	helper.tt.EXPECT().GetSubs(p2p, nil).Return([]types.Subscription{
 		subscription(t, user, p2p, "JRWPA"),
@@ -261,6 +280,7 @@ func TestAnnounceAvatarUpdatedReachesPeersAndGroupMembers(t *testing.T) {
 		subscription(t, peer, group, "RWP"),
 		subscription(t, member, group, "RWP"),
 		subscription(t, bannedMember, group, "N"),
+		muted(subscription(t, mutingMember, group, "RWP")),
 	}, nil)
 	helper.tt.EXPECT().GetSubs(failingGroup, nil).Return(nil, errors.New("db down"))
 	// No GetSubs for p2pBlocking or the channel: gomock fails the test if they're loaded.
@@ -269,7 +289,8 @@ func TestAnnounceAvatarUpdatedReachesPeersAndGroupMembers(t *testing.T) {
 	announceAvatarUpdated(user, payload)
 
 	routed := helper.routed(t)
-	for _, uid := range []types.Uid{user, peer, member} {
+	notified := []types.Uid{user, peer, member, mutingPeer, mutingMember, mutedGroupMember}
+	for _, uid := range notified {
 		msg, ok := routed[uid.UserId()]
 		if !ok {
 			t.Errorf("%s is not notified", uid.UserId())
@@ -285,8 +306,8 @@ func TestAnnounceAvatarUpdatedReachesPeersAndGroupMembers(t *testing.T) {
 			t.Errorf("%s should not be notified", uid.UserId())
 		}
 	}
-	if len(routed) != 3 {
-		t.Errorf("notified %d users, want 3", len(routed))
+	if len(routed) != len(notified) {
+		t.Errorf("notified %d users, want %d", len(routed), len(notified))
 	}
 }
 
