@@ -9,6 +9,11 @@ A command-line utility to generate an API key for [Tinode server](../server/)
  * `validate`: Key to validate: check previously issued key for validity.
  * `salt`: [HMAC](https://en.wikipedia.org/wiki/HMAC) salt, 32 random bytes base64 standard encoded; must be present for key validation; optional when generating the key: if missing, a cryptographically-strong salt will be automatically generated.
 
+**Message Encryption at Rest Key Generation:**
+
+ * `encrypt_at_rest`: Generate encryption key for message encryption at rest instead of API key.
+ * `keysize`: Encryption key size in bytes. Must be 16 (AES-128), 24 (AES-192), or 32 (AES-256). Default: 32.
+
 
 ## Usage
 
@@ -28,6 +33,24 @@ Sample output:
 ```text
 API key v1 seq1 [ordinary]: AQAAAAABAACGOIyP2vh5avSff5oVvMpk
 HMAC salt: TC0Jzr8f28kAspXrb4UYccJUJ63b7CSA16n1qMxxGpw=
+```
+
+**Generate Message Encryption at Rest Key:**
+
+```sh
+./keygen -encrypt_at_rest
+```
+
+Sample output:
+
+```text
+Generated 32-byte encryption key:
+dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3Q=
+
+Add this to your tinode.conf:
+"encrypt_at_rest": {
+    "key": "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3Q="
+}
 ```
 
 Copy `HMAC salt` to `api_key_salt` parameter in your server [config file](https://github.com/tinode/chat/blob/master/server/tinode.conf).
