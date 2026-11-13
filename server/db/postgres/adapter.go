@@ -2626,6 +2626,69 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
+// MessageSaveWithAttachments advances the topic's sequence (as TopicUpdateOnMessage), stores the
+// message (as MessageSave) and links its attachments (as FileLinkAttachments by message) in one
+// transaction (Dida patch 0001): if any step fails, for example because a file id has no upload
+// record, nothing is stored and the topic's stored sequence is unchanged.
+func (a *adapter) MessageSaveWithAttachments(msg *t.Message, fids []string) error {
+	var dids []any
+	for _, fid := range fids {
+		id := t.ParseUid(fid)
+		if id.IsZero() {
+			return t.ErrMalformed
+		}
+		dids = append(dids, store.DecodeUid(id))
+	}
+
+	ctx, cancel := a.getContextForTx()
+	if cancel != nil {
+		defer cancel()
+	}
+	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback(ctx)
+		}
+	}()
+
+	if _, err = tx.Exec(ctx, "UPDATE topics SET seqid=$1,touchedat=$2 WHERE name=$3",
+		msg.SeqId, msg.CreatedAt, msg.Topic); err != nil {
+		return err
+	}
+
+	var id int
+	if err = tx.QueryRow(ctx,
+		`INSERT INTO messages(createdAt,updatedAt,seqid,topic,"from",head,content) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, common.ToJSON(msg.Content)).Scan(&id); err != nil {
+		return err
+	}
+
+	if len(dids) > 0 {
+		now := t.TimeNow()
+		var linkArgs []any
+		for _, did := range dids {
+			// createdat,fileid,msgid
+			linkArgs = append(linkArgs, now, did, int64(id))
+		}
+		query, args := expandQuery("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES (?,?,?)"+
+			strings.Repeat(",(?,?,?)", len(dids)-1), linkArgs...)
+		if _, err = tx.Exec(ctx, query, args...); err != nil {
+			return err
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	// Replacing ID given by store by ID given by the DB.
+	msg.SetUid(t.Uid(id))
+	return nil
+}
+
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = a.maxMessageResults
 

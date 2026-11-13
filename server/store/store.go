@@ -678,19 +678,44 @@ type messagesMapper struct{}
 // Messages is a singleton ancor object for exporting MessagesPersistenceInterface.
 var Messages MessagesPersistenceInterface
 
+// messageSaverWithAttachments is implemented by adapters that advance the topic's sequence, store
+// the message and link its attachments in one transaction (Dida patch 0001). Without it a failed
+// attachment link (a file id with no upload record, e.g. one already garbage-collected) left the
+// message stored while the topic's in-memory sequence did not move, so every later message in the
+// loaded topic collided with the stored row (unique index messages_topic_seqid).
+type messageSaverWithAttachments interface {
+	MessageSaveWithAttachments(msg *types.Message, fids []string) error
+}
+
 // Save message
 func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySender bool) (error, bool) {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
-	// Increment topic's or user's SeqId
-	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
-	if err != nil {
-		return err, false
+
+	var attachments []string
+	for _, url := range attachmentURLs {
+		// Convert attachment URLs to file IDs.
+		if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
+			attachments = append(attachments, fid.String())
+		}
 	}
 
-	err = adp.MessageSave(msg)
-	if err != nil {
-		return err, false
+	saver, atomic := adp.(messageSaverWithAttachments)
+	if atomic {
+		if err := saver.MessageSaveWithAttachments(msg, attachments); err != nil {
+			return err, false
+		}
+	} else {
+		// Increment topic's or user's SeqId
+		err := adp.TopicUpdateOnMessage(msg.Topic, msg)
+		if err != nil {
+			return err, false
+		}
+
+		err = adp.MessageSave(msg)
+		if err != nil {
+			return err, false
+		}
 	}
 
 	markedReadBySender := false
@@ -711,17 +736,8 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 		}
 	}
 
-	if len(attachmentURLs) > 0 {
-		var attachments []string
-		for _, url := range attachmentURLs {
-			// Convert attachment URLs to file IDs.
-			if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
-				attachments = append(attachments, fid.String())
-			}
-		}
-		if len(attachments) > 0 {
-			return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments), markedReadBySender
-		}
+	if !atomic && len(attachments) > 0 {
+		return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments), markedReadBySender
 	}
 
 	return nil, markedReadBySender
