@@ -1068,7 +1068,7 @@ func TestDeviceUpsert(t *testing.T) {
 
 func TestMessageAttachments(t *testing.T) {
 	fids := []string{testData.Files[0].Id, testData.Files[1].Id}
-	err := adp.FileLinkAttachments("", types.ZeroUid, types.ParseUid(testData.Msgs[1].Id), fids)
+	_, err := adp.FileLinkAttachments("", types.ZeroUid, types.ParseUid(testData.Msgs[1].Id), fids)
 	if err != nil {
 		t.Fatal(err)
 	}
