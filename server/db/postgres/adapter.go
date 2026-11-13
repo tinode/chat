@@ -3460,45 +3460,23 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && msgId.IsZero() && userId.IsZero()) {
-		return t.ErrMalformed
-	}
-	now := t.TimeNow()
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) ([]string, error) {
+	return common.LinkAttachments(topic, userId, msgId, fids, func(fid string) error {
+		return a.fileLinkAttachment(topic, userId, msgId, fid)
+	})
+}
 
-	var args []any
+// Each link has its own transaction so a missing upload cannot roll back other links.
+func (a *adapter) fileLinkAttachment(topic string, userId, msgId t.Uid, fid string) error {
 	var linkId any
 	var linkBy string
 	if !msgId.IsZero() {
-		linkBy = "msgid"
-		linkId = int64(msgId)
+		linkBy, linkId = "msgid", int64(msgId)
 	} else if topic != "" {
-		linkBy = "topic"
-		linkId = topic
-		// Only one attachment per topic is permitted at this time.
-		fids = fids[0:1]
+		linkBy, linkId = "topic", topic
 	} else {
-		linkBy = "userid"
-		linkId = store.DecodeUid(userId)
-		// Only one attachment per user is permitted at this time.
-		fids = fids[0:1]
+		linkBy, linkId = "userid", store.DecodeUid(userId)
 	}
-
-	// Decoded ids
-	var dids []any
-	for _, fid := range fids {
-		id := t.ParseUid(fid)
-		if id.IsZero() {
-			return t.ErrMalformed
-		}
-		dids = append(dids, store.DecodeUid(id))
-	}
-
-	for _, id := range dids {
-		// createdat,fileid,[msgid|topic|userid]
-		args = append(args, now, id, linkId)
-	}
-
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
@@ -3507,28 +3485,16 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback(ctx)
-		}
-	}()
-
-	// Unlink earlier uploads on the same topic or user allowing them to be garbage-collected.
+	defer tx.Rollback(ctx)
+	// Replace topic/user attachments only if the new link can be committed.
 	if msgId.IsZero() {
-		sql := "DELETE FROM filemsglinks WHERE " + linkBy + "=$1"
-		_, err = tx.Exec(ctx, sql, linkId)
-		if err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM filemsglinks WHERE "+linkBy+"=$1", linkId); err != nil {
 			return err
 		}
 	}
-
-	query, args := expandQuery("INSERT INTO filemsglinks(createdat,fileid,"+linkBy+") VALUES (?,?,?)"+
-		strings.Repeat(",(?,?,?)", len(dids)-1), args...)
-	_, err = tx.Exec(ctx, query, args...)
-	if err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO filemsglinks(createdat,fileid,"+linkBy+") VALUES($1,$2,$3)", t.TimeNow(), store.DecodeUid(t.ParseUid(fid)), linkId); err != nil {
 		return err
 	}
-
 	return tx.Commit(ctx)
 }
 

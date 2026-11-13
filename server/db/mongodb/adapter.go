@@ -2924,78 +2924,67 @@ func (a *adapter) decFileUseCounter(ctx context.Context, collection string, msgF
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && userId.IsZero() && msgId.IsZero()) {
-		return t.ErrMalformed
-	}
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) ([]string, error) {
+	return common.LinkAttachments(topic, userId, msgId, fids, func(fid string) error {
+		return a.fileLinkAttachment(topic, userId, msgId, fid)
+	})
+}
 
+func (a *adapter) fileLinkAttachment(topic string, userId, msgId t.Uid, fid string) error {
 	now := t.TimeNow()
-	var err error
-
+	files := a.db.Collection("fileuploads")
+	// Reserve the upload before recording its reference, so GC cannot collect an
+	// unreferenced upload between the two writes. UpdateOne never creates uploads.
+	res, err := files.UpdateOne(a.ctx, b.M{"_id": fid}, b.M{
+		"$set": b.M{"updatedat": now}, "$inc": b.M{"usecount": 1},
+	})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return t.ErrNotFound
+	}
+	release := func(id string) error {
+		_, err := files.UpdateOne(a.ctx, b.M{"_id": id}, b.M{
+			"$set": b.M{"updatedat": now}, "$inc": b.M{"usecount": -1},
+		})
+		return err
+	}
+	table, linkId := "messages", msgId.String()
+	update := b.M{"$set": b.M{"updatedat": now}, "$addToSet": b.M{"attachments": fid}}
 	if msgId.IsZero() {
-		// Only one link per user or topic is permitted.
-		fids = fids[0:1]
-
-		// Topics and users and mutable. Must unlink the previous attachments first.
-		var table string
-		var linkId string
-		if topic != "" {
-			table = "topics"
-			linkId = topic
-		} else {
-			table = "users"
-			linkId = userId.String()
+		table, linkId = "topics", topic
+		if topic == "" {
+			table, linkId = "users", userId.String()
 		}
-
-		// Find the old attachment.
-		var attachments map[string][]string
-		findOpts := mdbopts.FindOne().SetProjection(b.M{"attachments": 1, "_id": 0})
-		err = a.db.Collection(table).FindOne(a.ctx, b.M{"_id": linkId}, findOpts).Decode(&attachments)
-		if err != nil {
-			return err
+		update = b.M{"$set": b.M{"updatedat": now, "attachments": []string{fid}}}
+	}
+	// Returning the previous list makes duplicate links and avatar replacement
+	// balance their counters even when updates to the same target interleave.
+	var old struct {
+		Attachments []string `bson:"attachments"`
+	}
+	err = a.db.Collection(table).FindOneAndUpdate(a.ctx, b.M{"_id": linkId}, update,
+		mdbopts.FindOneAndUpdate().SetProjection(b.M{"attachments": 1, "_id": 0})).Decode(&old)
+	if err != nil {
+		if err == mdb.ErrNoDocuments {
+			return errors.Join(t.ErrNotFound, release(fid))
 		}
-
-		if len(attachments["attachments"]) > 0 {
-			// Decrement the use count of old attachment.
-			if _, err = a.db.Collection("fileuploads").UpdateOne(a.ctx,
-				b.M{"_id": attachments["attachments"][0]},
-				b.M{
-					"$set": b.M{"updatedat": now},
-					"$inc": b.M{"usecount": -1},
-				},
-			); err != nil {
+		// A transport or decoding error may follow a successful write. Keep the
+		// reservation when the outcome is unknown rather than risk collecting a linked file.
+		return err
+	}
+	if msgId.IsZero() {
+		for _, id := range old.Attachments {
+			if err := release(id); err != nil {
 				return err
 			}
 		}
-
-		_, err = a.db.Collection(table).UpdateOne(a.ctx,
-			b.M{"_id": linkId},
-			b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
-		if err != nil {
-			return err
-		}
-	} else {
-		_, err = a.db.Collection("messages").UpdateOne(a.ctx,
-			b.M{"_id": msgId.String()},
-			b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
-		if err != nil {
-			return err
-		}
+	} else if slices.Contains(old.Attachments, fid) {
+		// The reference already existed; undo the extra reservation.
+		return release(fid)
 	}
-
-	ids := make([]any, len(fids))
-	for i, id := range fids {
-		ids[i] = id
-	}
-	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
-		b.M{"_id": b.M{"$in": ids}},
-		b.M{
-			"$set": b.M{"updatedat": now},
-			"$inc": b.M{"usecount": 1},
-		},
-	)
-
-	return err
+	return nil
 }
 
 // PCacheGet reads a persistet cache entry.
