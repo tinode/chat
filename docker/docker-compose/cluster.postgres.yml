@@ -1,11 +1,9 @@
-version: '3.8'
-
 x-postgres-tinode-env-vars: &postgres-tinode-env-vars
   "STORE_USE_ADAPTER": "postgres"
 
 services:
   db:
-    image: postgres:15.2
+    image: postgres:15-bookworm
     container_name: postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready"]

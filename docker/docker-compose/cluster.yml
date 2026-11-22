@@ -11,12 +11,12 @@ x-tinode:
   &tinode-base
   depends_on:
     - db
-  image: tinode/tinode:latest
+  image: tinode/tinode:0.25.3
   restart: always
 
 x-exporter:
   &exporter-base
-  image: tinode/exporter:latest
+  image: tinode/exporter:0.19.0
   restart: always
 
 x-tinode-env-vars: &tinode-env-vars
@@ -65,7 +65,7 @@ x-exporter-env-vars: &exporter-env-vars
 
 services:
   db:
-    image: mysql:8.0
+    image: mysql:8.4.13
     container_name: mysql
     restart: always
     # Use your own volume.
@@ -77,8 +77,6 @@ services:
       test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
       timeout: 5s
       retries: 10
-    security_opt:
-      - seccomp=unconfined
 
   # Tinode servers.
   tinode-0:
