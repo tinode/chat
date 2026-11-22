@@ -720,7 +720,10 @@ func (messagesMapper) Save(msg *types.Message, attachmentURLs []string, readBySe
 			}
 		}
 		if len(attachments) > 0 {
-			return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments), markedReadBySender
+			if failed, err := adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments); err != nil {
+				logs.Warn.Printf("topic[%s]: failed to link message attachments (seq: %d, files: %v): %v",
+					msg.Topic, msg.SeqId, failed, err)
+			}
 		}
 	}
 
@@ -1072,7 +1075,8 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 			userId = types.ParseUserId(topic)
 			topic = ""
 		}
-		return adp.FileLinkAttachments(topic, userId, msgId, fids)
+		_, err := adp.FileLinkAttachments(topic, userId, msgId, fids)
+		return err
 	}
 	return nil
 }

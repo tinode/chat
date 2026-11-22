@@ -362,8 +362,8 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	msgID := req.GetId()
 
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -387,8 +387,12 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 
 	// Check if media handler redirects or adds headers.
 	mh := store.Store.GetMediaHandler()
-	url, _ := url.Parse(req.Uri)
-	headers, statusCode, err := mh.Headers(http.MethodGet, url, http.Header{}, true)
+	fileURL, err := url.Parse(req.GetUri())
+	if err != nil {
+		writeResponse(ErrMalformed(msgID, "", now), err)
+		return nil
+	}
+	headers, statusCode, err := mh.Headers(http.MethodGet, fileURL, http.Header{}, true)
 	if err != nil {
 		writeResponse(decodeStoreError(err, "", now, nil), err)
 		return nil
@@ -443,7 +447,53 @@ func (*grpcNodeServer) LargeFileServe(req *pbx.FileDownReq, stream pbx.Node_Larg
 	return err
 }
 
-// LargeFileReceive is the gRPC equivalent of LargeFileReceiveHTTP.
+// grpcUploadReader streams chunks on demand and bounds the total file size,
+// including any content sent with the initial metadata request.
+type grpcUploadReader struct {
+	stream pbx.Node_LargeFileReceiveServer
+	// content holds the unread bytes of the current chunk.
+	content []byte
+	// maxSize is the total file size limit; nonpositive values disable it.
+	maxSize int64
+	// read counts bytes already returned to the storage handler.
+	read int64
+	// err preserves the terminal stream or size-limit error for subsequent reads.
+	err error
+}
+
+// Read copies file content from successive stream requests into p.
+// It returns a *http.MaxBytesError before exposing a chunk that would exceed
+// maxSize, or the stream's error when no more content can be received.
+func (r *grpcUploadReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if r.err != nil {
+		return 0, r.err
+	}
+	// Skip metadata-only and empty requests until file bytes are available.
+	for len(r.content) == 0 {
+		req, err := r.stream.Recv()
+		if err != nil {
+			r.err = err
+			return 0, err
+		}
+		r.content = req.GetContent()
+	}
+	// Check the whole unread chunk before passing any of it to storage.
+	// Subtracting the consumed size avoids overflowing a cumulative sum.
+	if r.maxSize > 0 && int64(len(r.content)) > r.maxSize-r.read {
+		r.err = &http.MaxBytesError{Limit: r.maxSize}
+		return 0, r.err
+	}
+	n := copy(p, r.content)
+	r.content = r.content[n:]
+	r.read += int64(n)
+	return n, nil
+}
+
+// LargeFileReceive accepts a file upload over gRPC and enforces the configured
+// total file size limit across all requests in the stream.
 func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) error {
 	now := types.TimeNow()
 	mh := store.Store.GetMediaHandler()
@@ -466,8 +516,8 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 
 	msgID := req.GetId()
-	// Check authorization: auth information must be present (SID is not used for gRPC).
-	authMethod, secret := req.Auth.Scheme, req.Auth.Secret
+	// Let authFileRequest interpret the authentication fields, including an empty scheme.
+	authMethod, secret := req.GetAuth().GetScheme(), req.GetAuth().GetSecret()
 	var remoteAddr string
 	if p, ok := peer.FromContext(stream.Context()); ok {
 		remoteAddr = p.Addr.String()
@@ -534,37 +584,19 @@ func (*grpcNodeServer) LargeFileReceive(stream pbx.Node_LargeFileReceiveServer) 
 	}
 	fdef.InitTimes()
 
-	reader, writer := io.Pipe()
-	// Create a non-blocking channel to collect errors from the inbound IO process.
-	done := make(chan error, 1)
-	go func() {
-		defer writer.Close()
-		for {
-			if req, err := stream.Recv(); err == nil {
-				chunk := req.GetContent()
-				if _, err := writer.Write(chunk); err != nil {
-					done <- err
-					break
-				}
-			} else {
-				if err == io.EOF {
-					err = nil
-				}
-				done <- err
-				break
-			}
-		}
-	}()
-
+	// Receive chunks as storage consumes them, so a storage error does not leave
+	// a background goroutine blocked waiting for more client data.
+	reader := &grpcUploadReader{stream: stream, content: req.GetContent(), maxSize: globals.maxFileUploadSize}
 	url, size, err := mh.Upload(fdef, reader)
-	if err == nil {
-		// No outbound IO error. Maybe we have an inbound one?
-		err = <-done
-	}
 	if err != nil {
-		logs.Info.Println("media upload: failed", req.Meta.Name, "key", fdef.Location, err)
+		logs.Info.Println("media upload: failed", req.GetMeta().GetName(), "key", fdef.Location, err)
 		store.Files.FinishUpload(fdef, false, 0)
-		writeResponse(decodeStoreError(err, msgID, now, nil), nil)
+		var sizeErr *http.MaxBytesError
+		if errors.As(err, &sizeErr) {
+			writeResponse(ErrTooLarge(msgID, "", now), err)
+		} else {
+			writeResponse(decodeStoreError(err, msgID, now, nil), err)
+		}
 		return nil
 	}
 
@@ -615,7 +647,7 @@ func authFileRequest(authMethod, secret, sid, remoteAddr string) (types.Uid, []b
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
 		if err != nil {
-			logs.Info.Println("media: invalid auth secret", authMethod, "'"+secret+"'")
+			logs.Info.Println("media: invalid auth secret", authMethod)
 			return uid, nil, types.ErrMalformed
 		}
 

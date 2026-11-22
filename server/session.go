@@ -444,17 +444,12 @@ func (s *Session) dispatchRaw(raw []byte) {
 		return
 	}
 
-	toLog := raw
-	truncated := ""
-	if len(raw) > 512 {
-		toLog = raw[:512]
-		truncated = "<...>"
-	}
-	logs.Info.Printf("in: '%s%s' sid='%s' uid='%s'", toLog, truncated, s.sid, s.uid)
+	// Payloads may contain passwords, bearer tokens, or private messages.
+	logs.Info.Printf("in: bytes=%d sid='%s' uid='%s'", len(raw), s.sid, s.uid)
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		// Malformed message
-		logs.Warn.Println("s.dispatch", err, s.sid)
+		// Decoder errors can include private payload values.
+		logs.Warn.Println("s.dispatch: malformed JSON", s.sid)
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}

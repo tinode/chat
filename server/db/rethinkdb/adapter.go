@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	rdb "gopkg.in/rethinkdb/rethinkdb-go.v6"
+	"gopkg.in/rethinkdb/rethinkdb-go.v6/encoding"
 )
 
 // adapter holds RethinkDb connection data.
@@ -2856,91 +2858,69 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && userId.IsZero() && msgId.IsZero()) {
-		return t.ErrMalformed
-	}
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) ([]string, error) {
+	return common.LinkAttachments(topic, userId, msgId, fids, func(fid string) error {
+		return a.fileLinkAttachment(topic, userId, msgId, fid)
+	})
+}
 
+func (a *adapter) fileLinkAttachment(topic string, userId, msgId t.Uid, fid string) error {
 	now := t.TimeNow()
-	var err error
-
-	if msgId.IsZero() {
-		// Only one link per user or topic is permitted.
-		fids = fids[0:1]
-
-		// Topics and users and mutable. Must unlink the previous attachments first.
-		var table string
-		var linkId string
-		if topic != "" {
-			table = "topics"
-			linkId = topic
-		} else {
-			table = "users"
-			linkId = userId.String()
-		}
-
-		// Find the old attachment.
-		var cursor *rdb.Cursor
-		cursor, err = rdb.DB(a.dbName).Table(table).Get(linkId).
-			Field("Attachments").Default([]string{}).Run(a.conn)
-		if err != nil {
-			return err
-		}
-		defer cursor.Close()
-
-		if !cursor.IsNil() {
-			var attachments []string
-			if err = cursor.One(&attachments); err != nil {
-				if err != rdb.ErrEmptyResult {
-					return err
-				}
-				err = nil
-			}
-
-			if len(attachments) > 0 {
-				// Decrement the use count of old attachment.
-				if _, err = rdb.DB(a.dbName).Table("fileuploads").Get(attachments[0]).
-					Update(map[string]any{
-						"UpdatedAt": now,
-						"UseCount":  rdb.Row.Field("UseCount").Default(1).Sub(1),
-					}).RunWrite(a.conn); err != nil {
-					return err
-				}
-			}
-		}
-
-		_, err = rdb.DB(a.dbName).Table(table).Get(linkId).
-			Update(map[string]any{
-				"UpdatedAt":   now,
-				"Attachments": fids,
-			}).RunWrite(a.conn)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Messages are immutable. Just save the IDs.
-		_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
-			Update(map[string]any{
-				"UpdatedAt":   now,
-				"Attachments": fids,
-			}).RunWrite(a.conn)
-		if err != nil {
-			return err
-		}
+	files := rdb.DB(a.dbName).Table("fileuploads")
+	// Reserve existing uploads before adding their references. A missing upload
+	// must be reported, not silently skipped by Update.
+	res, err := files.Get(fid).Update(map[string]any{
+		"UpdatedAt": now, "UseCount": rdb.Row.Field("UseCount").Default(0).Add(1),
+	}).RunWrite(a.conn)
+	if err != nil {
+		return err
 	}
-
-	ids := make([]any, len(fids))
-	for i, id := range fids {
-		ids[i] = id
+	if res.Skipped != 0 {
+		return t.ErrNotFound
 	}
-
-	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
-		Update(map[string]any{
-			"UpdatedAt": now,
-			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+	release := func(id string) error {
+		_, err := files.Get(id).Update(map[string]any{
+			"UpdatedAt": now, "UseCount": rdb.Row.Field("UseCount").Default(1).Sub(1),
 		}).RunWrite(a.conn)
-
-	return err
+		return err
+	}
+	table, linkId := "messages", msgId.String()
+	var attachments any = rdb.Row.Field("Attachments").Default([]string{}).SetInsert(fid)
+	if msgId.IsZero() {
+		table, linkId = "topics", topic
+		if topic == "" {
+			table, linkId = "users", userId.String()
+		}
+		attachments = []string{fid}
+	}
+	res, err = rdb.DB(a.dbName).Table(table).Get(linkId).Update(map[string]any{
+		"UpdatedAt": now, "Attachments": attachments,
+	}, rdb.UpdateOpts{ReturnChanges: "always"}).RunWrite(a.conn)
+	if err != nil {
+		// The write may have succeeded despite a transport error. Retain the
+		// reservation unless the response confirms that the target was missing.
+		return err
+	}
+	if res.Skipped != 0 {
+		return errors.Join(t.ErrNotFound, release(fid))
+	}
+	var old struct{ Attachments []string }
+	if len(res.Changes) != 1 {
+		return errors.New("attachment update did not return previous values")
+	}
+	if err := encoding.Decode(&old, res.Changes[0].OldValue); err != nil {
+		return err
+	}
+	if msgId.IsZero() {
+		for _, id := range old.Attachments {
+			if err := release(id); err != nil {
+				return err
+			}
+		}
+	} else if slices.Contains(old.Attachments, fid) {
+		return release(fid)
+	}
+	return nil
 }
 
 // FileDeleteUnused deletes orphaned file uploads.

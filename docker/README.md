@@ -2,7 +2,7 @@
 
 All images are available at https://hub.docker.com/r/tinode/
 
-1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may not work with the older Docker.
+1. [Install Docker](https://docs.docker.com/install/) with the Compose plugin. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may not work with the older Docker.
 
 2. Create a bridge network. It's used to connect Tinode container with the database container.
 	```
@@ -13,13 +13,13 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	1. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
+	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:8.4.13
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
 
 	2. **PostgreSQL**: If you've decided to use PostgreSQL backend, run the official PostgreSQL Docker container:
 	```
-	$ docker run --name postgres --network tinode-net --restart always --env POSTGRES_PASSWORD=postgres -d postgres:13
+	$ docker run --name postgres --network tinode-net --restart always --env POSTGRES_PASSWORD=postgres -d postgres:15-bookworm
 	```
 	See [instructions](https://hub.docker.com/_/postgres/) for more options. PostgresSQL 13 or above is required.
 
@@ -27,7 +27,7 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
    ```
-   $ docker run --name mongodb --network tinode-net --restart always -d mongo:latest --replSet "rs0"
+   $ docker run --name mongodb --network tinode-net --restart always -d mongo:8.0.38 --replSet "rs0"
    $ docker exec -it mongodb mongosh
 
    # And inside mongo shell:
@@ -38,7 +38,7 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	4. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
-	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
+	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.4.4-bookworm-slim
 	```
 	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
 
@@ -236,6 +236,43 @@ A convenient way to generate a desired number of random bytes and base64-encode 
 $ openssl rand -base64 <desired length>
 ```
 
+## Security updates
+
+Build local images with `docker build --pull --no-cache` (using the appropriate
+`docker/tinode`, `docker/chatbot`, or `docker/exporter` build context) to refresh
+base images and installed packages. Pull published images before recreating
+containers; restarting an existing container does not update its software.
+For Compose, use the same base and override files for both commands:
+
+```sh
+docker compose -f docker/docker-compose/single-instance.yml pull
+docker compose -f docker/docker-compose/single-instance.yml up -d
+```
+
+### MySQL startup and seccomp
+
+Keep Docker's default seccomp filter enabled. If MySQL reports "Operation not
+permitted" or cannot create threads on an older host, check the Docker/container
+runtime and host libseccomp versions. Update Docker Engine, containerd and
+libseccomp2 on a supported host OS before retrying; this compatibility issue is
+[documented by the MySQL image maintainers](https://github.com/docker-library/mysql/issues/1067).
+Do not use seccomp=unconfined as a permanent fix. A successful startup on a different
+machine does not verify the deployment host's syscall filter.
+
+### NGINX reverse proxies
+
+These Dockerfiles and Compose examples do not install or run NGINX. If your
+deployment uses a separate NGINX reverse proxy, update it separately. The
+[NGINX security advisories](https://nginx.org/en/security_advisories.html) of
+November 2026 include HTTP/2 memory corruption (CVE-2026-123007) and use-after-free
+(CVE-2026-123633). Fixed upstream releases are **1.30.7 or later on the stable
+branch**, or **1.31.9 or later on the mainline branch**. For the official Docker
+image, use `nginx:1.30.7-alpine` or a newer patched release, pull it, and recreate
+the proxy container. Verify the running version with `nginx -v` inside that
+container. Distribution packages may instead carry vendor-backported fixes;
+check the distribution's security advisory for the installed package version.
+Updating Tinode images alone does not patch an external proxy.
+
 ## Metrics Exporter
 
 See [monitoring/exporter/README](../monitoring/exporter/README.md) for information on the Exporter.
@@ -263,3 +300,5 @@ Available variables:
 | `INFLUXDB_AUTH_TOKEN` | string | `` | InfluxDB auth token |
 | `PROM_NAMESPACE` | string | `tinode` | Prometheus namespace |
 | `PROM_METRICS_PATH` | string | `/metrics` | Exporter webserver path that Prometheus server scrapes |
+
+Before reusing existing database data, follow the [database upgrade notes](docker-compose/README.md#upgrading-existing-databases).

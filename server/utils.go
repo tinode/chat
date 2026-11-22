@@ -556,6 +556,10 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	var out []token
 	var prev int
 	query = strings.TrimSpace(query)
+	if query == "" {
+		// Nothing to parse: the query consists of whitespace only.
+		return nil, nil, nil
+	}
 	// Split query into tokens.
 	//   i - character index into the string.
 	//   pos - rune index into the string.

@@ -156,6 +156,18 @@ func TestParseSearchQuery(t *testing.T) {
 			expectedOr:  nil,
 			expectError: true,
 		},
+		{
+			query:       ``,
+			expectedAnd: nil,
+			expectedOr:  nil,
+			expectError: false,
+		},
+		{
+			query:       " \t ",
+			expectedAnd: nil,
+			expectedOr:  nil,
+			expectError: false,
+		},
 	}
 
 	for _, tc := range cases {

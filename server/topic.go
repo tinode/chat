@@ -596,7 +596,10 @@ func (t *Topic) handleUATimerEvent(currentUA string) {
 		return
 	}
 	t.userAgent = currentUA
-	t.presUsersOfInterest("ua", t.userAgent)
+	// Clients treat a user agent change as a sign of activity: don't announce it in incognito mode.
+	if !t.isIncognito() {
+		t.presUsersOfInterest("ua", t.userAgent)
+	}
 }
 
 // handleTopicTimeout starts termination of an idle topic and sends its offline notifications.
@@ -607,7 +610,10 @@ func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNoti
 	switch t.cat {
 	case types.TopicCatMe:
 		uaTimer.Stop()
-		t.presUsersOfInterest("off", currentUA)
+		// Incognito user was never reported online: "off" would reveal that the user was active.
+		if !t.isIncognito() {
+			t.presUsersOfInterest("off", currentUA)
+		}
 	case types.TopicCatGrp:
 		t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 	}
@@ -924,7 +930,8 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 				// len(pssd.muids) could be zero if the session was a background session.
 				meUid = pssd.muids[0]
 			}
-			if !meUid.IsZero() {
+			// Incognito user keeps the old timestamp, otherwise contacts would learn when the user was last active.
+			if !meUid.IsZero() && !t.isIncognito() {
 				// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
 				if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
 					logs.Warn.Println("user update last seen:", err)
@@ -1074,7 +1081,10 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 				logs.Err.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest without forcing response (no +en here).
-			t.presUsersOfInterest("on", userAgent)
+			// Incognito user stays offline for contacts.
+			if !t.isIncognito() {
+				t.presUsersOfInterest("on", userAgent)
+			}
 		}
 
 	case types.TopicCatGrp:

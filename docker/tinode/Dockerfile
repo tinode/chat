@@ -9,9 +9,9 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM alpine:3.22
+FROM alpine:3.24
 
-ARG VERSION=0.25
+ARG VERSION=0.25.3
 ENV VERSION=$VERSION
 ARG BINVERS=$VERSION
 
@@ -145,8 +145,7 @@ ENV ACC_GC_ENABLED=false
 
 # Install root certificates, they are needed for email validator to work
 # with the TLS SMTP servers like Gmail or Mailjet. Also add bash and grep.
-RUN apk update && \
-	apk add --no-cache ca-certificates bash grep
+RUN apk add --no-cache ca-certificates bash grep
 
 WORKDIR /opt/tinode
 
